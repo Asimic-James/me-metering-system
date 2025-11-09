@@ -6,10 +6,6 @@ function SubmitForm({ onSubmit, onSuccess }) {
     sealNo: '',
     meterNo: '',
     accountNumber: '',
-    installerName: '',
-    installerEmployeeId: '',
-    installerPhone: '',
-    installerEmail: '',
     installationNotes: ''
   });
   
@@ -39,30 +35,6 @@ function SubmitForm({ onSubmit, onSuccess }) {
       newErrors.meterNo = 'Meter Number is required';
     } else if (!/^\d{13}$/.test(formData.meterNo)) {
       newErrors.meterNo = 'Meter Number must be exactly 13 digits';
-    }
-
-    // Validate Installer Name
-    if (!formData.installerName.trim()) {
-      newErrors.installerName = 'Installer Name is required';
-    }
-
-    // Validate Installer Employee ID
-    if (!formData.installerEmployeeId.trim()) {
-      newErrors.installerEmployeeId = 'Installer Employee ID is required';
-    }
-
-    // Validate Installer Phone
-    if (!formData.installerPhone.trim()) {
-      newErrors.installerPhone = 'Installer Phone is required';
-    } else if (!/^\d{10,11}$/.test(formData.installerPhone)) {
-      newErrors.installerPhone = 'Phone must be 10-11 digits';
-    }
-
-    // Validate Installer Email
-    if (!formData.installerEmail.trim()) {
-      newErrors.installerEmail = 'Installer Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.installerEmail)) {
-      newErrors.installerEmail = 'Invalid email format';
     }
     
     setErrors(newErrors);
@@ -94,16 +66,25 @@ function SubmitForm({ onSubmit, onSuccess }) {
     setApiError(null);
     setInstallationId(null);
 
+    // Get current user from JED API Service
+    const currentUser = JEDApiService.getStoredUser();
+
+    if (!currentUser) {
+      setApiError('Authentication required. Please log in again.');
+      setIsSubmitting(false);
+      return;
+    }
+
     // Prepare payload
     const payload = {
       sealNo: formData.sealNo,
       meterNo: formData.meterNo,
       accountNumber: formData.accountNumber,
       installationDate: new Date().toISOString(),
-      installerName: formData.installerName,
-      installerEmployeeId: formData.installerEmployeeId,
-      installerPhone: formData.installerPhone,
-      installerEmail: formData.installerEmail,
+      installerName: currentUser.name,
+      installerEmployeeId: currentUser.employeeId,
+      installerPhone: currentUser.phone,
+      installerEmail: currentUser.email,
       notes: formData.installationNotes || 'Installation completed via web portal'
     };
 
@@ -156,10 +137,6 @@ function SubmitForm({ onSubmit, onSuccess }) {
         sealNo: '',
         meterNo: '',
         accountNumber: '',
-        installerName: '',
-        installerEmployeeId: '',
-        installerPhone: '',
-        installerEmail: '',
         installationNotes: ''
       });
       
@@ -205,10 +182,6 @@ function SubmitForm({ onSubmit, onSuccess }) {
       sealNo: '',
       meterNo: '',
       accountNumber: '',
-      installerName: '',
-      installerEmployeeId: '',
-      installerPhone: '',
-      installerEmail: '',
       installationNotes: ''
     });
     setErrors({});
@@ -347,100 +320,7 @@ function SubmitForm({ onSubmit, onSuccess }) {
             </div>
           </div>
 
-          {/* Installer Information Section */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Installer Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Installer Name */}
-              <div>
-                <label htmlFor="installerName" className="block text-sm font-medium text-gray-700 mb-2">
-                  Installer Name *
-                </label>
-                <input
-                  type="text"
-                  id="installerName"
-                  name="installerName"
-                  value={formData.installerName}
-                  onChange={handleInputChange}
-                  disabled={isSubmitting}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
-                    errors.installerName ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="e.g., John Doe"
-                />
-                {errors.installerName && (
-                  <p className="mt-1 text-sm text-red-600">{errors.installerName}</p>
-                )}
-              </div>
-
-              {/* Installer Employee ID */}
-              <div>
-                <label htmlFor="installerEmployeeId" className="block text-sm font-medium text-gray-700 mb-2">
-                  Employee ID *
-                </label>
-                <input
-                  type="text"
-                  id="installerEmployeeId"
-                  name="installerEmployeeId"
-                  value={formData.installerEmployeeId}
-                  onChange={handleInputChange}
-                  disabled={isSubmitting}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
-                    errors.installerEmployeeId ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="e.g., EMP-2024-001"
-                />
-                {errors.installerEmployeeId && (
-                  <p className="mt-1 text-sm text-red-600">{errors.installerEmployeeId}</p>
-                )}
-              </div>
-
-              {/* Installer Phone */}
-              <div>
-                <label htmlFor="installerPhone" className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number *
-                </label>
-                <input
-                  type="tel"
-                  id="installerPhone"
-                  name="installerPhone"
-                  value={formData.installerPhone}
-                  onChange={handleInputChange}
-                  maxLength="11"
-                  disabled={isSubmitting}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
-                    errors.installerPhone ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="e.g., 08012345678"
-                />
-                {errors.installerPhone && (
-                  <p className="mt-1 text-sm text-red-600">{errors.installerPhone}</p>
-                )}
-              </div>
-
-              {/* Installer Email */}
-              <div>
-                <label htmlFor="installerEmail" className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address *
-                </label>
-                <input
-                  type="email"
-                  id="installerEmail"
-                  name="installerEmail"
-                  value={formData.installerEmail}
-                  onChange={handleInputChange}
-                  disabled={isSubmitting}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
-                    errors.installerEmail ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="e.g., installer@jed.com"
-                />
-                {errors.installerEmail && (
-                  <p className="mt-1 text-sm text-red-600">{errors.installerEmail}</p>
-                )}
-              </div>
-            </div>
-          </div>
+          {/* Removed Installer Information Section - Now using authenticated user data */}
 
           {/* Installation Notes Section */}
           <div>
@@ -501,7 +381,7 @@ function SubmitForm({ onSubmit, onSuccess }) {
           <li>• Verify meter seal number matches physical installation</li>
           <li>• Ensure meter number is exactly 13 digits</li>
           <li>• Account number must be valid and active</li>
-          <li>• All installer information is required for tracking</li>
+          <li>• Installation will be logged with your authenticated user details</li>
           <li>• Installation will be recorded directly to the system</li>
           <li>• This action completes the installation process</li>
 

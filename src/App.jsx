@@ -21,6 +21,9 @@ function AppContent() {
 
   // Fetch customer requests from API
   const fetchCustomerRequests = useCallback(async () => {
+    // Return early if no user is authenticated
+    if (!isAuthenticated) return;
+
     try {
       setLoading(true);
       setError(null);
@@ -64,22 +67,42 @@ function AppContent() {
           status: 'pending',
           paymentReference: 'REF-2024-001',
           installer: {
-            name: user?.name || 'Installer',
-            employeeId: user?.employeeId || 'EMP-001'
+            name: 'Sample Installer',
+            employeeId: 'EMP-001'
           }
         }
       ]);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [isAuthenticated]); // Only depend on authentication status
 
+  // Debounced refresh handler
+  const [refreshTimeout, setRefreshTimeout] = useState(null);
+  
   // Fetch data on component mount and when refresh key changes
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchCustomerRequests();
+    if (!isAuthenticated) return;
+    
+    // Clear any existing refresh timeout
+    if (refreshTimeout) {
+      clearTimeout(refreshTimeout);
     }
-  }, [fetchCustomerRequests, refreshKey, isAuthenticated]);
+    
+    // Set new timeout for refresh
+    const timeoutId = setTimeout(() => {
+      fetchCustomerRequests();
+    }, 1000); // Debounce time of 1 second
+    
+    setRefreshTimeout(timeoutId);
+    
+    // Cleanup on unmount
+    return () => {
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
+      }
+    };
+  }, [fetchCustomerRequests, refreshKey, isAuthenticated, refreshTimeout]);
 
   // Handle new submission
   const handleAddSubmission = useCallback(async (newSubmission) => {
@@ -135,10 +158,13 @@ function AppContent() {
     }
   }, [error]);
 
-  // Handle manual refresh
+  // Handle manual refresh with debounce
   const handleRefresh = useCallback(() => {
-    setRefreshKey(prev => prev + 1);
-  }, []);
+    // Prevent multiple rapid refreshes
+    if (!loading) {
+      setRefreshKey(prev => prev + 1);
+    }
+  }, [loading]);
 
   // Dismiss error notification
   const dismissError = useCallback(() => {

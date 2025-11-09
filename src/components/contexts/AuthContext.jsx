@@ -1,5 +1,5 @@
-import { createContext, useState, useContext, useEffect } from 'react';
-import JEDApiService from '../services/api';
+import { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { JEDApiService } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -14,39 +14,62 @@ export const useAuth = () => {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const apiService = new JEDApiService();
+
+  // Normalize user data consistently with API service
+  const normalizeUser = useCallback((userData, credentials = {}) => {
+    return {
+      id: userData.id || userData._id,
+      firstName: userData.firstName || userData.first_name || '',
+      lastName: userData.lastName || userData.last_name || '',
+      name: userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
+      email: userData.email || '',
+      phone: userData.phone || credentials.phone || '',
+      role: (userData.role || 'installer').toLowerCase(),
+      nin: userData.nin || '',
+      homeAddress: userData.homeAddress || userData.home_address || '',
+      officeAddress: userData.officeAddress || userData.office_address || '',
+      employeeId: userData.employeeId || userData.employee_id || `EMP-${userData.id || ''}`,
+      createdAt: userData.createdAt || userData.created_at,
+      updatedAt: userData.updatedAt || userData.updated_at,
+    };
+  }, []);
+
+  // Store user data consistently
+  const storeUser = useCallback((userData) => {
+    const normalizedUser = normalizeUser(userData);
+    setUser(normalizedUser);
+    localStorage.setItem('jedUser', JSON.stringify(normalizedUser));
+    return normalizedUser;
+  }, [normalizeUser]);
 
   // Check for existing session on mount
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Try to get stored user data first
-        const storedUser = JEDApiService.getStoredUser();
-        const token = JEDApiService.getAuthToken();
+        const storedUser = apiService.getStoredUser();
+        const token = apiService.getAuthToken();
         
-        // If we have both user data and token, set the initial state
         if (storedUser && token) {
           setUser(storedUser);
           
-          // Verify token in background
+          // Verify token by fetching fresh profile data
           try {
-            const userData = await JEDApiService.verifyAuth();
-            // Update user data if verification successful
-            setUser(userData);
-            localStorage.setItem('jedUser', JSON.stringify(userData));
+            const profileData = await apiService.getProfile();
+            storeUser(profileData.user || profileData);
           } catch (error) {
-            console.error('[Auth] Token verification failed:', error.message);
-            // Only clear if it's an auth error, not a network error
-            if (error.message.includes('401') || error.message.includes('auth')) {
-              JEDApiService.clearTokens();
+            console.warn('[Auth] Token verification failed:', error.message);
+            // Clear only on auth errors, preserve on network errors
+            if (error.message.includes('AUTH_ERROR') || error.message.includes('401')) {
+              apiService.clearTokens();
               setUser(null);
             }
           }
         } else {
-          // No stored session
           setUser(null);
         }
       } catch (error) {
-        console.error('[Auth] Check auth failed:', error.message);
+        console.error('[Auth] Check auth failed:', error);
         setUser(null);
       } finally {
         setLoading(false);
@@ -54,87 +77,26 @@ export function AuthProvider({ children }) {
     };
 
     checkAuth();
-  }, []);
+  }, [apiService, storeUser]);
 
-  const login = async (credentials, rememberMe = false) => {
+  const login = async (credentials) => {
     try {
       console.log('[Auth] Attempting login with:', { phone: credentials.phone });
       
-      // Call API to authenticate
-      const response = await JEDApiService.login(credentials);
+      // Use API service for authentication
+      const userData = await apiService.login(credentials);
       
-      console.log('[Auth] Raw login response:', response);
-
-      // Handle the actual API response structure
-      let userData;
-      let token;
-
-      // API Response Structure:
-      // { success: true, message: "...", data: { user: {...}, token: "..." } }
+      console.log('[Auth] Login successful:', userData);
       
-      if (response.success && response.data) {
-        // Standard API response format
-        userData = response.data.user;
-        token = response.data.token;
-      } else if (response.data?.user) {
-        // Alternative format
-        userData = response.data.user;
-        token = response.data.token || response.token;
-      } else if (response.user) {
-        // Direct user object
-        userData = response.user;
-        token = response.token;
-      } else if (response.id) {
-        // Response IS the user object
-        userData = response;
-        token = response.token;
-      } else {
-        console.error('[Auth] Unexpected response format:', response);
-        throw new Error('Invalid login response format');
-      }
-
-      // Validate user data has required fields
-      if (!userData || (!userData.id && !userData._id)) {
-        console.error('[Auth] Invalid user data:', userData);
-        throw new Error('User ID missing from response');
-      }
-
-      // Normalize user data for consistent access
-      const normalizedUser = {
-        id: userData.id || userData._id,
-        firstName: userData.firstName || userData.first_name || '',
-        lastName: userData.lastName || userData.last_name || '',
-        name: userData.name || `${userData.firstName || ''} ${userData.lastName || ''}`.trim(),
-        email: userData.email || '',
-        phone: userData.phone || credentials.phone,
-        role: userData.role?.toLowerCase() || 'installer', // normalize role to lowercase
-        nin: userData.nin || '',
-        homeAddress: userData.homeAddress || userData.home_address || '',
-        officeAddress: userData.officeAddress || userData.office_address || '',
-        employeeId: userData.employeeId || userData.employee_id || `EMP-${userData.id}`,
-        createdAt: userData.createdAt || userData.created_at,
-        updatedAt: userData.updatedAt || userData.updated_at,
-      };
-
-      console.log('[Auth] Normalized user data:', normalizedUser);
-
-      // Store tokens if provided
-      if (token) {
-        JEDApiService.storeTokens({ 
-          token: token, 
-          refreshToken: response.data?.refreshToken || response.refreshToken 
-        }, rememberMe);
-      } else {
-        console.warn('[Auth] No token in response, proceeding anyway');
-      }
+      // Store normalized user data
+      const normalizedUser = storeUser(userData);
       
-      // Set user data
-      setUser(normalizedUser);
-      
-      // Store user data for quick access
-      localStorage.setItem('jedUser', JSON.stringify(normalizedUser));
-      
-      console.log('[Auth] Login successful:', normalizedUser);
+      // Debug logging
+      console.log('[Auth] Normalized user data:', {
+        role: normalizedUser.role,
+        isAdmin: normalizedUser.role === 'admin',
+        permissions: normalizedUser.role === 'admin' ? ROLE_PERMISSIONS['admin'] : ROLE_PERMISSIONS['installer']
+      });
       
       return normalizedUser;
     } catch (error) {
@@ -146,50 +108,20 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       console.log('[Auth] Logging out...');
-      // Call API to logout
-      await JEDApiService.logout();
+      await apiService.logout();
     } catch (error) {
       console.error('[Auth] Logout error:', error);
     } finally {
-      // Clear all auth state
       setUser(null);
-      JEDApiService.clearTokens();
+      apiService.clearTokens();
       console.log('[Auth] Logout complete');
     }
   };
 
-  const resetPassword = async (email) => {
-    try {
-      const url = `${JEDApiService.baseUrl}${JEDApiService.version}${JEDApiService.authEndpoint}/reset-password`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Password reset request failed');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('[Auth] Password reset error:', error);
-      throw error;
-    }
-  };
-
-  const updateUser = (updates) => {
-    const updatedUser = { ...user, ...updates };
-    setUser(updatedUser);
-    localStorage.setItem('jedUser', JSON.stringify(updatedUser));
-  };
-
-  // Register new user
   const register = async (userData) => {
     try {
       console.log('[Auth] Registering new user:', { phone: userData.phone, role: userData.role });
-      const response = await JEDApiService.register(userData);
+      const response = await apiService.register(userData);
       console.log('[Auth] Registration successful:', response);
       return response;
     } catch (error) {
@@ -198,14 +130,12 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Get user profile
   const getProfile = async () => {
     try {
       console.log('[Auth] Fetching user profile...');
-      const profile = await JEDApiService.getProfile();
+      const profile = await apiService.getProfile();
       if (profile) {
-        setUser(profile);
-        localStorage.setItem('jedUser', JSON.stringify(profile));
+        storeUser(profile.user || profile);
       }
       return profile;
     } catch (error) {
@@ -214,14 +144,12 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Update user profile
   const updateProfile = async (profileData) => {
     try {
       console.log('[Auth] Updating user profile...');
-      const updated = await JEDApiService.updateProfile(profileData);
+      const updated = await apiService.updateProfile(profileData);
       if (updated) {
-        setUser(prev => ({ ...prev, ...updated }));
-        localStorage.setItem('jedUser', JSON.stringify(updated));
+        storeUser(updated.user || updated);
       }
       return updated;
     } catch (error) {
@@ -230,35 +158,51 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Change password
   const changePassword = async (passwordData) => {
     try {
       console.log('[Auth] Changing password...');
-      return await JEDApiService.changePassword(passwordData);
+      return await apiService.changePassword(passwordData);
     } catch (error) {
       console.error('[Auth] Change password failed:', error);
       throw error;
     }
   };
 
+  // Update local user state (for immediate UI updates)
+  const updateUser = useCallback((updates) => {
+    if (user) {
+      const updatedUser = { ...user, ...updates };
+      storeUser(updatedUser);
+    }
+  }, [user, storeUser]);
+
+  // Check user roles
+  const isAdmin = user?.role === 'admin';
+  const isInstaller = user?.role === 'installer';
+
   const value = {
+    // State
     user,
     loading,
     isAuthenticated: !!user,
-    isAdmin: user?.role?.toLowerCase() === 'admin',
-    isSupervisor: user?.role?.toLowerCase() === 'supervisor',
-    isInstaller: user?.role?.toLowerCase() === 'installer',
+    
+    // Roles
+    isAdmin,
+    isInstaller,
+    
     // Auth methods
     login,
     logout,
     register,
+    
     // Profile methods
     getProfile,
     updateProfile,
     changePassword,
-    // Legacy methods
     updateUser,
-    resetPassword,
+    
+    // Token access (for API calls outside context)
+    getAuthToken: () => apiService.getAuthToken(),
   };
 
   // Loading screen
