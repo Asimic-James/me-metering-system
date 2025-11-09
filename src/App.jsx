@@ -7,7 +7,7 @@ import Navigation from './components/common/Navigation';
 import Dashboard from './components/dashboard/Dashboard';
 import SubmitForm from './components/submit/SubmitForm';
 import MeterSchedule from './components/schedule/MeterSchedule';
-import JEDApiService from './components/services/api';
+import { JEDApiService } from './components/services/api';
 
 function AppContent() {
   const { user, login, logout, isAuthenticated } = useAuth();
@@ -15,7 +15,7 @@ function AppContent() {
   // State Management
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [submissions, setSubmissions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Initialize as false
   const [error, setError] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -28,13 +28,16 @@ function AppContent() {
     try {
       setLoading(true);
       setError(null);
+      
+      const apiService = new JEDApiService();
+      console.log('[API] Fetching customer requests...');
 
-      const response = await JEDApiService.getAllCustomerRequests({
+      const response = await apiService.getAllCustomerRequests({
         page: 1,
         limit: 100
       });
 
-      console.log('API Response:', response);
+      console.log('[API] Response:', response);
 
       // Transform API response to match component format
       const formattedSubmissions = (response.data || response || []).map((item, index) => ({
@@ -81,7 +84,14 @@ function AppContent() {
   // Debounced refresh handler
   const [refreshTimeout, setRefreshTimeout] = useState(null);
   
-  // Fetch data on component mount and when refresh key changes
+  // Initial data fetch on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCustomerRequests();
+    }
+  }, [isAuthenticated]); // Only re-run if authentication status changes
+
+  // Handle refresh key changes
   useEffect(() => {
     if (!isAuthenticated) return;
     
@@ -90,12 +100,16 @@ function AppContent() {
       clearTimeout(refreshTimeout);
     }
     
-    // Set new timeout for refresh
-    const timeoutId = setTimeout(() => {
-      fetchCustomerRequests();
-    }, 1000); // Debounce time of 1 second
-    
-    setRefreshTimeout(timeoutId);
+    // Only fetch if refreshKey is not 0 (initial state)
+    if (refreshKey !== 0) {
+      console.log('[Refresh] Fetching new data...');
+      // Set new timeout for refresh
+      const timeoutId = setTimeout(() => {
+        fetchCustomerRequests();
+      }, 500); // Reduced debounce time for better responsiveness
+      
+      setRefreshTimeout(timeoutId);
+    }
     
     // Cleanup on unmount
     return () => {
@@ -103,7 +117,7 @@ function AppContent() {
         clearTimeout(refreshTimeout);
       }
     };
-  }, [fetchCustomerRequests, refreshKey, isAuthenticated, refreshTimeout]);
+  }, [refreshKey, isAuthenticated]);
 
   // Handle new submission
   const handleAddSubmission = useCallback(async (newSubmission) => {
@@ -159,13 +173,14 @@ function AppContent() {
     }
   }, [error]);
 
-  // Handle manual refresh with debounce
+  // Handle manual refresh
   const handleRefresh = useCallback(() => {
-    // Prevent multiple rapid refreshes
+    console.log('[Refresh] Manual refresh triggered');
     if (!loading) {
       setRefreshKey(prev => prev + 1);
+      fetchCustomerRequests(); // Immediately trigger a fetch
     }
-  }, [loading]);
+  }, [loading, fetchCustomerRequests]);
 
   // Dismiss error notification
   const dismissError = useCallback(() => {

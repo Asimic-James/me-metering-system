@@ -295,7 +295,7 @@ function Login({ onLogin }) {
             </a>
           </p>
           <p className="text-xs text-gray-500 mt-4">
-            © 2024 JED Meter Management. All rights reserved.
+            © 2025 JED Meter Management. All rights reserved.
           </p>
         </div>
       </div>
