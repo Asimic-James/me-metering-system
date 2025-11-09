@@ -1,6 +1,19 @@
 import { Home, Power, FileText, Calendar, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
+  // Handle body scroll when mobile menu is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   const navigationItems = [
     {
       id: 'dashboard',
@@ -33,13 +46,18 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
   return (
     <>
       {/* Mobile Sidebar Overlay */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden transition-opacity"
-          onClick={onClose}
-          aria-hidden="true"
-        />
-      )}
+      <div
+        className={`
+          fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden
+          transition-all duration-300 ease-in-out
+          ${isOpen 
+            ? 'opacity-100' 
+            : 'opacity-0 pointer-events-none'
+          }
+        `}
+        onClick={onClose}
+        aria-hidden={!isOpen}
+      />
 
       {/* Desktop Navigation Bar */}
       <nav className="hidden lg:block bg-white border-b border-gray-200 shadow-sm sticky top-16 sm:top-20 z-30">
@@ -80,9 +98,13 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
       <aside
         className={`
           fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] bg-white shadow-2xl z-50 lg:hidden
-          transform transition-transform duration-300 ease-in-out overflow-y-auto
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+          transform transition-all duration-300 ease-in-out overflow-y-auto
+          ${isOpen 
+            ? 'translate-x-0 opacity-100' 
+            : '-translate-x-full opacity-0 pointer-events-none'
+          }
         `}
+        aria-hidden={!isOpen}
       >
         {/* Sidebar Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
@@ -161,7 +183,7 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
       </aside>
 
       {/* Mobile Bottom Navigation (Alternative) */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-30 safe-area-inset-bottom">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-30 pb-safe">
         <div className="flex justify-around items-center h-16">
           {navigationItems.map((item) => {
             const Icon = item.icon;
@@ -170,19 +192,31 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
             return item.accessible ? (
               <button
                 key={item.id}
-                onClick={() => handleNavigation(item.id)}
+                onClick={() => {
+                  handleNavigation(item.id);
+                  // Add haptic feedback if supported
+                  if (window.navigator.vibrate) {
+                    window.navigator.vibrate(50);
+                  }
+                }}
                 className={`
-                  flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all
+                  relative flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all
+                  active:scale-95 touch-manipulation
                   ${isActive
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900 active:bg-gray-50'
                   }
                 `}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'scale-110' : ''}`} />
+                <div className={`
+                  relative rounded-lg p-1 transition-all duration-200
+                  ${isActive ? 'bg-blue-100' : ''}
+                `}>
+                  <Icon className={`w-5 h-5 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`} />
+                </div>
                 <span className="text-xs font-medium">{item.label.split(' ')[0]}</span>
                 {isActive && (
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-blue-600 rounded-b-full" />
+                  <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-12 h-0.5 bg-blue-600 rounded-b-full" />
                 )}
               </button>
             ) : null;

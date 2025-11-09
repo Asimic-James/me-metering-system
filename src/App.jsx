@@ -18,6 +18,7 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Fetch customer requests from API
   const fetchCustomerRequests = useCallback(async () => {
@@ -185,13 +186,20 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <Header user={user} onLogout={logout} />
+      <Header 
+        user={user} 
+        onLogout={logout}
+        onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        isMenuOpen={isMobileMenuOpen}
+      />
       
       {/* Navigation */}
       <Navigation 
         currentPage={currentPage} 
         onNavigate={handleNavigate}
         userRole={user?.role}
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
       />
       
       {/* Main Content */}
