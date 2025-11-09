@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Power, Phone, Lock, Eye, EyeOff, AlertCircle, Users } from 'lucide-react';
+import { Power, Phone, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 function Login({ onLogin }) {
   const [formData, setFormData] = useState({
@@ -11,7 +11,6 @@ function Login({ onLogin }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
-  const [showDemoCredentials, setShowDemoCredentials] = useState(true);
 
   const validateForm = () => {
     const newErrors = {};
@@ -53,11 +52,7 @@ function Login({ onLogin }) {
     }
   };
 
-  const handleQuickLogin = (phone, password, role) => {
-    setFormData({ phone, password, rememberMe: false });
-    setLoginError('');
-    setErrors({});
-  };
+  // Removed handleQuickLogin function
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -282,66 +277,6 @@ function Login({ onLogin }) {
               )}
             </button>
           </form>
-
-          {/* Demo Credentials */}
-          {showDemoCredentials && (
-            <div className="mt-6">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-blue-600" />
-                  <p className="text-xs font-semibold text-gray-700">Quick Login (Demo)</p>
-                </div>
-                <button
-                  onClick={() => setShowDemoCredentials(false)}
-                  className="text-xs text-gray-500 hover:text-gray-700"
-                >
-                  Hide
-                </button>
-              </div>
-              
-              <div className="space-y-2">
-                {/* Admin Login */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('08012345679', 'Pass123!', 'Admin')}
-                  disabled={isSubmitting}
-                  className="w-full p-3 bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-200 rounded-lg hover:from-purple-100 hover:to-purple-200 transition-all text-left disabled:opacity-50"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-purple-900">Admin Account</p>
-                      <p className="text-xs text-purple-700 mt-0.5">08012345679 • Pass123!</p>
-                    </div>
-                    <span className="px-2 py-1 bg-purple-600 text-white text-xs rounded-full font-medium">
-                      ADMIN
-                    </span>
-                  </div>
-                </button>
-
-                {/* Installer Login */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('08012345680', 'Pass123!', 'Installer')}
-                  disabled={isSubmitting}
-                  className="w-full p-3 bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-lg hover:from-blue-100 hover:to-blue-200 transition-all text-left disabled:opacity-50"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-blue-900">Installer Account</p>
-                      <p className="text-xs text-blue-700 mt-0.5">08012345680 • Pass123!</p>
-                    </div>
-                    <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-full font-medium">
-                      INSTALLER
-                    </span>
-                  </div>
-                </button>
-              </div>
-
-              <p className="text-xs text-gray-500 mt-3 text-center italic">
-                Click any card to auto-fill credentials
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Footer */}
