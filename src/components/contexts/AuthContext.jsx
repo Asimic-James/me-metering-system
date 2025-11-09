@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import { JEDApiService } from '../services/api';
 
 const AuthContext = createContext(null);
@@ -14,7 +14,9 @@ export const useAuth = () => {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const apiService = new JEDApiService();
+  
+  // Create a stable instance of JEDApiService using useMemo
+  const apiService = useMemo(() => new JEDApiService(), []);
 
   // Normalize user data consistently with API service
   const normalizeUser = useCallback((userData, credentials = {}) => {
@@ -45,39 +47,76 @@ export function AuthProvider({ children }) {
 
   // Check for existing session on mount
   useEffect(() => {
+    let mounted = true;
+
     const checkAuth = async () => {
       try {
+        // First try to get stored user data
         const storedUser = apiService.getStoredUser();
         const token = apiService.getAuthToken();
         
-        if (storedUser && token) {
-          setUser(storedUser);
-          
-          // Verify token by fetching fresh profile data
-          try {
-            const profileData = await apiService.getProfile();
-            storeUser(profileData.user || profileData);
-          } catch (error) {
-            console.warn('[Auth] Token verification failed:', error.message);
-            // Clear only on auth errors, preserve on network errors
-            if (error.message.includes('AUTH_ERROR') || error.message.includes('401')) {
-              apiService.clearTokens();
-              setUser(null);
-            }
+        if (!storedUser || !token) {
+          if (mounted) {
+            setUser(null);
+            setLoading(false);
           }
-        } else {
-          setUser(null);
+          return;
+        }
+
+        // Set initial user state from storage
+        if (mounted) {
+          setUser(storedUser);
+        }
+
+        // Verify token and get fresh profile data
+        try {
+          const response = await fetch(
+            `${import.meta.env.VITE_API_BASE_URL}/api/v1/auth/profile`,
+            {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(response.status === 401 ? 'AUTH_ERROR:Token invalid' : 'Failed to verify token');
+          }
+
+          const data = await response.json();
+          const profileData = data.data || data;
+
+          if (mounted && profileData) {
+            storeUser(profileData);
+          }
+        } catch (error) {
+          console.warn('[Auth] Token verification failed:', error.message);
+          if (mounted && (error.message.includes('AUTH_ERROR') || error.message.includes('401'))) {
+            apiService.clearTokens();
+            setUser(null);
+          }
         }
       } catch (error) {
         console.error('[Auth] Check auth failed:', error);
-        setUser(null);
+        if (mounted) {
+          setUser(null);
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
     checkAuth();
-  }, [apiService, storeUser]);
+
+    // Cleanup function
+    return () => {
+      mounted = false;
+    };
+  }, []); // Remove dependencies to prevent re-runs
 
   const login = async (credentials) => {
     try {
@@ -90,14 +129,10 @@ export function AuthProvider({ children }) {
       
       // Store normalized user data
       const normalizedUser = storeUser(userData);
-      
-      // Debug logging
       console.log('[Auth] Normalized user data:', {
         role: normalizedUser.role,
-        isAdmin: normalizedUser.role === 'admin',
-        permissions: normalizedUser.role === 'admin' ? ROLE_PERMISSIONS['admin'] : ROLE_PERMISSIONS['installer']
+        isAdmin: normalizedUser.role === 'admin'
       });
-      
       return normalizedUser;
     } catch (error) {
       console.error('[Auth] Login failed:', error);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AuthProvider, useAuth } from './components/contexts/AuthContext';
 import Login from './components/auth/Login';
 import Header from './components/common/Header';
@@ -20,6 +20,9 @@ function AppContent() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Create a single instance of JEDApiService
+  const apiService = useMemo(() => new JEDApiService(), []);
+
   // Fetch customer requests from API
   const fetchCustomerRequests = useCallback(async () => {
     // Return early if no user is authenticated
@@ -29,18 +32,33 @@ function AppContent() {
       setLoading(true);
       setError(null);
       
-      const apiService = new JEDApiService();
       console.log('[API] Fetching customer requests...');
 
-      const response = await apiService.getAllCustomerRequests({
-        page: 1,
-        limit: 100
-      });
+      const token = apiService.getAuthToken();
+      if (!token) {
+        throw new Error('AUTH_ERROR:No authentication token found');
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/v1/external/jed/requests`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
 
       console.log('[API] Response:', response);
 
       // Transform API response to match component format
-      const formattedSubmissions = (response.data || response || []).map((item, index) => ({
+      const formattedSubmissions = (data.data || data || []).map((item, index) => ({
         id: item.id || item._id || index + 1,
         sealNo: item.sealNo || item.meterSealNumber || item.seal_number || 'N/A',
         accountNumber: item.accountNumber || item.account_number || item.customerId || 'N/A',
