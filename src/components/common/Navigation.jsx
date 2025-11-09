@@ -1,0 +1,196 @@
+import { Home, Power, FileText, Calendar, X } from 'lucide-react';
+
+function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
+  const navigationItems = [
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: Home,
+      description: 'Overview and statistics',
+      accessible: true,
+    },
+    {
+      id: 'schedule',
+      label: 'Meter Schedule',
+      icon: Calendar,
+      description: 'View installation schedules',
+      accessible: true,
+    },
+    {
+      id: 'submit',
+      label: 'Install Meter',
+      icon: FileText,
+      description: 'Submit new installations',
+      accessible: true,
+    },
+  ];
+
+  const handleNavigation = (page) => {
+    onNavigate(page);
+    onClose?.(); // Close mobile menu after navigation
+  };
+
+  return (
+    <>
+      {/* Mobile Sidebar Overlay */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden transition-opacity"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Desktop Navigation Bar */}
+      <nav className="hidden lg:block bg-white border-b border-gray-200 shadow-sm sticky top-16 sm:top-20 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex gap-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+            {navigationItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = currentPage === item.id;
+              
+              return item.accessible ? (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavigation(item.id)}
+                  className={`
+                    flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-b-2 
+                    transition-all duration-200 whitespace-nowrap group relative
+                    ${isActive
+                      ? 'border-blue-600 text-blue-600 font-semibold bg-blue-50'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300 hover:bg-gray-50'
+                    }
+                  `}
+                >
+                  <Icon className={`w-5 h-5 transition-transform group-hover:scale-110 ${isActive ? 'animate-pulse' : ''}`} />
+                  <span className="text-sm sm:text-base">{item.label}</span>
+                  
+                  {/* Active Indicator */}
+                  {isActive && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 to-blue-600" />
+                  )}
+                </button>
+              ) : null;
+            })}
+          </div>
+        </div>
+      </nav>
+
+      {/* Mobile Sidebar Navigation */}
+      <aside
+        className={`
+          fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] bg-white shadow-2xl z-50 lg:hidden
+          transform transition-transform duration-300 ease-in-out overflow-y-auto
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}
+      >
+        {/* Sidebar Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/10 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                <Power className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="font-bold text-lg">Menu</h2>
+                <p className="text-blue-100 text-xs">JEDC Partnership</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+              aria-label="Close menu"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+
+        {/* Navigation Items */}
+        <div className="p-4 space-y-2">
+          {navigationItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentPage === item.id;
+            
+            return item.accessible ? (
+              <button
+                key={item.id}
+                onClick={() => handleNavigation(item.id)}
+                className={`
+                  w-full flex items-start gap-4 p-4 rounded-xl transition-all duration-200
+                  ${isActive
+                    ? 'bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 shadow-md'
+                    : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent hover:border-gray-200'
+                  }
+                `}
+              >
+                <div className={`
+                  p-2 rounded-lg flex-shrink-0
+                  ${isActive ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}
+                `}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                
+                <div className="flex-1 text-left">
+                  <p className={`font-semibold text-sm ${isActive ? 'text-blue-900' : 'text-gray-900'}`}>
+                    {item.label}
+                  </p>
+                  <p className={`text-xs mt-0.5 ${isActive ? 'text-blue-700' : 'text-gray-500'}`}>
+                    {item.description}
+                  </p>
+                </div>
+
+                {isActive && (
+                  <div className="flex-shrink-0 w-1 h-full bg-blue-600 rounded-full" />
+                )}
+              </button>
+            ) : null;
+          })}
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-gray-50">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-xs font-semibold text-blue-900 mb-1">Need Help?</p>
+            <p className="text-xs text-blue-700 mb-2">Contact support team</p>
+            <button className="w-full px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
+              Get Support
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile Bottom Navigation (Alternative) */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-30 safe-area-inset-bottom">
+        <div className="flex justify-around items-center h-16">
+          {navigationItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentPage === item.id;
+            
+            return item.accessible ? (
+              <button
+                key={item.id}
+                onClick={() => handleNavigation(item.id)}
+                className={`
+                  flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all
+                  ${isActive
+                    ? 'text-blue-600 bg-blue-50'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }
+                `}
+              >
+                <Icon className={`w-5 h-5 ${isActive ? 'scale-110' : ''}`} />
+                <span className="text-xs font-medium">{item.label.split(' ')[0]}</span>
+                {isActive && (
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-blue-600 rounded-b-full" />
+                )}
+              </button>
+            ) : null;
+          })}
+        </div>
+      </nav>
+    </>
+  );
+}
+
+export default Navigation;
