@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { PERMISSIONS, hasPermission } from '../auth/permissions';
-import JEDApiService from '../services/api';
+import { JEDApiService } from '../services/api';
 import { 
   BarChart,
   Users,
@@ -144,19 +144,21 @@ function AdminDashboard() {
         setLoading(true);
         setError(null);
 
+        const api = new JEDApiService();
+
         // Fetch stats
-        const statsResponse = await JEDApiService.getDashboardStats();
+        const statsResponse = await api.getDashboardStats();
         setStats(statsResponse.data || statsResponse);
 
         // Fetch recent installations
-        const installationsResponse = await JEDApiService.getAllCustomerRequests({
+        const installationsResponse = await api.getAllCustomerRequests({
           page: 1,
           limit: 5
         });
         setRecentInstallations(installationsResponse.data || installationsResponse);
 
         // Fetch installer performance
-        const performanceResponse = await JEDApiService.getInstallerPerformance();
+        const performanceResponse = await api.getInstallerPerformance();
         setInstallerPerformance(performanceResponse.data || performanceResponse);
 
       } catch (err) {

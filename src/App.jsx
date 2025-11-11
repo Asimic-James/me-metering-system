@@ -5,213 +5,145 @@ import Header from './components/common/Header';
 import Footer from './components/common/Footer';
 import Navigation from './components/common/Navigation';
 import Dashboard from './components/dashboard/Dashboard';
+import AdminDashboard from './components/admin/AdminDashboard';
+import AdminReports from './components/admin/AdminReports';
 import SubmitForm from './components/submit/SubmitForm';
 import MeterSchedule from './components/schedule/MeterSchedule';
-import { JEDApiService } from './components/services/api';
+import UserManagement from './components/admin/UserManagement';
+import ExcelUpload from './components/uploads/ExcelUpload';
+import ErrorNotification from './components/common/ErrorNotification';
+import { useSubmissions } from './hooks/useSubmissions';
+import { useNavigation } from './hooks/useNavigation';
+import jedApi from './components/services/api';
+
+// Constants for better maintainability
+const PAGE_NAMES = {
+  DASHBOARD: 'dashboard',
+  SCHEDULE: 'schedule',
+  USERS: 'users',
+  REPORTS: 'reports',
+  SUBMIT: 'submit'
+};
+
+
+const USER_ROLES = {
+  ADMIN: 'admin'
+};
 
 function AppContent() {
   const { user, login, logout, isAuthenticated } = useAuth();
   
-  // State Management
-  const [currentPage, setCurrentPage] = useState('dashboard');
-  const [submissions, setSubmissions] = useState([]);
-  const [loading, setLoading] = useState(false); // Initialize as false
-  const [error, setError] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // Create a single instance of JEDApiService
-  const apiService = useMemo(() => new JEDApiService(), []);
-
-  // Fetch customer requests from API
-  const fetchCustomerRequests = useCallback(async () => {
-    // Return early if no user is authenticated
-    if (!isAuthenticated) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('[API] Fetching customer requests...');
-
-      const token = apiService.getAuthToken();
-      if (!token) {
-        throw new Error('AUTH_ERROR:No authentication token found');
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/api/v1/external/jed/requests`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      console.log('[API] Response:', response);
-
-      // Transform API response to match component format
-      const formattedSubmissions = (data.data || data || []).map((item, index) => ({
-        id: item.id || item._id || index + 1,
-        sealNo: item.sealNo || item.meterSealNumber || item.seal_number || 'N/A',
-        accountNumber: item.accountNumber || item.account_number || item.customerId || 'N/A',
-        meterNo: item.meterNo || item.meter_number || item.meterNumber || 'N/A',
-        submittedAt: item.submittedAt || item.submitted_at || item.createdAt || item.created_at || new Date().toLocaleString(),
-        status: item.status || 'pending',
-        paymentReference: item.paymentReference || item.payment_reference || item.paymentRef || null,
-        installer: item.installer || (item.installer_name ? {
-          name: item.installer_name,
-          employeeId: item.installer_id || item.employee_id
-        } : null)
-      }));
-
-      setSubmissions(formattedSubmissions);
-      
-    } catch (err) {
-      console.error('Failed to fetch customer requests:', err);
-      setError('Unable to load submissions from server. Displaying sample data.');
-      
-      // Fallback to sample data
-      setSubmissions([
-        {
-          id: 1,
-          sealNo: '9900',
-          accountNumber: '477014',
-          meterNo: '0123456789898',
-          submittedAt: new Date().toLocaleString(),
-          status: 'pending',
-          paymentReference: 'REF-2024-001',
-          installer: {
-            name: 'Sample Installer',
-            employeeId: 'EMP-001'
-          }
-        }
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }, [isAuthenticated]); // Only depend on authentication status
-
-  // Debounced refresh handler
-  const [refreshTimeout, setRefreshTimeout] = useState(null);
+  // Run API health check on app start
+  useEffect(() => {
+    jedApi.validateApiIntegration();
+  }, []);
   
-  // Initial data fetch on mount
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchCustomerRequests();
-    }
-  }, [isAuthenticated]); // Only re-run if authentication status changes
+  // Custom hooks for separated concerns
+  const { 
+    submissions, 
+    loading, 
+    error, 
+    refreshSubmissions, 
+    addSubmission, 
+    dismissError 
+  } = useSubmissions(isAuthenticated);
+  
+  const {
+    currentPage,
+    isMobileMenuOpen,
+    navigateTo,
+    toggleMobileMenu,
+    closeMobileMenu
+  } = useNavigation();
 
-  // Handle refresh key changes
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    
-    // Clear any existing refresh timeout
-    if (refreshTimeout) {
-      clearTimeout(refreshTimeout);
-    }
-    
-    // Only fetch if refreshKey is not 0 (initial state)
-    if (refreshKey !== 0) {
-      console.log('[Refresh] Fetching new data...');
-      // Set new timeout for refresh
-      const timeoutId = setTimeout(() => {
-        fetchCustomerRequests();
-      }, 500); // Reduced debounce time for better responsiveness
-      
-      setRefreshTimeout(timeoutId);
-    }
-    
-    // Cleanup on unmount
-    return () => {
-      if (refreshTimeout) {
-        clearTimeout(refreshTimeout);
-      }
-    };
-  }, [refreshKey, isAuthenticated]);
-
-  // Handle new submission
-  const handleAddSubmission = useCallback(async (newSubmission) => {
+  // Handle login and redirect to dashboard
+  const handleLogin = useCallback(async (credentials) => {
     try {
-      // Add installer info if not present
-      const submissionWithInstaller = {
-        ...newSubmission,
-        installer: newSubmission.installer || {
-          name: user?.name || 'Unknown',
-          employeeId: user?.employeeId || 'N/A',
-          email: user?.email || 'N/A',
-          phone: user?.phone || 'N/A'
-        }
-      };
-
-      // Add to local state immediately for optimistic UI update
-      const optimisticSubmission = {
-        id: submissions.length + 1,
-        sealNo: submissionWithInstaller.sealNo,
-        accountNumber: submissionWithInstaller.accountNumber,
-        meterNo: submissionWithInstaller.meterNo,
-        submittedAt: submissionWithInstaller.submittedAt || new Date().toLocaleString(),
-        status: submissionWithInstaller.status || 'pending',
-        paymentReference: submissionWithInstaller.paymentReference || null,
-        installer: submissionWithInstaller.installer
-      };
-
-      setSubmissions(prev => [optimisticSubmission, ...prev]);
-
-      // Trigger a refresh to get updated data from server
-      setTimeout(() => {
-        setRefreshKey(prev => prev + 1);
-      }, 1000);
-
-      return { success: true };
-    } catch (err) {
-      console.error('Error adding submission:', err);
-      return { success: false, error: err.message };
+      console.log('[App] Attempting login with credentials...');
+      
+      // Use the jedApi singleton to make the actual login request
+      const userData = await jedApi.login(credentials);
+      
+      console.log('[App] Login successful:', userData);
+      
+      // Update auth context with the user data
+      login(userData);
+      navigateTo(PAGE_NAMES.DASHBOARD);
+      
+      return userData; // Return the user data for the Login component
+    } catch (error) {
+      console.error('[App] Login failed:', error);
+      throw error; // Re-throw the error for the Login component to handle
     }
-  }, [submissions.length, user]);
+  }, [login, navigateTo]);
 
   // Handle form success and navigation
   const handleFormSuccess = useCallback(() => {
-    setCurrentPage('dashboard');
-  }, []);
+    navigateTo(PAGE_NAMES.DASHBOARD);
+  }, [navigateTo]);
 
-  // Handle page navigation
-  const handleNavigate = useCallback((page) => {
-    setCurrentPage(page);
-    // Clear error when navigating
-    if (error) {
-      setError(null);
+  // Handle new submission with user context
+  const handleAddSubmission = useCallback(async (newSubmission) => {
+    const submissionWithUser = {
+      ...newSubmission,
+      installer: newSubmission.installer || {
+        name: user?.name || 'Unknown',
+        employeeId: user?.employeeId || 'N/A',
+        email: user?.email || 'N/A',
+        phone: user?.phone || 'N/A'
+      }
+    };
+    
+    return await addSubmission(submissionWithUser);
+  }, [addSubmission, user]);
+
+  // Render appropriate dashboard based on user role
+  const renderDashboard = useMemo(() => {
+    if (user?.role === USER_ROLES.ADMIN) {
+      return <AdminDashboard />;
     }
-  }, [error]);
+    return (
+      <Dashboard 
+        submissions={submissions} 
+        loading={loading}
+        onRefresh={refreshSubmissions}
+      />
+    );
+  }, [user?.role, submissions, loading, refreshSubmissions]);
 
-  // Handle manual refresh
-  const handleRefresh = useCallback(() => {
-    console.log('[Refresh] Manual refresh triggered');
-    if (!loading) {
-      setRefreshKey(prev => prev + 1);
-      fetchCustomerRequests(); // Immediately trigger a fetch
+  // Render current page content
+  const renderPageContent = useMemo(() => {
+    switch (currentPage) {
+      case PAGE_NAMES.DASHBOARD:
+        return renderDashboard;
+      
+      case PAGE_NAMES.SCHEDULE:
+        return (
+          <MeterSchedule 
+            onComplete={handleAddSubmission}
+          />
+        );
+      
+      case PAGE_NAMES.USERS:
+        return <UserManagement />;
+
+      case 'uploads':
+        return <ExcelUpload />;
+
+      case PAGE_NAMES.REPORTS:
+        return <AdminReports />;
+      
+      default:
+        return (
+          <SubmitForm 
+            onSubmit={handleAddSubmission} 
+            onSuccess={handleFormSuccess} 
+          />
+        );
     }
-  }, [loading, fetchCustomerRequests]);
+  }, [currentPage, renderDashboard, handleAddSubmission, handleFormSuccess]);
 
-  // Dismiss error notification
-  const dismissError = useCallback(() => {
-    setError(null);
-  }, []);
-
-  // Handle login
-  const handleLogin = (userData) => {
-    login(userData);
-    setCurrentPage('dashboard');
-  };
-
-  // If not authenticated, show login page
+  // Show login if not authenticated
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
@@ -222,64 +154,31 @@ function AppContent() {
       <Header 
         user={user} 
         onLogout={logout}
-        onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        onMenuToggle={toggleMobileMenu}
         isMenuOpen={isMobileMenuOpen}
       />
       
       {/* Navigation */}
       <Navigation 
         currentPage={currentPage} 
-        onNavigate={handleNavigate}
+        onNavigate={navigateTo}
         userRole={user?.role}
         isOpen={isMobileMenuOpen}
-        onClose={() => setIsMobileMenuOpen(false)}
+        onClose={closeMobileMenu}
       />
       
       {/* Main Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8">
         {/* Error Notification */}
         {error && (
-          <div className="mb-6 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg shadow-sm animate-fade-in">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3 flex-1">
-                <p className="text-sm font-medium text-yellow-800">{error}</p>
-              </div>
-              <div className="ml-auto pl-3">
-                <button
-                  onClick={dismissError}
-                  className="inline-flex text-yellow-400 hover:text-yellow-600 focus:outline-none"
-                >
-                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
+          <ErrorNotification 
+            message={error}
+            onDismiss={dismissError}
+          />
         )}
 
         {/* Page Content */}
-        {currentPage === 'dashboard' ? (
-          <Dashboard 
-            submissions={submissions} 
-            loading={loading}
-            onRefresh={handleRefresh}
-          />
-        ) : currentPage === 'schedule' ? (
-          <MeterSchedule 
-            onComplete={handleAddSubmission}
-          />
-        ) : (
-          <SubmitForm 
-            onSubmit={handleAddSubmission} 
-            onSuccess={handleFormSuccess} 
-          />
-        )}
+        {renderPageContent}
       </main>
       
       {/* Footer */}

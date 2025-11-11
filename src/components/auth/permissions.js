@@ -1,3 +1,5 @@
+import { createElement } from 'react';
+
 // Permission definitions
 export const PERMISSIONS = {
   // Dashboard Permissions
@@ -81,13 +83,13 @@ export const hasRole = (userRole, requiredRole) => {
 export const withPermission = (WrappedComponent, requiredPermission) => {
   return function PermissionWrapper({ userRole, ...props }) {
     if (!hasPermission(userRole, requiredPermission)) {
-      return (
-        <div className="p-4 text-center">
-          <h3 className="text-lg font-semibold text-gray-900">Access Denied</h3>
-          <p className="text-gray-600">You don't have permission to view this content.</p>
-        </div>
+      return createElement(
+        'div',
+        { className: 'p-4 text-center' },
+        createElement('h3', { className: 'text-lg font-semibold text-gray-900' }, 'Access Denied'),
+        createElement('p', { className: 'text-gray-600' }, `You don't have permission to view this content.`)
       );
     }
-    return <WrappedComponent {...props} />;
+    return createElement(WrappedComponent, props);
   };
 };

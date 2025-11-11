@@ -1,47 +1,62 @@
-// JED API Service - Debugged & Optimized
+// src/services/api.js
+// ============================================
+// JED API Service - Refactored & Optimized
+// ============================================
 
+// Enable API debugging globally if needed (set via window.DEBUG_API = true in console)
+if (typeof window !== 'undefined' && window.DEBUG_API) {
+  console.log('[API] Debug mode enabled - all API calls will be logged');
+}
 
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://pharez-api.onrender.com';
-const API_VERSION = '/api/v1';
-const JED_ENDPOINT = '/external/jed';
-const AUTH_ENDPOINT = '/auth';
+const API_CONFIG = {
+  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://pharez-api.onrender.com',
+  VERSION: '/api/v1',
+  ENDPOINTS: {
+    AUTH: '/auth',
+    JED: '/external/jed'
+  },
+  TOKEN_REFRESH_THRESHOLD: 5 * 60 * 1000, // 5 minutes
+  RETRY_CONFIG: {
+    MAX_RETRIES: 2,
+    BASE_DELAY: 500
+  }
+};
 
-// Token refresh configuration
-const TOKEN_REFRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes in milliseconds
-
-/**
- * API Service for JED Integration
- * Base URL: https://pharez-api.onrender.com/api/v1
- * API Documentation: https://pharez-api.onrender.com/api-docs
- */
+// Error types for consistent error handling
+const ERROR_TYPES = {
+  AUTH: 'AUTH_ERROR',
+  VALIDATION: 'VALIDATION_ERROR',
+  PERMISSION: 'PERMISSION_ERROR',
+  NOT_FOUND: 'NOT_FOUND',
+  SERVER: 'SERVER_ERROR',
+  NETWORK: 'NETWORK_ERROR'
+};
 
 class JEDApiService {
   constructor() {
-    this.baseUrl = API_BASE_URL;
-    this.version = API_VERSION;
-    this.jedEndpoint = JED_ENDPOINT;
-    this.authEndpoint = AUTH_ENDPOINT;
+    this.config = API_CONFIG;
   }
 
-  /**
-   * Get full API URL
-   * @param {string} endpoint 
-   * @param {boolean} isAuthEndpoint - Whether this is an auth endpoint
-   * @returns {string}
-   */
-  getFullUrl(endpoint, isAuthEndpoint = false) {
-    const baseEndpoint = isAuthEndpoint ? this.authEndpoint : this.jedEndpoint;
-    return `${this.baseUrl}${this.version}${baseEndpoint}${endpoint}`;
+  // URL construction helper
+  buildUrl(endpoint, isAuthEndpoint = false) {
+    const baseEndpoint = isAuthEndpoint 
+      ? this.config.ENDPOINTS.AUTH 
+      : this.config.ENDPOINTS.JED;
+    
+    return `${this.config.BASE_URL}${this.config.VERSION}${baseEndpoint}${endpoint}`;
   }
 
-  /**
-   * Get default headers including auth token if available
-   * @returns {Object} Headers object
-   */
-  getHeaders() {
+  // Generic API URL helper (for endpoints that are not under the JED namespace)
+  buildApiUrl(endpoint) {
+    return `${this.config.BASE_URL}${this.config.VERSION}${endpoint}`;
+  }
+
+  // Header construction helper
+  buildHeaders(customHeaders = {}) {
     const headers = {
       'Content-Type': 'application/json',
+      ...customHeaders
     };
 
     const token = this.getAuthToken();
@@ -52,459 +67,503 @@ class JEDApiService {
     return headers;
   }
 
-  /**
-   * Generic request handler with error handling and logging
-   * @param {string} url - Full URL to request
-   * @param {Object} options - Fetch options
-   * @returns {Promise<Object>} Response data
-   */
+  // Enhanced request method with better error handling and retry logic
   async makeRequest(url, options = {}) {
-    try {
-      console.log(`[API] ${options.method || 'GET'} ${url}`);
-      if (options.body) {
-        console.log('[API] Request Body:', JSON.parse(options.body));
+    const { maxRetries = this.config.RETRY_CONFIG.MAX_RETRIES } = options;
+    let lastError;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[API] Request to ${url} (attempt ${attempt + 1})`, { method: options.method });
+
+        // Respect FormData bodies by allowing the browser to set Content-Type
+        const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+        const headers = this.buildHeaders(options.headers);
+        if (isFormData && headers['Content-Type']) {
+          delete headers['Content-Type'];
+        }
+
+        // Log request body (truncate for large payloads)
+        if (options.body && typeof options.body === 'string') {
+          const bodyTrunc = options.body.length > 200 ? options.body.substring(0, 200) + '...' : options.body;
+          console.log('[API] Request body:', bodyTrunc);
+        }
+
+        const response = await fetch(url, {
+          ...options,
+          headers,
+        });
+
+        const result = await this.handleResponse(response);
+        return result;
+
+      } catch (error) {
+        lastError = error;
+        
+        // Check if we should retry
+        if (attempt < maxRetries && this.shouldRetry(error)) {
+          const delay = this.calculateRetryDelay(attempt);
+          console.warn(`[API] Retrying after ${delay}ms...`);
+          await this.delay(delay);
+          continue;
+        }
+        break;
       }
+    }
 
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-      });
+    throw this.enhanceError(lastError);
+  }
 
-      console.log(`[API] Response Status: ${response.status} ${response.statusText}`);
+  // Handle API response with consistent error formatting
+  async handleResponse(response) {
+    console.log(`[API] Response: ${response.status} ${response.statusText}`);
 
-      // Handle different response types
-      const contentType = response.headers.get('content-type');
-      let data;
+    const contentType = response.headers.get('content-type');
+    let data;
 
-      if (contentType && contentType.includes('application/json')) {
+    try {
+      // Check if response is HTML (common sign of error page or CORS issue)
+      if (contentType?.includes('text/html') || contentType?.includes('text/plain')) {
+        const text = await response.text();
+        console.warn('[API] Received HTML/text response instead of JSON:', text.substring(0, 100));
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: Server returned HTML error page`);
+        }
+        data = { message: text };
+      } else if (contentType?.includes('application/json')) {
         data = await response.json();
       } else {
         const text = await response.text();
-        data = text ? { message: text } : {};
+        console.warn('[API] Unknown content type:', contentType);
+        data = text ? { message: text } : { message: 'Empty response' };
       }
-
-      if (!response.ok) {
-        const errorMessage = data?.message || data?.error || `HTTP ${response.status}: ${response.statusText}`;
-        console.error('[API] Error Response:', data);
-        throw new Error(errorMessage);
-      }
-
-      console.log('[API] Success Response:', data);
-      return data;
-
-    } catch (error) {
-      console.error('[API] Request Failed:', error.message);
-      
-      // Enhanced error handling
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        throw new Error('Network error. Please check your internet connection.');
-      }
-      
-      if (error.message.includes('401')) {
-        this.clearTokens();
-        throw new Error('Authentication required. Please login again.');
-      }
-
-      throw error;
+    } catch (parseError) {
+      console.error('[API] Response parse error:', parseError);
+      data = { message: 'Invalid response format' };
     }
+
+    if (!response.ok) {
+      this.handleErrorResponse(response, data);
+    }
+
+    console.log('[API] Success Response:', data);
+    return data;
   }
 
-  // ============================================
+  // Handle different error responses
+  handleErrorResponse(response, data) {
+    const { status } = response;
+
+    if (status === 401) {
+      this.clearTokens();
+      throw new Error(`${ERROR_TYPES.AUTH}:${data?.message || 'Invalid credentials'}`);
+    }
+
+    // Check for common error indicators
+    const errorMsg = String(data?.message || data?.error || '').toLowerCase();
+    const isHtmlError = errorMsg.includes('doctype') || errorMsg.includes('<!');
+    
+    if (isHtmlError) {
+      console.error('[API] Server returned HTML error page — possible CORS or server issue');
+      throw new Error(`${ERROR_TYPES.SERVER}:Server responded with an error page — check CORS and API endpoint`);
+    }
+
+    const errorMap = {
+      400: `${ERROR_TYPES.VALIDATION}:${data?.message || 'Invalid request'}`,
+      403: `${ERROR_TYPES.PERMISSION}:${data?.message || 'Access denied'}`,
+      404: `${ERROR_TYPES.NOT_FOUND}:${data?.message || 'Resource not found'}`,
+      500: `${ERROR_TYPES.SERVER}:${data?.message || 'Internal server error'}`
+    };
+
+    const errorMessage = errorMap[status] || 
+      data?.message || 
+      data?.error || 
+      `HTTP ${status}: ${response.statusText}`;
+
+    throw new Error(errorMessage);
+  }
+
+  // Enhanced error handling
+  enhanceError(error) {
+    if (error.message && error.message.includes('401')) {
+      this.clearTokens();
+      return new Error('Authentication required. Please login again.');
+    }
+
+    // Network errors
+    if (error.name === 'TypeError' || error.message.toLowerCase().includes('network')) {
+      return new Error(`${ERROR_TYPES.NETWORK}:Unable to connect to server`);
+    }
+
+    return error;
+  }
+
+  // Retry logic helpers
+  shouldRetry(error) {
+    const isServerError = error.message?.match(/^HTTP 5/);
+    const isNetworkError = error.message?.includes(ERROR_TYPES.NETWORK);
+    return isServerError || isNetworkError;
+  }
+
+  calculateRetryDelay(attempt) {
+    return this.config.RETRY_CONFIG.BASE_DELAY * Math.pow(2, attempt);
+  }
+
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   // Authentication Methods
-  // ============================================
+  async register(userData) {
+    console.log('[Auth] Register:', { phone: userData.phone, role: userData.role });
+    const url = this.buildUrl('/register', true);
+    
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+  }
 
-  /**
-   * Authenticate user with phone and password
-   * POST /api/v1/auth/login
-   * @param {Object} credentials - Login credentials
-   * @param {string} credentials.phone - User's phone number
-   * @param {string} credentials.password - User's password
-   * @returns {Promise<Object>} Authentication response with user data and token
-   */
   async login(credentials) {
-    try {
-      console.log('[API] Login request:', { phone: credentials.phone });
-      const url = this.getFullUrl('/login', true);
-      
-      const response = await this.makeRequest(url, {
-        method: 'POST',
-        body: JSON.stringify(credentials),
-      });
-      
-      console.log('[API] Login response:', response);
+    console.log('[Auth] Login request:', { phone: credentials.phone, hasPassword: !!credentials.password });
+    const url = this.buildUrl('/login', true);
+    
+    // Primary payload shape
+    const payloads = [
+      { phone: credentials.phone, password: credentials.password },
+      { phoneNumber: credentials.phone, password: credentials.password },
+      { username: credentials.phone, password: credentials.password },
+      { data: { phone: credentials.phone, password: credentials.password } }
+    ];
 
-      // Handle different response formats
-      let userData, token, refreshToken;
+    let response = null;
+    let lastErr = null;
 
-      if (response.data) {
-        // Standard API format: { data: { user: {...}, token: "..." } }
-        userData = response.data.user || response.data;
-        token = response.data.token;
-        refreshToken = response.data.refreshToken;
-      } else {
-        // Direct format: { user: {...}, token: "..." }
-        userData = response.user || response;
-        token = response.token;
-        refreshToken = response.refreshToken;
+    for (let i = 0; i < payloads.length; i++) {
+      const p = payloads[i];
+      try {
+        console.log(`[Auth] Login attempt ${i + 1}/${payloads.length} with payload:`, JSON.stringify(p).substring(0, 100));
+        response = await this.makeRequest(url, {
+          method: 'POST',
+          body: JSON.stringify(p),
+        });
+        console.log('[Auth] Login successful on attempt', i + 1);
+        // stop on success
+        break;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[Auth] Login attempt ${i + 1} failed:`, err.message);
+        // If server indicates password/phone required, try next payload. Otherwise, rethrow for non-validation errors.
+        const msg = String(err?.message || '').toLowerCase();
+        if (!msg.includes('password is required') && !msg.includes('phone is required') && !msg.includes('validation')) {
+          throw err;
+        }
+        // else continue to try alternate payload shapes
       }
-
-      if (!userData || typeof userData !== 'object') {
-        throw new Error('Invalid user data in response');
-      }
-
-      // Store the tokens if available
-      if (token) {
-        this.storeTokens({ token, refreshToken });
-        
-        // Store normalized user data
-        const normalizedUser = {
-          ...userData,
-          role: userData.role?.toLowerCase() || 'installer'
-        };
-        localStorage.setItem('jedUser', JSON.stringify(normalizedUser));
-        return normalizedUser;
-      } else {
-        throw new Error('No authentication token received');
-      }
-    } catch (error) {
-      console.error('[Auth] Login error:', error);
-      throw error;
     }
+
+    if (!response) {
+      // all attempts failed
+      console.error('[Auth] All login attempts failed:', lastErr?.message);
+      throw lastErr || new Error(`${ERROR_TYPES.VALIDATION}:Invalid authentication response`);
+    }
+
+    // extractAuthData returns { userData, token }
+    const { userData, token } = this.extractAuthData(response);
+
+    if (!userData || !token) {
+      console.error('[Auth] Response extraction failed - userData:', userData, 'token:', !!token);
+      throw new Error(`${ERROR_TYPES.VALIDATION}:Invalid authentication response`);
+    }
+
+    console.log('[Auth] Login successful - storing user:', { id: userData.id, phone: userData.phone, role: userData.role });
+    this.storeTokens({ token });
+    this.storeUser(userData);
+
+    return this.normalizeUserData(userData);
   }
 
-  /**
-   * Verify current authentication token
-   * GET /api/v1/auth/verify
-   * @returns {Promise<Object>} User data if token is valid
-   */
-  async verifyAuth() {
-    try {
-      const token = this.getAuthToken();
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
+  // Extract authentication data from various response formats
+  extractAuthData(response) {
+    console.log('[Auth] Extracting auth data from response:', response);
+    let userData = null;
+    let token = null;
 
-      const url = this.getFullUrl('/verify', true);
-      return await this.makeRequest(url, {
-        method: 'GET',
-        headers: this.getHeaders(),
-      });
-    } catch (error) {
-      console.error('[Auth] Verification error:', error);
-      throw error;
+    // Try nested data.user format
+    if (response.data?.user) {
+      userData = response.data.user;
+      token = response.data.token || response.token;
     }
+    // Try response.user format
+    else if (response.user) {
+      userData = response.user;
+      token = response.token;
+    }
+    // Try response body is user object directly
+    else if (response.phone && response.role) {
+      userData = response;
+      token = response.token || response.accessToken || response.access_token;
+    }
+    // Try data is user object
+    else if (response.data && response.data.phone && response.data.role) {
+      userData = response.data;
+      token = response.token || response.data.token;
+    }
+
+    console.log('[Auth] Extracted - userData found:', !!userData, 'token found:', !!token);
+    return { userData, token };
   }
 
-  /**
-   * Logout user and invalidate token
-   * POST /api/v1/auth/logout
-   */
+  // Normalize user data structure
+  normalizeUserData(userData) {
+    return {
+      ...userData,
+      role: (userData.role?.toLowerCase() || 'installer')
+    };
+  }
+
+  // User Management Methods
+  async getProfile() {
+    const url = this.buildUrl('/profile', true);
+    const response = await this.makeRequest(url, { method: 'GET' });
+
+    if (response.user) {
+      this.storeUser(response.user);
+    }
+
+    return response;
+  }
+
+  async updateProfile(profileData) {
+    const url = this.buildUrl('/profile', true);
+    const response = await this.makeRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(profileData),
+    });
+
+    if (response.user) {
+      this.storeUser(response.user);
+    }
+    
+    return response;
+  }
+
+  async changePassword(passwordData) {
+    const url = this.buildUrl('/change-password', true);
+    return await this.makeRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(passwordData),
+    });
+  }
+
   async logout() {
     try {
       const token = this.getAuthToken();
       if (token) {
-        const url = this.getFullUrl('/logout', true);
-        await this.makeRequest(url, {
-          method: 'POST',
-          headers: this.getHeaders(),
-        });
+        const url = this.buildUrl('/logout', true);
+        try {
+          console.log('[Auth] Attempting server logout...');
+          await this.makeRequest(url, { method: 'POST' });
+          console.log('[Auth] Server logout successful');
+        } catch (err) {
+          // 404 means endpoint doesn't exist on backend — this is not critical
+          if (err.message && err.message.includes('NOT_FOUND')) {
+            console.warn('[Auth] Logout endpoint not found on server, proceeding with local logout');
+          } else {
+            console.warn('[Auth] Server logout failed:', err.message);
+          }
+          // Continue with local logout regardless of server error
+        }
+      } else {
+        console.log('[Auth] No token found, skipping server logout');
       }
     } catch (error) {
       console.error('[Auth] Logout error:', error);
     } finally {
+      console.log('[Auth] Clearing local tokens');
       this.clearTokens();
     }
   }
 
-  // ============================================
-  // JED Integration Methods - POST
-  // ============================================
-
-  /**
-   * Complete meter installation and notify JED
-   * POST /api/v1/external/jed/complete-installation
-   * @param {Object} installationData - Installation completion data
-   * @returns {Promise} Installation completion response
-   */
+  // JED Integration Methods
   async completeInstallation(installationData) {
-    try {
-      const url = this.getFullUrl('/complete-installation');
-      return await this.makeRequest(url, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(installationData),
-      });
-    } catch (error) {
-      console.error('[Installation] Complete installation error:', error);
-      throw error;
-    }
+    const url = this.buildUrl('/complete-installation');
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(installationData),
+    });
   }
 
-  /**
-   * Generate Remita payment reference for meter installation
-   * POST /api/v1/external/jed/generate-ref
-   * @param {Object} meterData - Meter installation data
-   * @returns {Promise} Payment reference response
-   */
   async generatePaymentReference(meterData) {
-    try {
-      const url = this.getFullUrl('/generate-ref');
-      return await this.makeRequest(url, {
-        method: 'POST',
-        body: JSON.stringify(meterData),
-      });
-    } catch (error) {
-      console.error('[Payment] Generate reference error:', error);
-      throw error;
-    }
+    const url = this.buildUrl('/generate-ref');
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(meterData),
+    });
   }
 
-  /**
-   * Confirm payment with JED after customer pays via Remita
-   * POST /api/v1/external/jed/confirm-payment
-   * @param {Object} paymentData - Payment confirmation data
-   * @returns {Promise} Payment confirmation response
-   */
   async confirmPayment(paymentData) {
-    try {
-      const url = this.getFullUrl('/confirm-payment');
-      return await this.makeRequest(url, {
-        method: 'POST',
-        body: JSON.stringify(paymentData),
-      });
-    } catch (error) {
-      console.error('[Payment] Confirm payment error:', error);
-      throw error;
-    }
+    const url = this.buildUrl('/confirm-payment');
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(paymentData),
+    });
   }
 
-  /**
-   * Remita webhook endpoint (array of webhook events)
-   * POST /api/v1/external/jed/remita/webhook
-   * @param {Array} webhookEvents - Array of webhook events from Remita
-   * @returns {Promise} Webhook processing response
-   */
   async handleRemitaWebhook(webhookEvents) {
-    try {
-      const url = this.getFullUrl('/remita/webhook');
-      return await this.makeRequest(url, {
-        method: 'POST',
-        body: JSON.stringify(webhookEvents),
-      });
-    } catch (error) {
-      console.error('[Webhook] Handle webhook error:', error);
-      throw error;
-    }
+    const url = this.buildUrl('/remita/webhook');
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(webhookEvents),
+    });
   }
 
-  // ============================================
-  // JED Integration Methods - GET
-  // ============================================
-
-  /**
-   * Get single customer request by account number
-   * GET /api/v1/external/jed/requests/{accountNumber}
-   * @param {string} accountNumber - Customer account number
-   * @returns {Promise} Customer request data
-   */
   async getCustomerRequest(accountNumber) {
-    try {
-      const url = this.getFullUrl(`/requests/${accountNumber}`);
-      return await this.makeRequest(url, {
-        method: 'GET',
-      });
-    } catch (error) {
-      console.error('[Requests] Get customer request error:', error);
-      throw error;
-    }
+    const url = this.buildUrl(`/requests/${accountNumber}`);
+    return await this.makeRequest(url, { method: 'GET' });
   }
 
-  /**
-   * Get all customer requests with pagination
-   * GET /api/v1/external/jed/requests
-   * @param {Object} params - Query parameters (page, limit, etc.)
-   * @returns {Promise} Paginated customer requests
-   */
   async getAllCustomerRequests(params = {}) {
-    try {
-      const queryString = new URLSearchParams(params).toString();
-      const url = this.getFullUrl(`/requests${queryString ? `?${queryString}` : ''}`);
-      return await this.makeRequest(url, {
-        method: 'GET',
-      });
-    } catch (error) {
-      console.error('[Requests] Get all requests error:', error);
-      throw error;
-    }
+    const queryString = new URLSearchParams(params).toString();
+    const url = this.buildUrl(`/requests${queryString ? `?${queryString}` : ''}`);
+    return await this.makeRequest(url, { method: 'GET' });
   }
 
-  /**
-   * Get customer requests by status
-   * GET /api/v1/external/jed/requests/status/{status}
-   * @param {string} status - Request status (pending, completed, failed, etc.)
-   * @returns {Promise} Filtered customer requests by status
-   */
-  async getCustomerRequestsByStatus(status) {
-    try {
-      const url = this.getFullUrl(`/requests/status/${status}`);
-      return await this.makeRequest(url, {
-        method: 'GET',
-      });
-    } catch (error) {
-      console.error('[Requests] Get by status error:', error);
-      throw error;
-    }
+  // Admin Methods
+  async getDashboardStats() {
+    const url = this.buildUrl('/dashboard/stats');
+    return await this.makeRequest(url, { method: 'GET' });
   }
 
-  /**
-   * Get installations by installer
-   * GET /api/v1/external/jed/requests/installer/{employeeId}
-   * @param {string} employeeId - Installer employee ID
-   * @returns {Promise} Installations by specific installer
-   */
-  async getInstallationsByInstaller(employeeId) {
-    try {
-      const url = this.getFullUrl(`/requests/installer/${employeeId}`);
-      return await this.makeRequest(url, {
-        method: 'GET',
-      });
-    } catch (error) {
-      console.error('[Installer] Get installations error:', error);
-      throw error;
-    }
+  async getInstallerPerformance(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const url = this.buildUrl(`/installer/performance${query ? `?${query}` : ''}`);
+    return await this.makeRequest(url, { method: 'GET' });
   }
 
-  /**
-   * Get installer statistics and performance
-   * GET /api/v1/external/jed/installers/{employeeId}/stats
-   * @param {string} employeeId - Installer employee ID
-   * @returns {Promise} Installer statistics
-   */
-  async getInstallerStats(employeeId) {
-    try {
-      const url = this.getFullUrl(`/installers/${employeeId}/stats`);
-      return await this.makeRequest(url, {
-        method: 'GET',
-      });
-    } catch (error) {
-      console.error('[Installer] Get stats error:', error);
-      throw error;
-    }
+  // Meters endpoints (based on API documentation)
+  async uploadMeters(formData) {
+    // formData should be a FormData instance containing the file under 'file' or similar key
+    const url = this.buildApiUrl('/meters/upload');
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: formData,
+    });
   }
 
-  // ============================================
-  // User Management Methods (Admin)
-  // ============================================
+  async downloadMetersTemplate() {
+    const url = this.buildApiUrl('/meters/template');
+    // Return the raw blob for download
+    const headers = this.buildHeaders();
+    if (headers['Content-Type']) delete headers['Content-Type'];
 
-  /**
-   * Get all users with pagination
-   * GET /api/v1/auth/users
-   * @param {Object} params - Query parameters (page, limit, etc.)
-   * @returns {Promise<Object>} Paginated list of users
-   */
-  async getUsers(params = {}) {
-    try {
-      const queryString = new URLSearchParams(params).toString();
-      const url = this.getFullUrl(`/users${queryString ? `?${queryString}` : ''}`, true);
-      return await this.makeRequest(url, {
-        method: 'GET',
-        headers: this.getHeaders(),
-      });
-    } catch (error) {
-      console.error('[Users] Get users error:', error);
-      throw error;
+    const resp = await fetch(url, { method: 'GET', headers });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || `Failed to download template: ${resp.status}`);
     }
+    return await resp.blob();
   }
 
-  /**
-   * Create a new user
-   * POST /api/v1/auth/users
-   * @param {Object} userData - User data to create
-   * @returns {Promise<Object>} Created user data
-   */
-  async createUser(userData) {
-    try {
-      const url = this.getFullUrl('/users', true);
-      return await this.makeRequest(url, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(userData),
-      });
-    } catch (error) {
-      console.error('[Users] Create user error:', error);
-      throw error;
+  async exportMeters(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const url = this.buildApiUrl(`/meters/export${query ? `?${query}` : ''}`);
+    // Return blob
+    const headers = this.buildHeaders();
+    if (headers['Content-Type']) delete headers['Content-Type'];
+
+    const resp = await fetch(url, { method: 'GET', headers });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || `Failed to export meters: ${resp.status}`);
     }
+    return await resp.blob();
   }
 
-  /**
-   * Update an existing user
-   * PUT /api/v1/auth/users/{userId}
-   * @param {string} userId - ID of the user to update
-   * @param {Object} userData - Updated user data
-   * @returns {Promise<Object>} Updated user data
-   */
-  async updateUser(userId, userData) {
-    try {
-      const url = this.getFullUrl(`/users/${userId}`, true);
-      return await this.makeRequest(url, {
-        method: 'PUT',
-        headers: this.getHeaders(),
-        body: JSON.stringify(userData),
-      });
-    } catch (error) {
-      console.error('[Users] Update user error:', error);
-      throw error;
-    }
+  async getMeters(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const url = this.buildApiUrl(`/meters${query ? `?${query}` : ''}`);
+    return await this.makeRequest(url, { method: 'GET' });
   }
 
-  /**
-   * Delete a user
-   * DELETE /api/v1/auth/users/{userId}
-   * @param {string} userId - ID of the user to delete
-   * @returns {Promise<Object>} Deletion confirmation
-   */
-  async deleteUser(userId) {
-    try {
-      const url = this.getFullUrl(`/users/${userId}`, true);
-      return await this.makeRequest(url, {
-        method: 'DELETE',
-        headers: this.getHeaders(),
-      });
-    } catch (error) {
-      console.error('[Users] Delete user error:', error);
-      throw error;
-    }
+  async getMeterStatistics() {
+    const url = this.buildApiUrl('/meters/statistics');
+    return await this.makeRequest(url, { method: 'GET' });
   }
 
-  // ============================================
+  async getMeterById(id) {
+    const url = this.buildApiUrl(`/meters/${id}`);
+    return await this.makeRequest(url, { method: 'GET' });
+  }
+
+  async getMeterByNumber(meterNumber) {
+    const url = this.buildApiUrl(`/meters/meter-number/${meterNumber}`);
+    return await this.makeRequest(url, { method: 'GET' });
+  }
+
+  async deleteMeter(meterNumber) {
+    const url = this.buildApiUrl(`/meters/${meterNumber}`);
+    return await this.makeRequest(url, { method: 'DELETE' });
+  }
+
+  async exportCustomerRequests(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const url = this.buildApiUrl(`/meters/customer-requests/export${query ? `?${query}` : ''}`);
+    const headers = this.buildHeaders();
+    if (headers['Content-Type']) delete headers['Content-Type'];
+
+    const resp = await fetch(url, { method: 'GET', headers });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || `Failed to export customer requests: ${resp.status}`);
+    }
+    return await resp.blob();
+  }
+
+  // Uploads / Excel processing endpoints
+  async uploadAndProcessExcel(endpoint, formData) {
+    const url = this.buildApiUrl(endpoint);
+    const headers = this.buildHeaders();
+    // Let the browser set Content-Type for FormData
+    if (headers['Content-Type']) delete headers['Content-Type'];
+
+    const resp = await fetch(url, { method: 'POST', headers, body: formData });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(txt || `Upload failed: ${resp.status}`);
+    }
+
+    const contentType = resp.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return await resp.json();
+    }
+    // If server returns a modified file, return Blob
+    return await resp.blob();
+  }
+
+  async uploadExcel(formData) {
+    return await this.uploadAndProcessExcel('/uploads/excel', formData);
+  }
+
+  async uploadExcelFirstSheet(formData) {
+    return await this.uploadAndProcessExcel('/uploads/excel-first-sheet', formData);
+  }
+
+  async uploadExcelModified(formData) {
+    // This endpoint may return a modified file; uploadAndProcessExcel will return JSON or Blob accordingly
+    return await this.uploadAndProcessExcel('/uploads/excel-modified', formData);
+  }
+
   // Token Management
-  // ============================================
-
-  /**
-   * Get auth token for API requests
-   * @returns {string|null} Current auth token
-   */
   getAuthToken() {
     return localStorage.getItem('jedAuthToken');
   }
 
-  /**
-   * Get refresh token
-   * @returns {string|null} Current refresh token
-   */
   getRefreshToken() {
     return localStorage.getItem('jedRefreshToken');
   }
 
-  /**
-   * Store authentication tokens
-   * @param {Object} tokens - Auth and refresh tokens
-   * @param {string} tokens.token - Authentication token
-   * @param {string} [tokens.refreshToken] - Refresh token
-   */
   storeTokens(tokens) {
     if (tokens.token) {
       localStorage.setItem('jedAuthToken', tokens.token);
@@ -514,120 +573,70 @@ class JEDApiService {
     }
   }
 
-  /**
-   * Clear all stored tokens
-   */
+  storeUser(userData) {
+    localStorage.setItem('jedUser', JSON.stringify(userData));
+  }
+
   clearTokens() {
     localStorage.removeItem('jedAuthToken');
     localStorage.removeItem('jedRefreshToken');
     localStorage.removeItem('jedUser');
   }
 
-  /**
-   * Check if current token needs refresh
-   * @returns {boolean} True if token needs refresh
-   */
-  needsRefresh() {
-    return true; // Always refresh to ensure token validity
-  }
-
-  /**
-   * Refresh auth token using refresh token
-   * @returns {Promise<Object>} New tokens
-   */
-  async refreshToken() {
-    try {
-      const refreshToken = this.getRefreshToken();
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
-
-      const url = this.getFullUrl('/refresh', true);
-      const tokens = await this.makeRequest(url, {
-        method: 'POST',
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      this.storeTokens(tokens);
-      return tokens;
-
-    } catch (error) {
-      console.error('[Auth] Token refresh failed:', error);
-      this.clearTokens(); // Clear invalid tokens
-      throw error;
-    }
-  }
-
-  /**
-   * Ensure valid auth token exists, refreshing if necessary
-   * @returns {Promise<string>} Valid auth token
-   */
-  async ensureValidToken() {
-    if (this.needsRefresh()) {
-      await this.refreshToken();
-    }
-    return this.getAuthToken();
-  }
-
-  /**
-   * Check if user session has timed out
-   * @returns {boolean} True if session has timed out
-   * @deprecated Session timeout has been removed
-   */
-  isSessionTimedOut() {
-    return false; // Session timeout functionality removed
-  }
-
-  // ============================================
-  // Utility Methods
-  // ============================================
-
-  /**
-   * Get API documentation URL
-   * @returns {string} API documentation URL
-   */
-  getApiDocsUrl() {
-    return `${this.baseUrl}/api-docs`;
-  }
-
-  /**
-   * Get API base URL
-   * @returns {string} API base URL
-   */
-  getApiBaseUrl() {
-    return `${this.baseUrl}${this.version}${this.jedEndpoint}`;
-  }
-
-  /**
-   * Check API health
-   * @returns {Promise<boolean>} True if API is healthy
-   */
-  async checkHealth() {
-    try {
-      const response = await fetch(`${this.baseUrl}/health`);
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Get stored user data
-   * @returns {Object|null} User data if available
-   */
   getStoredUser() {
     try {
       const userStr = localStorage.getItem('jedUser');
       return userStr ? JSON.parse(userStr) : null;
-    } catch {
+    } catch (error) {
+      console.error('[Auth] Error parsing stored user:', error);
       return null;
     }
   }
+
+  isAuthenticated() {
+    return !!this.getAuthToken() && !!this.getStoredUser();
+  }
+
+  getUserRole() {
+    const user = this.getStoredUser();
+    return user?.role || null;
+  }
+
+  isAdmin() {
+    return this.getUserRole() === 'admin';
+  }
+
+  isInstaller() {
+    return this.getUserRole() === 'installer';
+  }
+
+  // API Integration Health Check
+  async validateApiIntegration() {
+    console.log('[API Health Check] Starting validation...');
+    const checks = {
+      baseUrl: !!this.config.BASE_URL,
+      authEndpoint: !!this.config.ENDPOINTS.AUTH,
+      jedEndpoint: !!this.config.ENDPOINTS.JED,
+      hasTokenStorage: !!localStorage,
+      methods: {
+        login: typeof this.login === 'function',
+        getProfile: typeof this.getProfile === 'function',
+        getAllCustomerRequests: typeof this.getAllCustomerRequests === 'function',
+        getDashboardStats: typeof this.getDashboardStats === 'function',
+        uploadExcel: typeof this.uploadExcel === 'function',
+        downloadMetersTemplate: typeof this.downloadMetersTemplate === 'function'
+      }
+    };
+    
+    console.log('[API Health Check] Results:', checks);
+    const allPass = Object.values(checks).every(v => v === true || (typeof v === 'object' && Object.values(v).every(vv => vv === true)));
+    console.log('[API Health Check]', allPass ? 'PASSED' : 'FAILED');
+    return allPass;
+  }
 }
 
-// Export singleton instance
-const jedApiService = new JEDApiService();
-export default jedApiService;
+// Export both the class and a singleton instance
+const jedApi = new JEDApiService();
 
-// Also export the class for testing
-export { JEDApiService };
+export { JEDApiService, ERROR_TYPES };
+export default jedApi;
