@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { PERMISSIONS, hasPermission } from '../auth/permissions';
 import { JEDApiService } from '../services/api';
+import { formatCurrencyNGN } from '../../utils/currency';
 import { 
   BarChart,
   Users,
@@ -50,23 +51,23 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
       </button>
     </div>
     <div className="overflow-x-auto">
-      <table className="min-w-full">
+      <table className="w-full min-w-[500px] text-xs sm:text-sm">
         <thead>
-          <tr className="text-left text-sm text-gray-500">
-            <th className="pb-4 font-medium">Account No.</th>
-            <th className="pb-4 font-medium">Customer</th>
-            <th className="pb-4 font-medium">Status</th>
-            <th className="pb-4 font-medium">Amount</th>
-            <th className="pb-4 font-medium">Date</th>
+          <tr className="text-left text-gray-600 bg-gray-50 border-b">
+            <th className="px-3 sm:px-4 py-3 font-semibold">Account</th>
+            <th className="px-3 sm:px-4 py-3 font-semibold">Customer</th>
+            <th className="px-3 sm:px-4 py-3 font-semibold">Status</th>
+            <th className="px-3 sm:px-4 py-3 font-semibold text-right">Amount</th>
+            <th className="px-3 sm:px-4 py-3 font-semibold">Date</th>
           </tr>
         </thead>
-        <tbody className="text-sm">
+        <tbody className="divide-y divide-gray-200">
           {installations.map((install) => (
-            <tr key={install.id} className="border-t border-gray-100">
-              <td className="py-4 pr-4">{install.accountNumber}</td>
-              <td className="py-4 pr-4">{install.custNames || install.applicantName || install.installer?.name || '-'}</td>
-              <td className="py-4 pr-4">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+            <tr key={install.id} className="hover:bg-gray-50 transition-colors">
+              <td className="px-3 sm:px-4 py-3 text-gray-700 font-medium">{install.accountNumber}</td>
+              <td className="px-3 sm:px-4 py-3 text-gray-700">{install.custNames || install.applicantName || install.installer?.name || '-'}</td>
+              <td className="px-3 sm:px-4 py-3">
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                   install.status === 'completed' ? 'bg-green-100 text-green-800' :
                   install.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                   'bg-red-100 text-red-800'
@@ -74,8 +75,8 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
                   {install.status}
                 </span>
               </td>
-              <td className="py-4 pr-4 font-medium">{typeof install.amount === 'number' ? new Intl.NumberFormat(undefined, { style: 'currency', currency: 'NGN' }).format(install.amount) : (install.amount || '-')}</td>
-              <td className="py-4">{install.submittedAt ? new Date(install.submittedAt).toLocaleDateString() : '-'}</td>
+              <td className="px-3 sm:px-4 py-3 text-right font-semibold text-gray-900">{formatCurrencyNGN(install.amount)}</td>
+              <td className="px-3 sm:px-4 py-3 text-gray-600 text-xs sm:text-sm">{install.submittedAt ? new Date(install.submittedAt).toLocaleDateString() : '-'}</td>
             </tr>
           ))}
         </tbody>
@@ -238,7 +239,7 @@ function AdminDashboard() {
           value={
             // Format as currency if number, otherwise show raw
             typeof stats.totalRevenue === 'number'
-              ? new Intl.NumberFormat(undefined, { style: 'currency', currency: 'NGN' }).format(stats.totalRevenue)
+              ? formatCurrencyNGN(stats.totalRevenue)
               : stats.totalRevenue
           }
           icon={BarChart}

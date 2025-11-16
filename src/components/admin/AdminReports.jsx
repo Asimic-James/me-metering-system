@@ -3,11 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { PERMISSIONS, hasPermission } from '../auth/permissions';
 import { JEDApiService } from '../services/api';
 import { AlertCircle, FileText, Download } from 'lucide-react';
-
-function formatCurrency(value) {
-  if (typeof value !== 'number') return value ?? '-';
-  return value.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
-}
+import { formatCurrencyNGN } from '../../utils/currency';
 
 function AdminReports() {
   const { user } = useAuth();
@@ -153,89 +149,101 @@ function AdminReports() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Admin Reports</h1>
-          <p className="text-gray-600 mt-1">Comprehensive analytics and exportable data.</p>
+    <div className="space-y-6 p-4 sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Admin Reports</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1">Comprehensive analytics and exportable data.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={exportCsv}
-            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV
-          </button>
-        </div>
+        <button
+          onClick={exportCsv}
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          Export CSV
+        </button>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl shadow p-4">
-          <h4 className="text-sm text-gray-500">Revenue</h4>
-          <p className="text-2xl font-bold mt-2">{formatCurrency(stats.revenue)}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <div className="bg-white rounded-xl shadow p-4 sm:p-5">
+          <h4 className="text-xs sm:text-sm text-gray-500 font-medium">Revenue</h4>
+          <p className="text-xl sm:text-2xl font-bold mt-2 text-gray-900 truncate">{formatCurrencyNGN(stats.revenue)}</p>
         </div>
-        <div className="bg-white rounded-xl shadow p-4">
-          <h4 className="text-sm text-gray-500">Avg. Ticket</h4>
-          <p className="text-2xl font-bold mt-2">{formatCurrency(stats.avgTicket)}</p>
+        <div className="bg-white rounded-xl shadow p-4 sm:p-5">
+          <h4 className="text-xs sm:text-sm text-gray-500 font-medium">Avg. Ticket</h4>
+          <p className="text-xl sm:text-2xl font-bold mt-2 text-gray-900 truncate">{formatCurrencyNGN(stats.avgTicket)}</p>
         </div>
-        <div className="bg-white rounded-xl shadow p-4">
-          <h4 className="text-sm text-gray-500">Total Records</h4>
-          <p className="text-2xl font-bold mt-2">{pagination.totalCount || stats.transactions || rows.length}</p>
+        <div className="bg-white rounded-xl shadow p-4 sm:p-5">
+          <h4 className="text-xs sm:text-sm text-gray-500 font-medium">Total Records</h4>
+          <p className="text-xl sm:text-2xl font-bold mt-2 text-gray-900">{pagination.totalCount || stats.transactions || rows.length}</p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow p-4 flex flex-col sm:flex-row gap-3 items-center">
+      <div className="bg-white rounded-xl shadow p-4 sm:p-5 space-y-3">
         <input
           type="text"
           placeholder="Search account, meter or installer..."
           value={query}
           onChange={e => setQuery(e.target.value)}
-          className="flex-1 px-4 py-2 border rounded-lg"
+          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
         />
 
-        <select value={status} onChange={e => setStatus(e.target.value)} className="px-4 py-2 border rounded-lg">
-          <option value="">All Statuses</option>
-          <option value="pending">pending</option>
-          <option value="completed">completed</option>
-          <option value="failed">failed</option>
-        </select>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <select 
+            value={status} 
+            onChange={e => setStatus(e.target.value)} 
+            className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="">All Statuses</option>
+            <option value="pending">pending</option>
+            <option value="completed">completed</option>
+            <option value="failed">failed</option>
+          </select>
 
-        <div className="flex items-center gap-2">
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-3 py-2 border rounded-lg" />
-          <span className="text-gray-400">to</span>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-3 py-2 border rounded-lg" />
+          <input 
+            type="date" 
+            value={dateFrom} 
+            onChange={e => setDateFrom(e.target.value)} 
+            className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          
+          <input 
+            type="date" 
+            value={dateTo} 
+            onChange={e => setDateTo(e.target.value)} 
+            className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
         </div>
       </div>
 
       {/* Pagination Controls */}
-      <div className="bg-white rounded-xl shadow p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="text-sm text-gray-600">
-          Page <strong>{pagination.currentPage}</strong> of <strong>{pagination.totalPages}</strong> ({pagination.totalCount} total records)
+      <div className="bg-white rounded-xl shadow p-4 sm:p-5 space-y-3 sm:space-y-0 sm:flex sm:flex-col sm:items-center sm:justify-between">
+        <div className="text-xs sm:text-sm text-gray-600 text-center sm:text-left">
+          Page <strong>{pagination.currentPage}</strong> of <strong>{pagination.totalPages}</strong> (<strong>{pagination.totalCount}</strong> total)
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
           <button
             onClick={() => pagination.currentPage > 1 && setPagination(p => ({ ...p, currentPage: p.currentPage - 1 }))}
             disabled={!pagination.hasPrev}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            ← Previous
+            ← Prev
           </button>
           <select
             value={pagination.currentPage}
             onChange={(e) => setPagination(p => ({ ...p, currentPage: parseInt(e.target.value) }))}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-blue-500"
           >
             {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(p => (
-              <option key={p} value={p}>Page {p}</option>
+              <option key={p} value={p}>Pg {p}</option>
             ))}
           </select>
           <button
             onClick={() => pagination.currentPage < pagination.totalPages && setPagination(p => ({ ...p, currentPage: p.currentPage + 1 }))}
             disabled={!pagination.hasNext}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-2 border border-gray-300 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Next →
           </button>
@@ -243,36 +251,36 @@ function AdminReports() {
       </div>
 
       {/* Data table */}
-      <div className="bg-white rounded-xl shadow p-4 overflow-x-auto">
-        <table className="min-w-full text-sm">
+      <div className="bg-white rounded-xl shadow overflow-x-auto">
+        <table className="w-full min-w-[640px] text-xs sm:text-sm">
           <thead>
-            <tr className="text-left text-gray-500">
-              <th className="py-2">ID</th>
-              <th className="py-2">Account</th>
-              <th className="py-2">Meter</th>
-              <th className="py-2">Installer</th>
-              <th className="py-2">Status</th>
-              <th className="py-2 text-right">Amount</th>
-              <th className="py-2">Date</th>
+            <tr className="text-left text-gray-600 bg-gray-50 border-b">
+              <th className="px-3 sm:px-4 py-3 font-semibold">ID</th>
+              <th className="px-3 sm:px-4 py-3 font-semibold">Account</th>
+              <th className="px-3 sm:px-4 py-3 font-semibold">Meter</th>
+              <th className="px-3 sm:px-4 py-3 font-semibold">Installer</th>
+              <th className="px-3 sm:px-4 py-3 font-semibold">Status</th>
+              <th className="px-3 sm:px-4 py-3 font-semibold text-right">Amount</th>
+              <th className="px-3 sm:px-4 py-3 font-semibold">Date</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-gray-200">
             {loading ? (
-              <tr><td colSpan={7} className="py-8 text-center">Loading...</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
             ) : error ? (
-              <tr><td colSpan={7} className="py-8 text-center text-red-600">{error}</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-red-600 font-medium">{error}</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} className="py-8 text-center">No records found</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No records found</td></tr>
             ) : (
               filtered.map(r => (
-                <tr key={r.id} className="border-t">
-                  <td className="py-2">{r.id}</td>
-                  <td className="py-2">{r.accountNumber}</td>
-                  <td className="py-2">{r.meterNumber}</td>
-                  <td className="py-2">{r.installer}</td>
-                  <td className="py-2"><span className="inline-block px-2 py-0.5 rounded-full text-xs bg-gray-100">{r.status}</span></td>
-                  <td className="py-2 text-right font-medium">{formatCurrency(r.amount)}</td>
-                  <td className="py-2">{r.date ? new Date(r.date).toLocaleString() : '-'}</td>
+                <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-3 sm:px-4 py-3 text-gray-700">{r.id}</td>
+                  <td className="px-3 sm:px-4 py-3 text-gray-700 font-medium">{r.accountNumber}</td>
+                  <td className="px-3 sm:px-4 py-3 text-gray-700">{r.meterNumber}</td>
+                  <td className="px-3 sm:px-4 py-3 text-gray-700">{r.installer}</td>
+                  <td className="px-3 sm:px-4 py-3"><span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{r.status}</span></td>
+                  <td className="px-3 sm:px-4 py-3 text-right font-semibold text-gray-900">{formatCurrencyNGN(r.amount)}</td>
+                  <td className="px-3 sm:px-4 py-3 text-gray-600 text-xs sm:text-sm">{r.date ? new Date(r.date).toLocaleString() : '-'}</td>
                 </tr>
               ))
             )}
