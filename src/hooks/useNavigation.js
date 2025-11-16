@@ -5,7 +5,9 @@ export const PAGE_NAMES = {
   DASHBOARD: 'dashboard',
   SCHEDULE: 'schedule',
   USERS: 'users',
-  SUBMIT: 'submit'
+  REPORTS: 'reports',
+  SUBMIT: 'submit',
+  COMPLAINT: 'complaint'
 };
 
 export const useNavigation = (initialPage = PAGE_NAMES.DASHBOARD) => {

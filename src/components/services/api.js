@@ -438,7 +438,7 @@ class JEDApiService {
       const url = this.buildApiUrl('/dashboard-stats');
       return await this.makeRequest(url, { method: 'GET' });
     } catch (err) {
-      console.warn('[API] Primary dashboard-stats endpoint failed, falling back to /external/jed/dashboard/stats:', err?.message);
+      console.warn('[API] Primary dashboard-stats endpoint failed, falling back to /external/jed/dashboard-stats:', err?.message);
       const fallbackUrl = this.buildUrl('/dashboard/stats');
       return await this.makeRequest(fallbackUrl, { method: 'GET' });
     }
@@ -561,6 +561,26 @@ class JEDApiService {
   async uploadExcelModified(formData) {
     // This endpoint may return a modified file; uploadAndProcessExcel will return JSON or Blob accordingly
     return await this.uploadAndProcessExcel('/uploads/excel-modified', formData);
+  }
+
+  // Complaints Endpoint
+  async submitComplaint(complaintData) {
+    const url = this.buildApiUrl('/complaints');
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(complaintData),
+    });
+  }
+
+  async getComplaints(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    const url = this.buildApiUrl(`/complaints${query ? `?${query}` : ''}`);
+    return await this.makeRequest(url, { method: 'GET' });
+  }
+
+  async getComplaintById(complaintId) {
+    const url = this.buildApiUrl(`/complaints/${complaintId}`);
+    return await this.makeRequest(url, { method: 'GET' });
   }
 
   // Token Management

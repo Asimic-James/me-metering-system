@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { PERMISSIONS, hasPermission } from '../auth/permissions';
 import { JEDApiService } from '../services/api';
 import { formatCurrencyNGN } from '../../utils/currency';
 import { 
@@ -99,7 +98,7 @@ const QuickActions = () => (
   </div>
 );
 
-function AdminDashboard() {
+function AdminDashboard({ isInstallerView = false }) {
   const { user } = useAuth();
   const [stats, setStats] = useState({
     // Normalized shape matching API: { pendingRequests, completedRequests, activeInstallers, totalRevenue }
@@ -112,6 +111,10 @@ function AdminDashboard() {
   const [requestsTotalCount, setRequestsTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Determine which dashboard to show based on role
+  const isAdmin = user?.role === 'admin';
+  const showInstallerData = isInstallerView || !isAdmin;
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -141,10 +144,17 @@ function AdminDashboard() {
           limit: 5
         });
         // Extract data array and pagination metadata
-        const installations = Array.isArray(installationsResponse) 
+        let installations = Array.isArray(installationsResponse) 
           ? installationsResponse 
           : (installationsResponse?.data || []);
         const paginationData = installationsResponse?.pagination || {};
+        
+        // If showing installer data, filter to only show this installer's installations
+        if (showInstallerData && !isAdmin) {
+          installations = installations.filter(inst => 
+            inst.installer?.id === user?.id || inst.installerPhone === user?.phone
+          );
+        }
         
         setRecentInstallations(installations);
         setRequestsTotalCount(paginationData.totalCount || installations.length);
@@ -157,20 +167,13 @@ function AdminDashboard() {
       }
     };
 
-    if (hasPermission(user?.role, PERMISSIONS.VIEW_ADMIN_DASHBOARD)) {
+    // Allow both admins and installers to view the dashboard
+    if (isAdmin || !isAdmin) {
       fetchDashboardData();
     }
-  }, [user]);
+  }, [user, showInstallerData, isAdmin]);
 
-  if (!hasPermission(user?.role, PERMISSIONS.VIEW_ADMIN_DASHBOARD)) {
-    return (
-      <div className="p-8 text-center">
-        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
-        <p className="text-gray-600">You don't have permission to view the admin dashboard.</p>
-      </div>
-    );
-  }
+  // No permission check needed - both admins and installers can view their respective dashboards
 
   if (loading) {
     return (
@@ -201,13 +204,21 @@ function AdminDashboard() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-600 mt-1">Monitor system performance and manage users</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {showInstallerData && !isAdmin ? 'Installer Dashboard' : 'Admin Dashboard'}
+          </h1>
+          <p className="text-gray-600 mt-1">
+            {showInstallerData && !isAdmin 
+              ? 'Track your installation activity and performance' 
+              : 'Monitor system performance and manage users'}
+          </p>
         </div>
         <div className="mt-4 sm:mt-0">
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            Generate Report
-          </button>
+          {isAdmin && (
+            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+              Generate Report
+            </button>
+          )}
         </div>
       </div>
 

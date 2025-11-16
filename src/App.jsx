@@ -11,6 +11,7 @@ import SubmitForm from './components/submit/SubmitForm';
 import MeterSchedule from './components/schedule/MeterSchedule';
 import UserManagement from './components/admin/UserManagement';
 import ExcelUpload from './components/uploads/ExcelUpload';
+import ComplaintForm from './components/complaint/ComplaintForm';
 import ErrorNotification from './components/common/ErrorNotification';
 import { useSubmissions } from './hooks/useSubmissions';
 import { useNavigation } from './hooks/useNavigation';
@@ -22,7 +23,8 @@ const PAGE_NAMES = {
   SCHEDULE: 'schedule',
   USERS: 'users',
   REPORTS: 'reports',
-  SUBMIT: 'submit'
+  SUBMIT: 'submit',
+  COMPLAINT: 'complaint'
 };
 
 
@@ -31,7 +33,7 @@ const USER_ROLES = {
 };
 
 function AppContent() {
-  const { user, login, logout, isAuthenticated } = useAuth();
+  const { user, login, logout, isAuthenticated, loading: authLoading } = useAuth();
   
   // Run API health check on app start
   useEffect(() => {
@@ -102,14 +104,9 @@ function AppContent() {
     if (user?.role === USER_ROLES.ADMIN) {
       return <AdminDashboard />;
     }
-    return (
-      <Dashboard 
-        submissions={submissions} 
-        loading={loading}
-        onRefresh={refreshSubmissions}
-      />
-    );
-  }, [user?.role, submissions, loading, refreshSubmissions]);
+    // Installers also get the AdminDashboard but with installer-specific data filtering
+    return <AdminDashboard isInstallerView={true} />;
+  }, [user?.role]);
 
   // Render current page content
   const renderPageContent = useMemo(() => {
@@ -132,6 +129,9 @@ function AppContent() {
 
       case PAGE_NAMES.REPORTS:
         return <AdminReports />;
+      
+      case PAGE_NAMES.COMPLAINT:
+        return <ComplaintForm />;
       
       default:
         return (

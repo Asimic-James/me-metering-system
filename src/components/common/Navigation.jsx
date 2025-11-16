@@ -1,4 +1,4 @@
-import { Home, Power, FileText, Calendar, X, Users, Upload } from 'lucide-react';
+import { Home, Power, FileText, Calendar, X, Users, Upload, MessageSquare } from 'lucide-react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 
 // Constants for better maintainability
@@ -46,6 +46,13 @@ const NAVIGATION_CONFIG = {
       icon: Upload,
       description: 'Upload Excel files',
       accessible: (userRole) => ['admin', 'installer'].includes(userRole)
+    },
+    {
+      id: 'complaint',
+      label: 'Submit Complaint',
+      icon: MessageSquare,
+      description: 'Report installation issues',
+      accessible: (userRole) => ['admin', 'installer'].includes(userRole)
     }
   ]
 };
@@ -68,11 +75,13 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
   const filteredNavigationItems = useMemo(() => {
     return NAVIGATION_CONFIG.ITEMS.filter(item => {
       if (typeof item.accessible === 'function') {
-        return item.accessible(userRole);
+        // Show all items regardless of role during loading
+        // The disabled state will be handled in individual item components
+        return true;
       }
       return item.accessible;
     });
-  }, [userRole]);
+  }, []);
 
   // Handle navigation with haptic feedback
   const handleNavigation = useCallback((page) => {
@@ -89,17 +98,31 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
   const DesktopNavItem = useCallback(({ item, isActive }) => {
     const Icon = item.icon;
     
+    // Determine if item is accessible
+    let isAccessible = true;
+    if (typeof item.accessible === 'function') {
+      // If userRole is undefined, consider items accessible (they'll appear but might be disabled)
+      // Once userRole loads, properly check accessibility
+      isAccessible = userRole ? item.accessible(userRole) : true;
+    } else {
+      isAccessible = item.accessible;
+    }
+    
     return (
       <button
         onClick={() => handleNavigation(item.id)}
+        disabled={!isAccessible}
         className={`
           flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-b-2 
           transition-all duration-200 whitespace-nowrap group relative
-          ${isActive
+          ${!isAccessible 
+            ? 'opacity-50 cursor-not-allowed text-gray-400 border-transparent'
+            : isActive
             ? 'border-blue-600 text-blue-600 font-semibold bg-blue-50'
             : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300 hover:bg-gray-50'
           }
         `}
+        title={!isAccessible ? 'Not available for your role' : item.label}
       >
         <Icon className={`w-5 h-5 transition-transform group-hover:scale-110 ${isActive ? 'animate-pulse' : ''}`} />
         <span className="text-sm sm:text-base">{item.label}</span>
@@ -110,18 +133,29 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
         )}
       </button>
     );
-  }, [handleNavigation]);
+  }, [handleNavigation, userRole]);
 
   // Navigation item component for mobile sidebar
   const MobileSidebarItem = useCallback(({ item, isActive }) => {
     const Icon = item.icon;
     
+    // Determine if item is accessible
+    let isAccessible = true;
+    if (typeof item.accessible === 'function') {
+      isAccessible = userRole ? item.accessible(userRole) : true;
+    } else {
+      isAccessible = item.accessible;
+    }
+    
     return (
       <button
         onClick={() => handleNavigation(item.id)}
+        disabled={!isAccessible}
         className={`
           w-full flex items-start gap-4 p-4 rounded-xl transition-all duration-200
-          ${isActive
+          ${!isAccessible
+            ? 'opacity-50 cursor-not-allowed'
+            : isActive
             ? 'bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 shadow-md'
             : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent hover:border-gray-200'
           }
@@ -129,7 +163,12 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
       >
         <div className={`
           p-2 rounded-lg flex-shrink-0
-          ${isActive ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}
+          ${!isAccessible 
+            ? 'bg-gray-300 text-gray-500'
+            : isActive 
+            ? 'bg-blue-600 text-white' 
+            : 'bg-white text-gray-600'
+          }
         `}>
           <Icon className="w-5 h-5" />
         </div>
@@ -148,19 +187,30 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
         )}
       </button>
     );
-  }, [handleNavigation]);
+  }, [handleNavigation, userRole]);
 
   // Navigation item component for mobile bottom bar
   const MobileBottomNavItem = useCallback(({ item, isActive }) => {
     const Icon = item.icon;
     
+    // Determine if item is accessible
+    let isAccessible = true;
+    if (typeof item.accessible === 'function') {
+      isAccessible = userRole ? item.accessible(userRole) : true;
+    } else {
+      isAccessible = item.accessible;
+    }
+    
     return (
       <button
         onClick={() => handleNavigation(item.id)}
+        disabled={!isAccessible}
         className={`
           relative flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all
           active:scale-95 touch-manipulation
-          ${isActive
+          ${!isAccessible 
+            ? 'opacity-50 cursor-not-allowed'
+            : isActive
             ? 'text-blue-600'
             : 'text-gray-600 hover:text-gray-900 active:bg-gray-50'
           }
@@ -168,7 +218,12 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
       >
         <div className={`
           relative rounded-lg p-1 transition-all duration-200
-          ${isActive ? 'bg-blue-100' : ''}
+          ${!isAccessible 
+            ? 'bg-gray-200'
+            : isActive 
+            ? 'bg-blue-100' 
+            : ''
+          }
         `}>
           <Icon className={`w-5 h-5 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`} />
         </div>
@@ -178,7 +233,7 @@ function Navigation({ currentPage, onNavigate, userRole, isOpen, onClose }) {
         )}
       </button>
     );
-  }, [handleNavigation]);
+  }, [handleNavigation, userRole]);
 
   // Mobile sidebar overlay
   const MobileOverlay = useCallback(() => (
