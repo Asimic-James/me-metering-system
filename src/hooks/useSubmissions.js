@@ -6,6 +6,14 @@ export const useSubmissions = (isAuthenticated) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalCount: 0,
+    hasNext: false,
+    hasPrev: false,
+    limit: 100
+  });
   
   const apiService = useRef(new JEDApiService());
   const refreshTimeout = useRef(null);
@@ -16,7 +24,13 @@ export const useSubmissions = (isAuthenticated) => {
     sealNo: item.sealNo || item.meterSealNumber || item.seal_number || 'N/A',
     accountNumber: item.accountNumber || item.account_number || item.customerId || 'N/A',
     meterNo: item.meterNo || item.meter_number || item.meterNumber || 'N/A',
-    submittedAt: item.submittedAt || item.submitted_at || item.createdAt || item.created_at || new Date().toLocaleString(),
+    // prefer server-provided dateRequested, fall back to createdAt
+    submittedAt: item.dateRequested || item.submittedAt || item.submitted_at || item.createdAt || item.created_at || new Date().toLocaleString(),
+    // additional customer-facing fields from API
+    custNames: item.custNames || item.customerName || item.applicantName || item.name || null,
+    gsm: item.gsm || item.phone || item.phone1 || item.phone2 || null,
+    email: item.email || null,
+    amount: typeof item.amount === 'string' ? Number(item.amount) : (item.amount || 0),
     status: item.status || 'pending',
     paymentReference: item.paymentReference || item.payment_reference || item.paymentRef || null,
     installer: item.installer || (item.installer_name ? {
@@ -57,29 +71,39 @@ export const useSubmissions = (isAuthenticated) => {
     setSubmissions(getSampleData());
   }, [getSampleData]);
 
-  // Fetch customer requests from API
-  const fetchCustomerRequests = useCallback(async () => {
+  // Fetch specific page of customer requests
+  const fetchCustomerRequestsPage = useCallback(async (page = 1, limit = 100) => {
     if (!isAuthenticated) return;
 
     try {
       setLoading(true);
       setError(null);
       
-      console.log('[useSubmissions] Fetching customer requests...');
+      console.log(`[useSubmissions] Fetching customer requests - page ${page}, limit ${limit}...`);
 
       try {
         // Use the centralized API service instead of raw fetch
-        const data = await apiService.current.getAllCustomerRequests({ limit: 100 });
-        console.log('[useSubmissions] API response received:', data);
+        const response = await apiService.current.getAllCustomerRequests({ page, limit });
+        console.log('[useSubmissions] API response received:', response);
 
-        // Transform API response to match component format
-        const items = Array.isArray(data) ? data : (data?.data || []);
+        // Extract data array and pagination metadata
+        const items = Array.isArray(response) ? response : (response?.data || []);
+        const paginationData = response?.pagination || {
+          currentPage: page,
+          totalPages: 1,
+          totalCount: items.length,
+          hasNext: false,
+          hasPrev: page > 1,
+          limit
+        };
+        
         if (items.length === 0) {
           console.warn('[useSubmissions] No items in response');
         }
         
         const formattedSubmissions = items.map(transformSubmissionData);
         setSubmissions(formattedSubmissions);
+        setPagination(paginationData);
         
       } catch (apiErr) {
         console.error('[useSubmissions] API service error:', apiErr);
@@ -94,6 +118,27 @@ export const useSubmissions = (isAuthenticated) => {
       setLoading(false);
     }
   }, [isAuthenticated, transformSubmissionData, handleApiError]);
+
+  // Fetch customer requests from API (uses current page from state)
+  const fetchCustomerRequests = useCallback(async () => {
+    if (!isAuthenticated) return;
+    return await fetchCustomerRequestsPage(pagination.currentPage, pagination.limit);
+  }, [isAuthenticated, pagination.currentPage, pagination.limit, fetchCustomerRequestsPage]);
+
+  // Navigate to a specific page
+  const goToPage = useCallback((pageNumber) => {
+    if (pageNumber >= 1 && pageNumber <= pagination.totalPages) {
+      console.log(`[useSubmissions] Navigating to page ${pageNumber}`);
+      fetchCustomerRequestsPage(pageNumber, pagination.limit);
+    }
+  }, [pagination.totalPages, pagination.limit, fetchCustomerRequestsPage]);
+
+  // Change items per page
+  const setPageLimit = useCallback((newLimit) => {
+    console.log(`[useSubmissions] Changing limit to ${newLimit}`);
+    setPagination(prev => ({ ...prev, limit: newLimit, currentPage: 1 }));
+    fetchCustomerRequestsPage(1, newLimit);
+  }, [fetchCustomerRequestsPage]);
 
   // Debounced refresh mechanism
   useEffect(() => {
@@ -175,6 +220,9 @@ export const useSubmissions = (isAuthenticated) => {
     submissions,
     loading,
     error,
+    pagination,
+    goToPage,
+    setPageLimit,
     refreshSubmissions,
     addSubmission,
     dismissError

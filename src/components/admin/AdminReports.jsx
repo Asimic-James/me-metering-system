@@ -16,6 +16,14 @@ function AdminReports() {
 
   const [stats, setStats] = useState({ revenue: 0, avgTicket: 0, transactions: 0 });
   const [rows, setRows] = useState([]);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalCount: 0,
+    hasNext: false,
+    hasPrev: false,
+    limit: 50
+  });
 
   // Filters
   const [query, setQuery] = useState('');
@@ -46,8 +54,17 @@ function AdminReports() {
         }
 
         // Fetch report rows (use customer requests as a general transaction dataset)
-        const resp = await api.getAllCustomerRequests({ page: 1, limit: 1000 });
+        const resp = await api.getAllCustomerRequests({ page: pagination.currentPage, limit: pagination.limit });
         const data = resp?.data || resp || [];
+        const paginationData = resp?.pagination || {
+          currentPage: pagination.currentPage,
+          totalPages: 1,
+          totalCount: data.length,
+          hasNext: false,
+          hasPrev: pagination.currentPage > 1,
+          limit: pagination.limit
+        };
+
         // normalize rows to expected shape
         const normalized = (Array.isArray(data) ? data : []).map((r) => ({
           id: r.id || r.installationId || r.requestId || Math.random().toString(36).slice(2,9),
@@ -56,11 +73,13 @@ function AdminReports() {
           installer: r.installer?.name || r.installerName || r.installer_name || '-',
           status: (r.status || r.state || 'unknown').toString(),
           amount: Number(r.amount || r.fee || r.paymentAmount || 0),
-          date: r.submittedAt || r.createdAt || r.date || null,
+          date: r.submittedAt || r.dateRequested || r.createdAt || r.date || null,
+          custNames: r.custNames || r.customerName || r.applicantName || '-',
           raw: r
         }));
 
         setRows(normalized);
+        setPagination(paginationData);
 
       } catch (err) {
         console.error('Failed to load reports:', err);
@@ -73,7 +92,7 @@ function AdminReports() {
     if (hasPermission(user?.role, PERMISSIONS.VIEW_REPORTS)) {
       load();
     }
-  }, [user]);
+  }, [user, pagination.currentPage, pagination.limit]);
 
   // Real-time filtering
   const filtered = useMemo(() => {
@@ -162,8 +181,8 @@ function AdminReports() {
           <p className="text-2xl font-bold mt-2">{formatCurrency(stats.avgTicket)}</p>
         </div>
         <div className="bg-white rounded-xl shadow p-4">
-          <h4 className="text-sm text-gray-500">Transactions</h4>
-          <p className="text-2xl font-bold mt-2">{stats.transactions || rows.length}</p>
+          <h4 className="text-sm text-gray-500">Total Records</h4>
+          <p className="text-2xl font-bold mt-2">{pagination.totalCount || stats.transactions || rows.length}</p>
         </div>
       </div>
 
@@ -188,6 +207,38 @@ function AdminReports() {
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-3 py-2 border rounded-lg" />
           <span className="text-gray-400">to</span>
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-3 py-2 border rounded-lg" />
+        </div>
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="bg-white rounded-xl shadow p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="text-sm text-gray-600">
+          Page <strong>{pagination.currentPage}</strong> of <strong>{pagination.totalPages}</strong> ({pagination.totalCount} total records)
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => pagination.currentPage > 1 && setPagination(p => ({ ...p, currentPage: p.currentPage - 1 }))}
+            disabled={!pagination.hasPrev}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            ← Previous
+          </button>
+          <select
+            value={pagination.currentPage}
+            onChange={(e) => setPagination(p => ({ ...p, currentPage: parseInt(e.target.value) }))}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          >
+            {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(p => (
+              <option key={p} value={p}>Page {p}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => pagination.currentPage < pagination.totalPages && setPagination(p => ({ ...p, currentPage: p.currentPage + 1 }))}
+            disabled={!pagination.hasNext}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next →
+          </button>
         </div>
       </div>
 

@@ -41,19 +41,22 @@ const StatCard = ({ title, value, icon: Icon, change, changeType = 'neutral' }) 
 );
 
 // Recent Installations Table
-const RecentInstallations = ({ installations }) => (
+const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
   <div className="bg-white rounded-xl shadow-sm p-6 overflow-hidden">
     <div className="flex items-center justify-between mb-6">
       <h3 className="text-lg font-semibold text-gray-900">Recent Installations</h3>
-      <button className="text-sm text-blue-600 hover:text-blue-700">View All</button>
+      <button onClick={onViewAll} className="text-sm text-blue-600 hover:text-blue-700">
+        View All ({totalCount})
+      </button>
     </div>
     <div className="overflow-x-auto">
       <table className="min-w-full">
         <thead>
           <tr className="text-left text-sm text-gray-500">
             <th className="pb-4 font-medium">Account No.</th>
-            <th className="pb-4 font-medium">Installer</th>
+            <th className="pb-4 font-medium">Customer</th>
             <th className="pb-4 font-medium">Status</th>
+            <th className="pb-4 font-medium">Amount</th>
             <th className="pb-4 font-medium">Date</th>
           </tr>
         </thead>
@@ -61,7 +64,7 @@ const RecentInstallations = ({ installations }) => (
           {installations.map((install) => (
             <tr key={install.id} className="border-t border-gray-100">
               <td className="py-4 pr-4">{install.accountNumber}</td>
-              <td className="py-4 pr-4">{install.installer?.name}</td>
+              <td className="py-4 pr-4">{install.custNames || install.applicantName || install.installer?.name || '-'}</td>
               <td className="py-4 pr-4">
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                   install.status === 'completed' ? 'bg-green-100 text-green-800' :
@@ -71,42 +74,12 @@ const RecentInstallations = ({ installations }) => (
                   {install.status}
                 </span>
               </td>
-              <td className="py-4">{new Date(install.submittedAt).toLocaleDateString()}</td>
+              <td className="py-4 pr-4 font-medium">{typeof install.amount === 'number' ? new Intl.NumberFormat(undefined, { style: 'currency', currency: 'NGN' }).format(install.amount) : (install.amount || '-')}</td>
+              <td className="py-4">{install.submittedAt ? new Date(install.submittedAt).toLocaleDateString() : '-'}</td>
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
-  </div>
-);
-
-// Installer Performance Component
-const InstallerPerformance = ({ installers }) => (
-  <div className="bg-white rounded-xl shadow-sm p-6">
-    <div className="flex items-center justify-between mb-6">
-      <h3 className="text-lg font-semibold text-gray-900">Installer Performance</h3>
-      <button className="text-sm text-blue-600 hover:text-blue-700">View Details</button>
-    </div>
-    <div className="space-y-4">
-      {installers.map((installer) => (
-        <div key={installer.id} className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold">
-            {installer.name.charAt(0)}
-          </div>
-          <div className="ml-4 flex-1">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-sm font-medium text-gray-900">{installer.name}</p>
-              <span className="text-sm text-gray-500">{installer.successRate}%</span>
-            </div>
-            <div className="w-full bg-gray-100 rounded-full h-2">
-              <div 
-                className="bg-blue-600 rounded-full h-2" 
-                style={{ width: `${installer.successRate}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      ))}
     </div>
   </div>
 );
@@ -128,13 +101,14 @@ const QuickActions = () => (
 function AdminDashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState({
-    totalInstallations: 0,
-    pendingCount: 0,
-    completedCount: 0,
-    activeInstallers: 0
+    // Normalized shape matching API: { pendingRequests, completedRequests, activeInstallers, totalRevenue }
+    pendingRequests: 0,
+    completedRequests: 0,
+    activeInstallers: 0,
+    totalRevenue: 0
   });
   const [recentInstallations, setRecentInstallations] = useState([]);
-  const [installerPerformance, setInstallerPerformance] = useState([]);
+  const [requestsTotalCount, setRequestsTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -148,18 +122,31 @@ function AdminDashboard() {
 
         // Fetch stats
         const statsResponse = await api.getDashboardStats();
-        setStats(statsResponse.data || statsResponse);
+        const payload = statsResponse?.data ?? statsResponse ?? {};
+
+        // Normalize field names from possible legacy shapes
+        const normalized = {
+          pendingRequests: payload.pendingRequests ?? payload.pendingCount ?? payload.pending ?? 0,
+          completedRequests: payload.completedRequests ?? payload.completedCount ?? payload.completed ?? 0,
+          activeInstallers: payload.activeInstallers ?? payload.active_installers ?? payload.installersActive ?? 0,
+          totalRevenue: payload.totalRevenue ?? payload.total_revenue ?? payload.revenue ?? 0
+        };
+
+        setStats(normalized);
 
         // Fetch recent installations
         const installationsResponse = await api.getAllCustomerRequests({
           page: 1,
           limit: 5
         });
-        setRecentInstallations(installationsResponse.data || installationsResponse);
-
-        // Fetch installer performance
-        const performanceResponse = await api.getInstallerPerformance();
-        setInstallerPerformance(performanceResponse.data || performanceResponse);
+        // Extract data array and pagination metadata
+        const installations = Array.isArray(installationsResponse) 
+          ? installationsResponse 
+          : (installationsResponse?.data || []);
+        const paginationData = installationsResponse?.pagination || {};
+        
+        setRecentInstallations(installations);
+        setRequestsTotalCount(paginationData.totalCount || installations.length);
 
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
@@ -225,33 +212,38 @@ function AdminDashboard() {
 
       {/* Statistics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          title="Total Installations" 
-          value={stats.totalInstallations} 
-          icon={BarChart}
-          change={12}
-          changeType="positive"
-        />
-        <StatCard 
-          title="Pending" 
-          value={stats.pendingCount} 
+        <StatCard
+          title="Pending Requests"
+          value={stats.pendingRequests}
           icon={Clock}
           change={5}
           changeType="neutral"
         />
-        <StatCard 
-          title="Completed" 
-          value={stats.completedCount} 
+        <StatCard
+          title="Completed Requests"
+          value={stats.completedRequests}
           icon={CheckCircle}
           change={8}
           changeType="positive"
         />
-        <StatCard 
-          title="Active Installers" 
-          value={stats.activeInstallers} 
+        <StatCard
+          title="Active Installers"
+          value={stats.activeInstallers}
           icon={Users}
           change={-2}
           changeType="negative"
+        />
+        <StatCard
+          title="Total Revenue"
+          value={
+            // Format as currency if number, otherwise show raw
+            typeof stats.totalRevenue === 'number'
+              ? new Intl.NumberFormat(undefined, { style: 'currency', currency: 'NGN' }).format(stats.totalRevenue)
+              : stats.totalRevenue
+          }
+          icon={BarChart}
+          change={0}
+          changeType="neutral"
         />
       </div>
 
@@ -259,12 +251,15 @@ function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Installations - Takes up 2 columns */}
         <div className="lg:col-span-2">
-          <RecentInstallations installations={recentInstallations} />
+          <RecentInstallations 
+            installations={recentInstallations}
+            totalCount={requestsTotalCount}
+            onViewAll={() => console.log('Navigate to reports with full requests list')}
+          />
         </div>
 
         {/* Right Side Panel - Takes up 1 column */}
         <div className="space-y-6">
-          <InstallerPerformance installers={installerPerformance} />
           <QuickActions />
         </div>
       </div>

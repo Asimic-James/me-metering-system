@@ -432,8 +432,16 @@ class JEDApiService {
 
   // Admin Methods
   async getDashboardStats() {
-    const url = this.buildUrl('/dashboard/stats');
-    return await this.makeRequest(url, { method: 'GET' });
+    // Prefer the root-level dashboard-stats endpoint: /api/v1/dashboard-stats
+    // Fall back to the older JED namespaced endpoint (/external/jed/dashboard/stats)
+    try {
+      const url = this.buildApiUrl('/dashboard-stats');
+      return await this.makeRequest(url, { method: 'GET' });
+    } catch (err) {
+      console.warn('[API] Primary dashboard-stats endpoint failed, falling back to /external/jed/dashboard/stats:', err?.message);
+      const fallbackUrl = this.buildUrl('/dashboard/stats');
+      return await this.makeRequest(fallbackUrl, { method: 'GET' });
+    }
   }
 
   async getInstallerPerformance(params = {}) {
