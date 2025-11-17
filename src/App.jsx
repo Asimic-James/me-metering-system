@@ -4,7 +4,6 @@ import Login from './components/auth/Login';
 import Header from './components/common/Header';
 import Footer from './components/common/Footer';
 import Navigation from './components/common/Navigation';
-import Dashboard from './components/dashboard/Dashboard';
 import AdminDashboard from './components/admin/AdminDashboard';
 import AdminReports from './components/admin/AdminReports';
 import SubmitForm from './components/submit/SubmitForm';
@@ -29,7 +28,8 @@ const PAGE_NAMES = {
 
 
 const USER_ROLES = {
-  ADMIN: 'admin'
+  ADMIN: 'admin',
+  INSTALLER: 'installer'
 };
 
 function AppContent() {
