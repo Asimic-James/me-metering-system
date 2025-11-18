@@ -1,25 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { PERMISSIONS, hasPermission } from '../auth/permissions';
+import { PERMISSIONS, hasPermission } from '../auth/permissions.jsx';
 import { JEDApiService } from '../services/api';
 import { 
   AlertCircle, 
   FileText, 
-  Download, 
   Filter,
   X,
   Calendar,
   Search,
-  FileSpreadsheet,
   RefreshCw
 } from 'lucide-react';
 import { formatCurrencyNGN } from '../../utils/currency';
-
-// Export format options
-const EXPORT_FORMATS = {
-  CSV: 'csv',
-  EXCEL: 'excel'
-};
 
 // Comprehensive field definitions for export
 const EXPORT_FIELDS = [
@@ -252,36 +244,6 @@ function AdminReports() {
     }
   };
 
-  // Excel export via API
-  const exportToExcel = async () => {
-    setExporting(true);
-    
-    try {
-      const api = new JEDApiService();
-      const blob = await api.exportCustomerRequests({ 
-        format: 'excel',
-        status: status || undefined,
-        dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined
-      });
-      
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `admin-reports-${new Date().toISOString().slice(0,10)}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Excel export failed:', err);
-      alert('Excel export failed. Falling back to CSV...');
-      exportToCSV();
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const clearFilters = () => {
     setQuery('');
     setStatus('');
@@ -313,7 +275,7 @@ function AdminReports() {
             </p>
           </div>
           
-          {/* Export Buttons */}
+          {/* Export Button */}
           <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={exportToCSV}
@@ -329,23 +291,6 @@ function AdminReports() {
                 <>
                   <FileText className="w-4 h-4" />
                   Export CSV
-                </>
-              )}
-            </button>
-            <button
-              onClick={exportToExcel}
-              disabled={exporting || filtered.length === 0}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-            >
-              {exporting ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <FileSpreadsheet className="w-4 h-4" />
-                  Export Excel
                 </>
               )}
             </button>

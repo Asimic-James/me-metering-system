@@ -323,31 +323,99 @@ class JEDApiService {
     };
   }
 
-  // User Management Methods
-  async getProfile() {
-    const url = this.buildUrl('/profile', true);
-    const response = await this.makeRequest(url, { method: 'GET' });
+  // Add these methods to your JEDApiService class in src/services/api.js
 
-    if (response.user) {
-      this.storeUser(response.user);
+// User Management Methods
+async getUsers(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const url = this.buildApiUrl(`/users${query ? `?${query}` : ''}`);
+  
+  try {
+    return await this.makeRequest(url, { method: 'GET' });
+  } catch (error) {
+    // Handle permission errors specifically
+    if (error.message?.includes('PERMISSION_ERROR') || error.message?.includes('403')) {
+      console.warn('[API] User management requires admin permissions');
+      throw new Error('PERMISSION_ERROR:User management requires admin role');
     }
-
-    return response;
+    throw error;
   }
+}
 
-  async updateProfile(profileData) {
-    const url = this.buildUrl('/profile', true);
-    const response = await this.makeRequest(url, {
-      method: 'PUT',
-      body: JSON.stringify(profileData),
-    });
+async createUser(userData) {
+  const url = this.buildApiUrl('/users');
+  return await this.makeRequest(url, {
+    method: 'POST',
+    body: JSON.stringify(userData),
+  });
+}
 
-    if (response.user) {
-      this.storeUser(response.user);
+async updateUser(userId, userData) {
+  const url = this.buildApiUrl(`/users/${userId}`);
+  return await this.makeRequest(url, {
+    method: 'PUT',
+    body: JSON.stringify(userData),
+  });
+}
+
+async deleteUser(userId) {
+  const url = this.buildApiUrl(`/users/${userId}`);
+  return await this.makeRequest(url, { method: 'DELETE' });
+}
+
+async getUserById(userId) {
+  const url = this.buildApiUrl(`/users/${userId}`);
+  return await this.makeRequest(url, { method: 'GET' });
+}
+
+async resetUserPassword(userId, passwordData) {
+  const url = this.buildApiUrl(`/users/${userId}/reset-password`);
+  return await this.makeRequest(url, {
+    method: 'POST',
+    body: JSON.stringify(passwordData),
+  });
+}
+
+async updateUserStatus(userId, statusData) {
+  const url = this.buildApiUrl(`/users/${userId}/status`);
+  return await this.makeRequest(url, {
+    method: 'PUT',
+    body: JSON.stringify(statusData),
+  });
+}
+
+// Add this method to check API capabilities
+async validateUserEndpoints() {
+  const endpoints = [
+    '/users',
+    '/users/:id',
+    '/users/:id/reset-password',
+    '/users/:id/status'
+  ];
+  
+  const availableEndpoints = [];
+  
+  for (const endpoint of endpoints) {
+    try {
+      const testUrl = endpoint.includes(':id') 
+        ? this.buildApiUrl('/users') 
+        : this.buildApiUrl(endpoint);
+      
+      const response = await fetch(testUrl, {
+        method: 'HEAD',
+        headers: this.buildHeaders()
+      });
+      
+      if (response.status !== 404) {
+        availableEndpoints.push(endpoint);
+      }
+    } catch (error) {
+      console.warn(`[API] Endpoint ${endpoint} may not be available:`, error.message);
     }
-    
-    return response;
   }
+  
+  return availableEndpoints;
+}
 
   async changePassword(passwordData) {
     const url = this.buildUrl('/change-password', true);
@@ -432,15 +500,20 @@ class JEDApiService {
 
   // Admin Methods
   async getDashboardStats() {
-    // Prefer the root-level dashboard-stats endpoint: /api/v1/dashboard-stats
-    // Fall back to the older JED namespaced endpoint (/external/jed/dashboard/stats)
+    // Use the correct root-level dashboard-stats endpoint: /api/v1/dashboard-stats
+    // Note: This endpoint requires admin permissions
+    const url = this.buildApiUrl('/dashboard-stats');
+    console.log('[API] Calling dashboard stats endpoint:', url);
+    
     try {
-      const url = this.buildApiUrl('/dashboard-stats');
       return await this.makeRequest(url, { method: 'GET' });
-    } catch (err) {
-      console.warn('[API] Primary dashboard-stats endpoint failed, falling back to /external/jed/dashboard-stats:', err?.message);
-      const fallbackUrl = this.buildUrl('/dashboard/stats');
-      return await this.makeRequest(fallbackUrl, { method: 'GET' });
+    } catch (error) {
+      // If permission denied, throw a specific error for better handling
+      if (error.message?.includes('PERMISSION_ERROR') || error.message?.includes('403')) {
+        console.warn('[API] Dashboard stats requires admin permissions');
+        throw new Error('PERMISSION_ERROR:Dashboard stats endpoint requires admin role');
+      }
+      throw error;
     }
   }
 
@@ -448,6 +521,22 @@ class JEDApiService {
     const query = new URLSearchParams(params).toString();
     const url = this.buildUrl(`/installer/performance${query ? `?${query}` : ''}`);
     return await this.makeRequest(url, { method: 'GET' });
+  }
+
+  async getInstallerDashboard() {
+    // Installer-specific dashboard endpoint
+    // Falls back to calculating from customer requests if endpoint doesn't exist
+    try {
+      const url = this.buildUrl('/installer/dashboard-stats');
+      return await this.makeRequest(url, { method: 'GET' });
+    } catch (error) {
+      // If endpoint doesn't exist, return null to trigger fallback calculation
+      if (error.message?.includes('NOT_FOUND') || error.message?.includes('404')) {
+        console.warn('[API] Installer dashboard endpoint not found, will calculate from requests');
+        return null;
+      }
+      throw error;
+    }
   }
 
   // Meters endpoints (based on API documentation)
@@ -497,7 +586,17 @@ class JEDApiService {
 
   async getMeterStatistics() {
     const url = this.buildApiUrl('/meters/statistics');
-    return await this.makeRequest(url, { method: 'GET' });
+    
+    try {
+      return await this.makeRequest(url, { method: 'GET' });
+    } catch (error) {
+      // If permission denied, throw a specific error for better handling
+      if (error.message?.includes('PERMISSION_ERROR') || error.message?.includes('403')) {
+        console.warn('[API] Meter statistics requires specific permissions');
+        throw new Error('PERMISSION_ERROR:Meter statistics endpoint requires elevated permissions');
+      }
+      throw error;
+    }
   }
 
   async getMeterById(id) {
@@ -639,28 +738,33 @@ class JEDApiService {
   }
 
   // API Integration Health Check
-  async validateApiIntegration() {
-    console.log('[API Health Check] Starting validation...');
-    const checks = {
-      baseUrl: !!this.config.BASE_URL,
-      authEndpoint: !!this.config.ENDPOINTS.AUTH,
-      jedEndpoint: !!this.config.ENDPOINTS.JED,
-      hasTokenStorage: !!localStorage,
-      methods: {
-        login: typeof this.login === 'function',
-        getProfile: typeof this.getProfile === 'function',
-        getAllCustomerRequests: typeof this.getAllCustomerRequests === 'function',
-        getDashboardStats: typeof this.getDashboardStats === 'function',
-        uploadExcel: typeof this.uploadExcel === 'function',
-        downloadMetersTemplate: typeof this.downloadMetersTemplate === 'function'
-      }
-    };
-    
-    console.log('[API Health Check] Results:', checks);
-    const allPass = Object.values(checks).every(v => v === true || (typeof v === 'object' && Object.values(v).every(vv => vv === true)));
-    console.log('[API Health Check]', allPass ? 'PASSED' : 'FAILED');
-    return allPass;
-  }
+async validateApiIntegration() {
+  console.log('[API Health Check] Starting validation...');
+  const checks = {
+    baseUrl: !!this.config.BASE_URL,
+    authEndpoint: !!this.config.ENDPOINTS.AUTH,
+    jedEndpoint: !!this.config.ENDPOINTS.JED,
+    hasTokenStorage: !!localStorage,
+    methods: {
+      login: typeof this.login === 'function',
+      getProfile: typeof this.getProfile === 'function',
+      getUsers: typeof this.getUsers === 'function', // NEW
+      createUser: typeof this.createUser === 'function', // NEW
+      updateUser: typeof this.updateUser === 'function', // NEW
+      deleteUser: typeof this.deleteUser === 'function', // NEW
+      getAllCustomerRequests: typeof this.getAllCustomerRequests === 'function',
+      getDashboardStats: typeof this.getDashboardStats === 'function',
+      getInstallerDashboard: typeof this.getInstallerDashboard === 'function',
+      uploadExcel: typeof this.uploadExcel === 'function',
+      downloadMetersTemplate: typeof this.downloadMetersTemplate === 'function'
+    }
+  };
+  
+  console.log('[API Health Check] Results:', checks);
+  const allPass = Object.values(checks).every(v => v === true || (typeof v === 'object' && Object.values(v).every(vv => vv === true)));
+  console.log('[API Health Check]', allPass ? 'PASSED' : 'FAILED');
+  return allPass;
+}
 }
 
 // Export both the class and a singleton instance

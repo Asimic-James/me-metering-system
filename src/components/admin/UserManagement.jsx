@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { PERMISSIONS, ROLES, hasPermission } from '../auth/permissions';
+import { PERMISSIONS, ROLES, hasPermission } from '../auth/permissions.jsx';
 import JEDApiService from '../services/api';
 import {
   Users,
@@ -211,19 +211,52 @@ function UserManagement() {
     fetchUsers();
   }, []);
 
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await JEDApiService.getUsers();
-      setUsers(response.data || response);
-    } catch (err) {
-      console.error('Error fetching users:', err);
-      setError('Failed to load users. Please try again.');
-    } finally {
-      setLoading(false);
+  // Enhanced fetchUsers function in your UserManagement component
+const fetchUsers = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    // Check if user management endpoints are available
+    console.log('[UserManagement] Fetching users...');
+    const response = await JEDApiService.getUsers();
+    
+    // Handle different response formats
+    let usersData = [];
+    
+    if (response.success) {
+      usersData = response.data || [];
+    } else if (Array.isArray(response.data)) {
+      usersData = response.data;
+    } else if (Array.isArray(response)) {
+      usersData = response;
+    } else {
+      usersData = response.data || [];
     }
-  };
+    
+    console.log('[UserManagement] Users received:', usersData.length, 'users');
+    setUsers(usersData);
+    
+  } catch (err) {
+    console.error('[UserManagement] Error fetching users:', err);
+    
+    // Enhanced error handling
+    const errorMessage = err.message || '';
+    
+    if (errorMessage.includes('PERMISSION_ERROR')) {
+      setError('You do not have permission to manage users.');
+    } else if (errorMessage.includes('NOT_FOUND') || errorMessage.includes('404')) {
+      setError('User management features are not available in this system.');
+    } else {
+      setError(err.message || 'Failed to load users. Please try again.');
+    }
+    
+    // Set empty array as fallback
+    setUsers([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleCreateUser = async (userData) => {
     try {
@@ -263,12 +296,21 @@ function UserManagement() {
   };
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.phone.includes(searchQuery);
-    const matchesRole = filterRole === 'all' || user.role === filterRole;
-    return matchesSearch && matchesRole;
-  });
+  // Safe search with null checks
+  const searchLower = searchQuery.toLowerCase();
+  const userName = user?.name || '';
+  const userEmail = user?.email || '';
+  const userPhone = user?.phone || '';
+  
+  const matchesSearch = 
+    userName.toLowerCase().includes(searchLower) ||
+    userEmail.toLowerCase().includes(searchLower) ||
+    userPhone.includes(searchQuery);
+  
+  const matchesRole = filterRole === 'all' || user?.role === filterRole;
+  
+  return matchesSearch && matchesRole;
+});
 
   if (!hasPermission(currentUser?.role, PERMISSIONS.MANAGE_USERS)) {
     return (
@@ -399,73 +441,73 @@ function UserManagement() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredUsers.map((user) => (
-                  <tr key={user.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                            <span className="text-blue-600 font-medium">
-                              {user.name.charAt(0)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {user.name}
-                          </div>
-                          <div className="text-sm text-gray-500">{user.email}</div>
-                          <div className="text-sm text-gray-500">{user.phone}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.role === ROLES.ADMIN
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        <Shield className="w-3 h-3 mr-1" />
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.employeeId}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.isActive
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {user.isActive ? (
-                          <Check className="w-3 h-3 mr-1" />
-                        ) : (
-                          <X className="w-3 h-3 mr-1" />
-                        )}
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => {
-                          setEditingUser(user);
-                          setShowForm(true);
-                        }}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+  {filteredUsers.map((user) => (
+    <tr key={user.id}>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <div className="flex items-center">
+          <div className="flex-shrink-0 h-10 w-10">
+            <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+              <span className="text-blue-600 font-medium">
+                {(user?.name || 'U').charAt(0).toUpperCase()}
+              </span>
+            </div>
+          </div>
+          <div className="ml-4">
+            <div className="text-sm font-medium text-gray-900">
+              {user?.name || 'Unknown User'}
+            </div>
+            <div className="text-sm text-gray-500">{user?.email || 'No email'}</div>
+            <div className="text-sm text-gray-500">{user?.phone || 'No phone'}</div>
+          </div>
+        </div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+          user?.role === ROLES.ADMIN
+            ? 'bg-purple-100 text-purple-800'
+            : 'bg-blue-100 text-blue-800'
+        }`}>
+          <Shield className="w-3 h-3 mr-1" />
+          {user?.role || 'Unknown'}
+        </span>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+        {user?.employeeId || 'N/A'}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+          user?.isActive
+            ? 'bg-green-100 text-green-800'
+            : 'bg-red-100 text-red-800'
+        }`}>
+          {user?.isActive ? (
+            <Check className="w-3 h-3 mr-1" />
+          ) : (
+            <X className="w-3 h-3 mr-1" />
+          )}
+          {user?.isActive ? 'Active' : 'Inactive'}
+        </span>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+        <button
+          onClick={() => {
+            setEditingUser(user);
+            setShowForm(true);
+          }}
+          className="text-blue-600 hover:text-blue-900 mr-4"
+        >
+          <Edit className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => handleDeleteUser(user.id)}
+          className="text-red-600 hover:text-red-900"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </td>
+    </tr>
+  ))}
+</tbody>
             </table>
           </div>
         </div>

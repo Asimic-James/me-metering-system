@@ -79,7 +79,7 @@ export const ENDPOINTS = {
       `/external/jed/requests?startDate=${startDate}&endDate=${endDate}`,
     
     // Installer Management
-    GET_INSTALLER_STATS: (employeeId) => `/external/jed/installers/${employeeId}/stats`,
+    GET_INSTALLER_STATS: (employeeId) => `/external/jed/installers/${employeeId}/dashboard-stats`,
     GET_INSTALLER_PERFORMANCE: '/external/jed/installer/performance',
     UPDATE_INSTALLER_PROFILE: (employeeId) => `/external/jed/installers/${employeeId}/profile`,
   },
