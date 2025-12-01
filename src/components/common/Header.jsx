@@ -1,6 +1,7 @@
-import { Power, User, LogOut, ChevronDown, Menu, X, Bell } from 'lucide-react';
+import { Power, User, LogOut, ChevronDown, Menu, X, Bell, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import JEDApiService from '../services/api';
 
 // Header-specific constants
 const HEADER_STYLES = {
@@ -42,8 +43,78 @@ const getUserInitials = (user) => {
     .slice(0, 2);
 };
 
+// Profile Modal Component
+const ProfileModal = ({ isOpen, onClose, user, profileData, loading, error }) => {
+  if (!isOpen) return null;
+
+  const DetailItem = ({ icon: Icon, label, value }) => (
+    <div className="flex items-start gap-3">
+      <Icon className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" />
+      <div>
+        <p className="text-xs text-gray-500">{label}</p>
+        <p className="text-sm font-medium text-gray-800">{value || 'Not provided'}</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="p-4 sm:p-6 border-b flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">User Profile</h2>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {loading && (
+            <div className="flex flex-col items-center justify-center h-full min-h-[200px]">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              <p className="mt-3 text-sm text-gray-600">Loading profile...</p>
+            </div>
+          )}
+          {error && (
+            <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center">
+              <AlertCircle className="w-8 h-8 text-red-500" />
+              <p className="mt-3 text-sm text-red-600">{error}</p>
+            </div>
+          )}
+          {!loading && !error && profileData && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center font-bold text-white text-2xl shadow-lg">
+                  {getUserInitials(profileData)}
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">{`${profileData.firstName || ''} ${profileData.lastName || ''}`}</h3>
+                  <p className="text-sm text-gray-600 capitalize">{profileData.role?.toLowerCase()}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t pt-6">
+                <DetailItem icon={Mail} label="Email" value={profileData.email} />
+                <DetailItem icon={Phone} label="Phone" value={profileData.phone} />
+                <DetailItem icon={MapPin} label="Home Address" value={profileData.homeAddress} />
+                <DetailItem icon={MapPin} label="Office Address" value={profileData.officeAddress} />
+                <DetailItem icon={Shield} label="NIN" value={profileData.nin} />
+                <DetailItem icon={profileData.isEmailVerified ? CheckCircle : AlertCircle} label="Email Verified" value={profileData.isEmailVerified ? 'Yes' : 'No'} />
+                <DetailItem icon={profileData.isPhoneVerified ? CheckCircle : AlertCircle} label="Phone Verified" value={profileData.isPhoneVerified ? 'Yes' : 'No'} />
+                <DetailItem icon={profileData.isActive ? CheckCircle : AlertCircle} label="Account Active" value={profileData.isActive ? 'Yes' : 'No'} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileData, setProfileData] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState(null);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
@@ -58,9 +129,26 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
     onLogout();
   }, [onLogout]);
 
-  const handleProfileClick = useCallback(() => {
+  const handleProfileClick = useCallback(async () => {
     setShowDropdown(false);
-    console.log('Navigate to profile');
+    setShowProfileModal(true);
+    setProfileLoading(true);
+    setProfileError(null);
+
+    try {
+      const response = await JEDApiService.getProfile();
+      if (response.success && response.data) {
+        setProfileData(response.data);
+      } else {
+        // Fallback for different response structures
+        setProfileData(response.user || response.data || response);
+      }
+    } catch (err) {
+      console.error('Failed to fetch profile:', err);
+      setProfileError(err.message || 'Could not load profile data.');
+    } finally {
+      setProfileLoading(false);
+    }
   }, []);
 
   const handleSettingsClick = useCallback(() => {
@@ -223,6 +311,14 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
           )}
         </div>
       </div>
+
+      <ProfileModal 
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        profileData={profileData}
+        loading={profileLoading}
+        error={profileError}
+      />
     </header>
   );
 }
