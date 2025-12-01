@@ -642,10 +642,12 @@ class JEDApiService {
   }
 
   static async getComplaints(params = {}) {
-    const url = this.utils.buildUrlWithParams(
-      this.endpoints.COMPLAINTS.BASE,
-      params
+    const cleanParams = Object.fromEntries(
+      Object.entries(params).filter(([_, v]) => v != null && v !== '')
     );
+    const queryString = new URLSearchParams(cleanParams).toString();
+    const url = `${this.buildApiUrl(this.endpoints.COMPLAINTS.BASE)}?${queryString}`;
+
     return await this.makeRequest(url, { 
       method: 'GET',
       useCache: true,
