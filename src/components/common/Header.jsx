@@ -34,13 +34,21 @@ const useClickOutside = (ref, callback) => {
 };
 
 const getUserInitials = (user) => {
-  if (!user?.name) return 'U';
-  return user.name
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  if (!user) return 'U';
+
+  if (user.firstName && user.lastName) {
+    return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+  }
+
+  if (user.name) {
+    const parts = user.name.split(' ').filter(Boolean);
+    if (parts.length > 1) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return parts[0]?.substring(0, 2).toUpperCase() || 'U';
+  }
+
+  return 'U';
 };
 
 // Profile Modal Component
