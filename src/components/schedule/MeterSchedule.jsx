@@ -262,51 +262,16 @@ const useMeterStatistics = () => {
   };
 };
 
-// Custom hook for schedule data management
-const useScheduleData = () => {
-  const [scheduledJobs, setScheduledJobs] = useState([
-    {
-      id: 1,
-      sealNo: '9900',
-      meterNo: '0123456789898',
-      accountNumber: '477014',
-      customerName: 'John Smith',
-      customerPhone: '08012345678',
-      address: '123 Main Street, Lagos',
-      scheduledDate: '2025-10-15',
-      scheduledTime: '09:00 AM',
-      priority: 'high',
-      status: 'pending',
-      notes: 'Customer prefers morning installation'
-    }
-  ]);
-
-  const updateJobStatus = useCallback((jobId, updates) => {
-    setScheduledJobs(prev => prev.map(job => 
-      job.id === jobId ? { ...job, ...updates } : job
-    ));
-  }, []);
-
-  return {
-    scheduledJobs,
-    updateJobStatus
-  };
-};
-
 // Stats Cards Component
 const StatsCard = ({ title, value, icon: Icon, bgColor, iconColor, loading = false, error = false }) => (
   <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 hover:shadow-lg transition-shadow duration-200">
     <div className="flex items-center justify-between">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-gray-500 text-sm font-medium mb-1 truncate">{title}</p>
-        <p className={`text-2xl sm:text-3xl font-bold ${
-          error ? 'text-red-600' : 'text-gray-900'
-        }`}>
+        <p className={`text-2xl sm:text-3xl font-bold ${error ? 'text-red-600' : 'text-gray-900'}`}>
           {loading ? '...' : error ? 'Error' : value}
         </p>
-        {error && (
-          <p className="text-xs text-red-500 mt-1">Failed to load</p>
-        )}
+        {error && <p className="text-xs text-red-500 mt-1">Failed to load</p>}
       </div>
       <div className={`${bgColor} rounded-full p-2 sm:p-3 flex-shrink-0 ml-4`}>
         <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${iconColor}`} />
@@ -1247,46 +1212,17 @@ const MeterQuery = ({ meterQuery }) => {
 };
 
 // Main Component
-function MeterSchedule({ onComplete }) {
-  const { user } = useAuth();
-  const { scheduledJobs, updateJobStatus } = useScheduleData();
+function MeterSchedule() {
   const { meterStats, loading: statsLoading, error: statsError, refetch: refetchStats } = useMeterStatistics();
   const meterInventory = useMeterData({ searchTerm: '', searchField: 'meterNumber' });
   const meterQuery = useMeterData({ searchTerm: '', searchField: 'meterNumber' });
   
-  const [activeTab, setActiveTab] = useState('schedule');
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [showInstallForm, setShowInstallForm] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [installationLoading, setInstallationLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('inventory');
 
   useEffect(() => {
     console.log('[MeterSchedule] Component mounted');
     console.log('[MeterSchedule] Active tab:', activeTab);
   }, [activeTab]);
-
-  const filteredJobs = useMemo(() => {
-    return scheduledJobs.filter(job => {
-      const matchesTab = activeTab === 'schedule' || job.status === activeTab;
-      const matchesSearch = 
-        job.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        job.accountNumber?.includes(searchTerm) ||
-        job.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        job.sealNo?.includes(searchTerm);
-      
-      return matchesTab && matchesSearch;
-    });
-  }, [scheduledJobs, activeTab, searchTerm]);
-
-  const jobStats = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    return {
-      total: scheduledJobs.length,
-      pending: scheduledJobs.filter(j => j.status === 'pending').length,
-      completed: scheduledJobs.filter(j => j.status === 'completed').length,
-      today: scheduledJobs.filter(j => j.scheduledDate === today).length
-    };
-  }, [scheduledJobs]);
 
   const statsCards = useMemo(() => {
     const cards = [
@@ -1295,6 +1231,8 @@ function MeterSchedule({ onComplete }) {
         value: meterStats.totalMeters, 
         icon: Battery, 
         bgColor: 'bg-blue-100', 
+        icon: Battery,
+        bgColor: 'bg-blue-100',
         iconColor: 'text-blue-600',
         loading: statsLoading,
         error: !!statsError
@@ -1349,105 +1287,8 @@ function MeterSchedule({ onComplete }) {
     return cards;
   }, [meterStats, statsLoading, statsError]);
 
-  const handleSelectJob = useCallback((job) => {
-    setSelectedJob(job);
-    setShowInstallForm(false);
-  }, []);
-
-  const handleStartInstallation = useCallback(() => {
-    setShowInstallForm(true);
-  }, []);
-
-  const handleCompleteInstallation = useCallback(async (formData) => {
-    if (!selectedJob) return;
-
-    setInstallationLoading(true);
-
-    try {
-      console.log('[MeterSchedule] Completing installation for job:', selectedJob.id);
-      
-      const installationData = {
-        sealNo: formData.actualSealNo,
-        meterNo: formData.actualMeterNo,
-        accountNumber: selectedJob.accountNumber,
-        installationDate: new Date().toISOString().split('T')[0],
-        installationTime: formData.installationTime,
-        installerName: user?.name || user?.username || 'Current Installer',
-        notes: formData.installationNotes,
-        customerName: selectedJob.customerName,
-        address: selectedJob.address,
-        phone: selectedJob.customerPhone
-      };
-
-      console.log('[MeterSchedule] Sending installation data:', installationData);
-      
-      const response = await JEDApiService.completeInstallation(installationData);
-      
-      if (response.success) {
-        console.log('[MeterSchedule] Installation completed successfully');
-        
-        updateJobStatus(selectedJob.id, {
-          status: 'completed',
-          completedAt: new Date().toLocaleString(),
-          meterNo: formData.actualMeterNo,
-          sealNo: formData.actualSealNo,
-          installationNotes: formData.installationNotes
-        });
-
-        await refetchStats();
-        meterInventory.fetchMeters();
-        meterQuery.fetchMeters();
-
-        if (onComplete) {
-          onComplete({
-            ...selectedJob,
-            meterNo: formData.actualMeterNo,
-            sealNo: formData.actualSealNo,
-            status: 'completed',
-            installationTime: formData.installationTime,
-            installationNotes: formData.installationNotes
-          });
-        }
-
-        setShowInstallForm(false);
-        alert('Installation completed successfully!');
-        
-      } else {
-        throw new Error(response.message || 'Failed to complete installation');
-      }
-
-    } catch (error) {
-      console.error('[MeterSchedule] Error completing installation:', error);
-      
-      let errorMessage = 'Failed to complete installation. Please try again.';
-      if (error.message?.includes('PERMISSION_ERROR')) {
-        errorMessage = 'You do not have permission to complete installations.';
-      } else if (error.message?.includes('VALIDATION_ERROR')) {
-        errorMessage = 'Invalid installation data. Please check the meter and seal numbers.';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      alert(errorMessage);
-    } finally {
-      setInstallationLoading(false);
-    }
-  }, [selectedJob, user, onComplete, updateJobStatus, refetchStats, meterInventory, meterQuery]);
-
-  const handleCancelInstallation = useCallback(() => {
-    setShowInstallForm(false);
-  }, []);
-
-  const handleSearchChange = useCallback((e) => {
-    setSearchTerm(e.target.value);
-  }, []);
-
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
-    if (tabId !== 'schedule') {
-      setSelectedJob(null);
-      setShowInstallForm(false);
-    }
   }, []);
 
   return (
@@ -1456,7 +1297,7 @@ function MeterSchedule({ onComplete }) {
         <div className="min-w-0">
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">Meter Management</h2>
           <p className="text-gray-600 text-sm sm:text-base">
-            Manage your installation schedule and meter inventory
+            Query your meter inventory and check stock levels
           </p>
         </div>
         {statsError && (
@@ -1496,89 +1337,6 @@ function MeterSchedule({ onComplete }) {
           ))}
         </div>
       </div>
-
-      {activeTab === 'schedule' && (
-        <>
-          <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
-              <div className="flex space-x-1 sm:space-x-2 overflow-x-auto">
-                <button
-                  onClick={() => handleTabChange('schedule')}
-                  className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-xs sm:text-sm ${
-                    activeTab === 'schedule'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  All Jobs ({jobStats.total})
-                </button>
-                <button
-                  onClick={() => handleTabChange('schedule')}
-                  className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-xs sm:text-sm ${
-                    activeTab === 'schedule'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Pending ({jobStats.pending})
-                </button>
-                <button
-                  onClick={() => handleTabChange('schedule')}
-                  className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-xs sm:text-sm ${
-                    activeTab === 'schedule'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Completed ({jobStats.completed})
-                </button>
-              </div>
-
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search jobs..."
-                  value={searchTerm}
-                  onChange={handleSearchChange}
-                  className="w-full md:w-64 px-3 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-            <div className="lg:col-span-2 space-y-3 sm:space-y-4">
-              {filteredJobs.length > 0 ? (
-                filteredJobs.map(job => (
-                  <JobCard
-                    key={job.id}
-                    job={job}
-                    isSelected={selectedJob?.id === job.id}
-                    onClick={() => handleSelectJob(job)}
-                  />
-                ))
-              ) : (
-                <EmptyState 
-                  hasFilters={searchTerm} 
-                  searchTerm={searchTerm}
-                />
-              )}
-            </div>
-
-            <div className="lg:col-span-1">
-              <JobDetails
-                job={selectedJob}
-                onStartInstallation={handleStartInstallation}
-                showInstallForm={showInstallForm}
-                onInstallationSubmit={handleCompleteInstallation}
-                onCancelInstallation={handleCancelInstallation}
-                installationLoading={installationLoading}
-              />
-            </div>
-          </div>
-        </>
-      )}
 
       {activeTab === 'inventory' && (
         <MeterInventory meterInventory={meterInventory} />

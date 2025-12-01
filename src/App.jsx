@@ -121,13 +121,13 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<AdminDashboard />} />
-          <Route path="/submit" element={(permissions.isAdmin || permissions.canCreateInstallation) ? <SubmitForm onSubmit={handleAddSubmission} onSuccess={handleFormSuccess} /> : <AccessDenied />} />
-          <Route path="/schedule" element={(permissions.isAdmin || permissions.canViewSchedule) ? <MeterSchedule onComplete={handleAddSubmission} /> : <AccessDenied />} />
+          <Route path="/submit" element={permissions.isAdmin || permissions.canCreateInstallation ? <SubmitForm onSubmit={handleAddSubmission} onSuccess={handleFormSuccess} /> : <AccessDenied />} />
+          <Route path="/schedule" element={permissions.isAdmin || permissions.canViewSchedule ? <MeterSchedule onComplete={handleAddSubmission} /> : <AccessDenied />} />
           <Route path="/users" element={permissions.isAdmin ? <UserManagement /> : <AccessDenied />} />
-          <Route path="/uploads" element={(permissions.isAdmin || permissions.canUploadExcel) ? <ExcelUpload /> : <AccessDenied />} />
+          <Route path="/uploads" element={permissions.isAdmin || permissions.canUploadExcel ? <ExcelUpload /> : <AccessDenied />} />
           <Route path="/reports" element={permissions.isAdmin ? <AdminReports /> : <AccessDenied />} />
           <Route path="/settings" element={permissions.isAdmin ? <MeterTypeSettings /> : <AccessDenied />} />
-          <Route path="/complaint" element={(permissions.isAdmin || permissions.canCreateComplaint) ? <ComplaintForm /> : <AccessDenied />} />
+          <Route path="/complaint" element={permissions.isAdmin || permissions.canCreateComplaint ? <ComplaintForm /> : <AccessDenied />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>

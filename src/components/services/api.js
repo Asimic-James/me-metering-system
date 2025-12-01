@@ -704,7 +704,7 @@ class JEDApiService {
     console.log('[API] Updating meter type:', id, meterTypeData);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
     const response = await this.makeRequest(url, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(meterTypeData),
     });
     this.clearCache();
@@ -722,11 +722,12 @@ class JEDApiService {
   // ==================== USER MANAGEMENT METHODS ====================
   static async getUsers(params = {}) {
     console.log('[API] Fetching users');
-    const url = this.utils.buildUrlWithParams(
-      this.endpoints.ADMIN.USERS.BASE, 
-      params,
-      'AUTH'
+    const cleanParams = Object.fromEntries(
+      Object.entries(params).filter(([_, v]) => v != null && v !== '')
     );
+    const queryString = new URLSearchParams(cleanParams).toString();
+    const url = `${this.buildApiUrl(this.endpoints.ADMIN.USERS.BASE)}?${queryString}`;
+
     return await this.makeRequest(url, { 
       method: 'GET',
       useCache: true,

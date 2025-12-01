@@ -7,8 +7,8 @@ const HEADER_STYLES = {
   gradient: 'bg-gradient-to-r from-blue-600 to-blue-700',
   mobile: {
     menuButton: 'lg:hidden p-2 -ml-2 hover:bg-blue-700 rounded-lg transition-colors',
-    avatar: 'w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-500',
-    title: 'text-sm font-bold truncate',
+    avatar: 'w-9 h-9 bg-gradient-to-br from-blue-400 to-blue-500',
+    title: 'text-base font-bold truncate',
     subtitle: 'text-blue-100 text-xs'
   },
   desktop: {
@@ -117,7 +117,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   ), [handleProfileClick, handleSettingsClick]);
 
   const LogoSection = useCallback(() => (
-    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
+    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
       <div className="flex-shrink-0">
         <div className="w-9 h-9 sm:w-10 sm:h-10 bg-white/10 backdrop-blur-sm rounded-lg flex items-center justify-center">
           <Power className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -139,15 +139,14 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
 
   const UserAvatar = useCallback(() => (
     <button
-      onClick={handleDropdownToggle}
-      className="flex items-center gap-2 sm:gap-3 bg-blue-700/50 hover:bg-blue-700 rounded-lg px-2 sm:px-4 py-2 transition-all duration-200 hover:shadow-lg"
+      onClick={handleDropdownToggle} // Simplified for mobile
+      className="flex items-center gap-2 sm:gap-3 bg-blue-700/50 hover:bg-blue-700 rounded-lg sm:px-4 sm:py-2 p-1.5 transition-all duration-200 hover:shadow-lg"
       aria-expanded={showDropdown}
       aria-haspopup="true"
     >
       <div className={`${HEADER_STYLES.mobile.avatar} ${HEADER_STYLES.desktop.avatar} rounded-full flex items-center justify-center font-semibold text-sm shadow-md`}>
         {getUserInitials(user)}
       </div>
-
       <div className="text-left hidden md:block">
         <p className="text-sm font-semibold leading-tight">{user.name}</p>
         <p className="text-xs text-blue-200 leading-tight capitalize">{user.role}</p>
@@ -195,7 +194,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
     <header className={`${HEADER_STYLES.gradient} text-white shadow-lg sticky top-0 z-40`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
-          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0 mr-2 sm:mr-4">
             <button
               onClick={onMenuToggle}
               className={HEADER_STYLES.mobile.menuButton}

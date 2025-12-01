@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import JEDApiService from '../services/api';
+import { useNavigate } from 'react-router-dom';
 import { formatCurrencyNGN } from '../../utils/currency';
 import { 
   BarChart,
@@ -241,7 +242,7 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
 };
 
 // Quick Actions Component - Mobile First
-const QuickActions = ({ onManageUsers, onExportData, isAdmin }) => (
+const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) => (
   <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
     <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
     <div className="grid grid-cols-2 gap-3">
@@ -266,7 +267,10 @@ const QuickActions = ({ onManageUsers, onExportData, isAdmin }) => (
         </span>
       </button>
       {isAdmin && (
-        <button className="p-3 sm:p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg hover:shadow-md transition-all border border-purple-200 col-span-2">
+        <button 
+          onClick={onGoToSettings}
+          className="p-3 sm:p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg hover:shadow-md transition-all border border-purple-200 col-span-2"
+        >
           <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 mb-2 mx-auto" />
           <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
             System Settings
@@ -278,6 +282,7 @@ const QuickActions = ({ onManageUsers, onExportData, isAdmin }) => (
 );
 
 function AdminDashboard({ isInstallerView = false }) {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [stats, setStats] = useState({
     pendingRequests: 0,
@@ -290,7 +295,6 @@ function AdminDashboard({ isInstallerView = false }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   const isAdmin = user?.role === 'admin';
   const showInstallerData = isInstallerView || !isAdmin;
@@ -442,10 +446,11 @@ function AdminDashboard({ isInstallerView = false }) {
   };
 
   const handleManageUsers = () => {
-    // Navigate to user management or open user modal
-    console.log('Navigate to user management');
-    // You can implement navigation or modal here
-    alert('User management feature - Navigate to /admin/users or implement inline modal');
+    navigate('/users');
+  };
+
+  const handleGoToSettings = () => {
+    navigate('/settings');
   };
 
   if (loading) {
@@ -477,73 +482,9 @@ function AdminDashboard({ isInstallerView = false }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Mobile Header */}
-      <div className="lg:hidden sticky top-0 z-10 bg-white border-b px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-gray-900">
-          {showInstallerData && !isAdmin ? 'Installer' : 'Admin'} Dashboard
-        </h1>
-        <button
-          onClick={() => setShowMobileMenu(!showMobileMenu)}
-          className="p-2 text-gray-600 hover:text-gray-900"
-        >
-          {showMobileMenu ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
-      </div>
-
-      {/* Mobile Menu Overlay */}
-      {showMobileMenu && (
-        <div className="lg:hidden fixed inset-0 z-20 bg-black bg-opacity-50" onClick={() => setShowMobileMenu(false)}>
-          <div className="absolute right-0 top-0 h-full w-64 bg-white shadow-xl p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-semibold text-gray-900">Menu</h3>
-              <button onClick={() => setShowMobileMenu(false)}>
-                <X className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
-            <div className="space-y-2">
-              {isAdmin && (
-                <>
-                  <button
-                    onClick={() => {
-                      handleGenerateReport();
-                      setShowMobileMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-3"
-                  >
-                    <FileText className="w-5 h-5" />
-                    Generate Report
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleManageUsers();
-                      setShowMobileMenu(false);
-                    }}
-                    className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-3"
-                  >
-                    <Users className="w-5 h-5" />
-                    Manage Users
-                  </button>
-                </>
-              )}
-              <button
-                onClick={() => {
-                  setShowExportModal(true);
-                  setShowMobileMenu(false);
-                }}
-                className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg flex items-center gap-3"
-              >
-                <Download className="w-5 h-5" />
-                Export Data
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
-        {/* Desktop Header */}
-        <div className="hidden lg:flex flex-col sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-4 sm:space-y-6">
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               {showInstallerData && !isAdmin ? 'Installer Dashboard' : 'Admin Dashboard'}
@@ -617,12 +558,12 @@ function AdminDashboard({ isInstallerView = false }) {
           <div className="space-y-4 sm:space-y-6">
             <QuickActions 
               onManageUsers={handleManageUsers}
+              onGoToSettings={handleGoToSettings}
               onExportData={() => setShowExportModal(true)}
               isAdmin={isAdmin}
             />
           </div>
         </div>
-      </div>
 
       {/* Export Modal */}
       <ExportModal

@@ -19,7 +19,7 @@ const NAVIGATION_CONFIG = {
       label: 'Meter Schedule',
       path: '/schedule',
       icon: Calendar,
-      mobileBottomNav: (role) => role === 'admin', // Admin only
+      mobileBottomNav: false,
       description: 'View installation schedules',
       accessible: () => true,
     },
@@ -55,7 +55,7 @@ const NAVIGATION_CONFIG = {
       label: 'Uploads',
       path: '/uploads',
       icon: Upload,
-      description: 'Upload Excel files',
+      description: 'Upload meter data',
       accessible: (userRole) => ['admin', 'installer'].includes(userRole)
     },
     {
@@ -117,7 +117,7 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
       const variants = {
         desktop: {
           container: `flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-b-2 transition-all duration-200 whitespace-nowrap group relative ${!isAccessible ? 'opacity-50 cursor-not-allowed text-gray-400 border-transparent' : ''}`,
-          active: 'border-blue-600 text-blue-600 font-semibold bg-blue-50',
+          active: 'border-transparent text-blue-600 font-semibold bg-blue-50',
           inactive: 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300 hover:bg-gray-50',
           icon: `w-5 h-5 transition-transform group-hover:scale-110 ${isActive ? 'animate-pulse' : ''}`,
           text: item.label,
@@ -209,15 +209,17 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
 
   const DesktopNavigation = useCallback(() => (
     <nav className="hidden lg:block bg-white border-b border-gray-200 shadow-sm sticky top-16 sm:top-20 z-30">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex gap-1 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-          {filteredNavItems.map((item) => (
-            <NavItem
-              key={item.id}
-              item={item}
-              variant="desktop"
-            />
-          ))}
+      <div className="max-w-7xl mx-auto">
+        <div className="overflow-x-auto scrollbar-hide -mb-4 pb-4">
+          <div className="flex justify-center items-center gap-1 px-2 sm:px-4 lg:px-6">
+            {filteredNavItems.map((item) => (
+              <NavItem
+                key={item.id}
+                item={item}
+                variant="desktop"
+              />
+            ))}
+          </div>
         </div>
       </div>
     </nav>
@@ -226,7 +228,7 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
   const MobileSidebar = useCallback(() => (
     <aside
       className={`
-        fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] bg-white shadow-2xl z-50 lg:hidden
+        fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] bg-white shadow-2xl z-50 lg:hidden flex flex-col
         transform transition-all duration-300 ease-in-out overflow-y-auto
         ${isOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0 pointer-events-none'}
       `}
@@ -253,7 +255,7 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
         </div>
       </div>
 
-      <div className="p-4 space-y-2">
+      <div className="p-4 space-y-2 flex-1 overflow-y-auto">
         {filteredNavItems.map((item) => (
           <NavItem
             key={item.id}
@@ -263,7 +265,7 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
         ))}
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-gray-50">
+      <div className="p-4 border-t border-gray-200 bg-gray-50">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <p className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-1">Need Help?</p>
           <p className="text-xs text-blue-700 mb-2">Contact support team</p>
@@ -281,10 +283,9 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
   const MobileBottomNavigation = useCallback(() => (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-30 pb-safe">
       <div className="flex justify-around items-center h-16">
-        {/* Show curated items for the bottom nav */}
         {filteredNavItems
           .filter(item => item.mobileBottomNav && item.mobileBottomNav(userRole))
-          .slice(0, 3) // Show a max of 3 curated items
+          .slice(0, 5) // Show a max of 5 curated items
           .map((item) => (
           <NavItem
             key={item.id}
@@ -292,15 +293,6 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
             variant="mobileBottom"
           />
         ))}
-        <button
-          onClick={onMenuToggle} // Correctly toggle the sidebar
-          className="relative flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all active:scale-95 touch-manipulation text-gray-600 hover:text-gray-900"
-        >
-          <div className="relative rounded-lg p-1 transition-all duration-200">
-            <MoreHorizontal className="w-5 h-5" />
-          </div>
-          <span className="text-sm sm:text-base">More</span>
-        </button>
       </div>
     </nav>
   ), [filteredNavItems, NavItem, onMenuToggle, userRole]);

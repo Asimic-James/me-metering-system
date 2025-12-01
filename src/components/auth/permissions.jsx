@@ -122,12 +122,6 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.INSTALLATIONS.VIEW,
     PERMISSIONS.INSTALLATIONS.COMPLETE,
     
-    // Schedule - View only
-    PERMISSIONS.SCHEDULE.VIEW,
-    
-    // Uploads - Excel only
-    PERMISSIONS.UPLOADS.EXCEL,
-    
     // Complaints - Create only
     PERMISSIONS.COMPLAINTS.CREATE
   ])
