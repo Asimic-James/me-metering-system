@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { PERMISSIONS, hasPermission } from '../auth/permissions.jsx';
-import { JEDApiService } from '../services/api';
+import JEDApiService from '../services/api';
 import { 
   AlertCircle, 
   FileText, 
@@ -69,11 +69,9 @@ function AdminReports() {
         setLoading(true);
         setError(null);
 
-        const api = new JEDApiService();
-
         // Use dashboard stats if available
         try {
-          const s = await api.getDashboardStats();
+          const s = await JEDApiService.getDashboardStats();
           const payload = s?.data || s || {};
           setStats(prev => ({
             revenue: payload.revenue || payload.totalRevenue || prev.revenue,
@@ -85,9 +83,9 @@ function AdminReports() {
         }
 
         // Fetch report rows
-        const resp = await api.getAllCustomerRequests({ 
+        const resp = await JEDApiService.getAllCustomerRequests({ 
           page: pagination.currentPage, 
-          limit: pagination.limit 
+          limit: Number(pagination.limit) || 50 // Ensure limit is a valid number
         });
         const data = resp?.data || resp || [];
         const paginationData = resp?.pagination || {
@@ -155,7 +153,7 @@ function AdminReports() {
       }
     };
 
-    if (hasPermission(user?.role, PERMISSIONS.VIEW_REPORTS)) {
+    if (hasPermission(user?.role, PERMISSIONS.REPORTS.VIEW)) {
       load();
     }
   }, [user, pagination.currentPage, pagination.limit]);
@@ -251,7 +249,7 @@ function AdminReports() {
     setDateTo('');
   };
 
-  if (!hasPermission(user?.role, PERMISSIONS.VIEW_REPORTS)) {
+  if (!user || !hasPermission(user.role, PERMISSIONS.REPORTS.VIEW)) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center">

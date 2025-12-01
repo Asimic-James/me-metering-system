@@ -1,110 +1,107 @@
 // src/services/api.js
 // ============================================
-// JED API Service - Refactored & Optimized
+// Optimized JED API Service with Enhanced Configuration
 // ============================================
 
-// Enable API debugging globally if needed (set via window.DEBUG_API = true in console)
+import { 
+  API_CONFIG, 
+  ENDPOINTS, 
+  ERROR_TYPES, 
+  ERROR_CODES,
+  API_UTILS 
+} from './api.config.js';
+
+// Enable API debugging globally if needed
 if (typeof window !== 'undefined' && window.DEBUG_API) {
   console.log('[API] Debug mode enabled - all API calls will be logged');
 }
 
-// API Configuration
-const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://pharez-api.onrender.com',
-  VERSION: '/api/v1',
-  ENDPOINTS: {
-    AUTH: '/auth',
-    JED: '/external/jed'
-  },
-  TOKEN_REFRESH_THRESHOLD: 5 * 60 * 1000, // 5 minutes
-  RETRY_CONFIG: {
-    MAX_RETRIES: 2,
-    BASE_DELAY: 500
-  }
-};
-
-// Error types for consistent error handling
-const ERROR_TYPES = {
-  AUTH: 'AUTH_ERROR',
-  VALIDATION: 'VALIDATION_ERROR',
-  PERMISSION: 'PERMISSION_ERROR',
-  NOT_FOUND: 'NOT_FOUND',
-  SERVER: 'SERVER_ERROR',
-  NETWORK: 'NETWORK_ERROR'
-};
-
 class JEDApiService {
-  constructor() {
-    this.config = API_CONFIG;
-  }
-
-  // URL construction helper
-  buildUrl(endpoint, isAuthEndpoint = false) {
-    const baseEndpoint = isAuthEndpoint 
-      ? this.config.ENDPOINTS.AUTH 
-      : this.config.ENDPOINTS.JED;
+  // Static properties for configuration
+  static config = API_CONFIG;
+  static endpoints = ENDPOINTS;
+  static errorTypes = ERROR_TYPES;
+  static errorCodes = ERROR_CODES;
+  static utils = API_UTILS;
     
-    return `${this.config.BASE_URL}${this.config.VERSION}${baseEndpoint}${endpoint}`;
-  }
+  // Static cache properties
+  static requestCache = new Map();
+  static cacheTimeout = 30000; // 30 seconds
 
-  // Generic API URL helper (for endpoints that are not under the JED namespace)
-  buildApiUrl(endpoint) {
-    return `${this.config.BASE_URL}${this.config.VERSION}${endpoint}`;
-  }
+  // Enhanced request method with caching and better error handling
+  static async makeRequest(url, options = {}) {
+    const { 
+      maxRetries = this.config.RETRY_CONFIG.MAX_RETRIES,
+      useCache = false,
+      cacheKey = null,
+      ...requestOptions 
+    } = options;
 
-  // Header construction helper
-  buildHeaders(customHeaders = {}) {
-    const headers = {
-      'Content-Type': 'application/json',
-      ...customHeaders
-    };
-
-    const token = this.getAuthToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    // Check cache first if enabled
+    if (useCache && cacheKey) {
+      const cached = this.getCachedResponse(cacheKey);
+      if (cached) {
+        console.log('[API] Returning cached response for:', cacheKey);
+        return cached;
+      }
     }
 
-    return headers;
-  }
-
-  // Enhanced request method with better error handling and retry logic
-  async makeRequest(url, options = {}) {
-    const { maxRetries = this.config.RETRY_CONFIG.MAX_RETRIES } = options;
     let lastError;
+    let response;
+    let timeoutId;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[API] Request to ${url} (attempt ${attempt + 1})`, { method: options.method });
+        console.log(`[API] Request to ${url} (attempt ${attempt + 1})`, { 
+          method: requestOptions.method,
+          cache: useCache ? 'enabled' : 'disabled'
+        });
 
-        // Respect FormData bodies by allowing the browser to set Content-Type
-        const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-        const headers = this.buildHeaders(options.headers);
+        // Build headers with FormData support
+        const isFormData = typeof FormData !== 'undefined' && requestOptions.body instanceof FormData;
+        const headers = this.utils.buildHeaders(requestOptions.headers);
+        
         if (isFormData && headers['Content-Type']) {
           delete headers['Content-Type'];
         }
 
         // Log request body (truncate for large payloads)
-        if (options.body && typeof options.body === 'string') {
-          const bodyTrunc = options.body.length > 200 ? options.body.substring(0, 200) + '...' : options.body;
+        if (requestOptions.body && typeof requestOptions.body === 'string') {
+          const bodyTrunc = requestOptions.body.length > 200 ? 
+            requestOptions.body.substring(0, 200) + '...' : requestOptions.body;
           console.log('[API] Request body:', bodyTrunc);
         }
 
-        const response = await fetch(url, {
-          ...options,
+        // Add timeout support
+        const controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), this.utils.getTimeout(url));
+        
+        response = await fetch(url, {
+          ...requestOptions,
           headers,
+          signal: controller.signal
         });
 
+        clearTimeout(timeoutId);
+
         const result = await this.handleResponse(response);
+        
+        // Cache successful responses
+        if (useCache && cacheKey && this.utils.isSuccessResponse(response)) {
+          this.setCachedResponse(cacheKey, result);
+        }
+
         return result;
 
       } catch (error) {
         lastError = error;
+        if (timeoutId) clearTimeout(timeoutId);
         
         // Check if we should retry
-        if (attempt < maxRetries && this.shouldRetry(error)) {
-          const delay = this.calculateRetryDelay(attempt);
+        if (attempt < maxRetries && this.utils.shouldRetry(error)) {
+          const delay = this.utils.calculateRetryDelay(attempt);
           console.warn(`[API] Retrying after ${delay}ms...`);
-          await this.delay(delay);
+          await this.utils.delay(delay);
           continue;
         }
         break;
@@ -114,15 +111,35 @@ class JEDApiService {
     throw this.enhanceError(lastError);
   }
 
+  // Cache management methods
+  static getCachedResponse(key) {
+    const cached = this.requestCache.get(key);
+    if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+      return cached.data;
+    }
+    this.requestCache.delete(key);
+    return null;
+  }
+
+  static setCachedResponse(key, data) {
+    this.requestCache.set(key, {
+      data,
+      timestamp: Date.now()
+    });
+  }
+
+  static clearCache() {
+    this.requestCache.clear();
+  }
+
   // Handle API response with consistent error formatting
-  async handleResponse(response) {
+  static async handleResponse(response) {
     console.log(`[API] Response: ${response.status} ${response.statusText}`);
 
     const contentType = response.headers.get('content-type');
     let data;
 
     try {
-      // Check if response is HTML (common sign of error page or CORS issue)
       if (contentType?.includes('text/html') || contentType?.includes('text/plain')) {
         const text = await response.text();
         console.warn('[API] Received HTML/text response instead of JSON:', text.substring(0, 100));
@@ -151,29 +168,28 @@ class JEDApiService {
     return data;
   }
 
-  // Handle different error responses
-  handleErrorResponse(response, data) {
+  // Enhanced error handling with specific error types
+  static handleErrorResponse(response, data) {
     const { status } = response;
 
     if (status === 401) {
       this.clearTokens();
-      throw new Error(`${ERROR_TYPES.AUTH}:${data?.message || 'Invalid credentials'}`);
+      throw new Error(`${this.errorTypes.AUTH}:${data?.message || 'Invalid credentials'}`);
     }
 
-    // Check for common error indicators
     const errorMsg = String(data?.message || data?.error || '').toLowerCase();
     const isHtmlError = errorMsg.includes('doctype') || errorMsg.includes('<!');
     
     if (isHtmlError) {
       console.error('[API] Server returned HTML error page — possible CORS or server issue');
-      throw new Error(`${ERROR_TYPES.SERVER}:Server responded with an error page — check CORS and API endpoint`);
+      throw new Error(`${this.errorTypes.SERVER}:Server responded with an error page — check CORS and API endpoint`);
     }
 
     const errorMap = {
-      400: `${ERROR_TYPES.VALIDATION}:${data?.message || 'Invalid request'}`,
-      403: `${ERROR_TYPES.PERMISSION}:${data?.message || 'Access denied'}`,
-      404: `${ERROR_TYPES.NOT_FOUND}:${data?.message || 'Resource not found'}`,
-      500: `${ERROR_TYPES.SERVER}:${data?.message || 'Internal server error'}`
+      400: `${this.errorTypes.VALIDATION}:${data?.message || 'Invalid request'}`,
+      403: `${this.errorTypes.PERMISSION}:${data?.message || 'Access denied'}`,
+      404: `${this.errorTypes.NOT_FOUND}:${data?.message || 'Resource not found'}`,
+      500: `${this.errorTypes.SERVER}:${data?.message || 'Internal server error'}`
     };
 
     const errorMessage = errorMap[status] || 
@@ -184,40 +200,38 @@ class JEDApiService {
     throw new Error(errorMessage);
   }
 
-  // Enhanced error handling
-  enhanceError(error) {
+  // Enhanced error handling with specific error categorization
+  static enhanceError(error) {
     if (error.message && error.message.includes('401')) {
       this.clearTokens();
       return new Error('Authentication required. Please login again.');
     }
 
-    // Network errors
     if (error.name === 'TypeError' || error.message.toLowerCase().includes('network')) {
-      return new Error(`${ERROR_TYPES.NETWORK}:Unable to connect to server`);
+      return new Error(`${this.errorTypes.NETWORK}:Unable to connect to server`);
+    }
+
+    if (error.name === 'AbortError') {
+      return new Error(`${this.errorTypes.NETWORK}:Request timeout`);
     }
 
     return error;
   }
 
-  // Retry logic helpers
-  shouldRetry(error) {
-    const isServerError = error.message?.match(/^HTTP 5/);
-    const isNetworkError = error.message?.includes(ERROR_TYPES.NETWORK);
-    return isServerError || isNetworkError;
+  // URL construction using config utilities
+  static buildUrl(endpoint, isAuthEndpoint = false) {
+    const group = isAuthEndpoint ? 'AUTH' : 'JED';
+    return this.utils.buildUrl(endpoint, group);
   }
 
-  calculateRetryDelay(attempt) {
-    return this.config.RETRY_CONFIG.BASE_DELAY * Math.pow(2, attempt);
+  static buildApiUrl(endpoint) {
+    return this.utils.buildApiUrl(endpoint);
   }
 
-  delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  // Authentication Methods
-  async register(userData) {
+  // ==================== AUTHENTICATION METHODS ====================
+  static async register(userData) {
     console.log('[Auth] Register:', { phone: userData.phone, role: userData.role });
-    const url = this.buildUrl('/register', true);
+    const url = this.buildUrl(this.endpoints.AUTH.REGISTER, true);
     
     return await this.makeRequest(url, {
       method: 'POST',
@@ -225,11 +239,10 @@ class JEDApiService {
     });
   }
 
-  async login(credentials) {
+  static async login(credentials) {
     console.log('[Auth] Login request:', { phone: credentials.phone, hasPassword: !!credentials.password });
-    const url = this.buildUrl('/login', true);
+    const url = this.buildUrl(this.endpoints.AUTH.LOGIN, true);
     
-    // Primary payload shape
     const payloads = [
       { phone: credentials.phone, password: credentials.password },
       { phoneNumber: credentials.phone, password: credentials.password },
@@ -241,72 +254,69 @@ class JEDApiService {
     let lastErr = null;
 
     for (let i = 0; i < payloads.length; i++) {
-      const p = payloads[i];
+      const payload = payloads[i];
       try {
-        console.log(`[Auth] Login attempt ${i + 1}/${payloads.length} with payload:`, JSON.stringify(p).substring(0, 100));
+        console.log(`[Auth] Login attempt ${i + 1}/${payloads.length}`);
         response = await this.makeRequest(url, {
           method: 'POST',
-          body: JSON.stringify(p),
+          body: JSON.stringify(payload),
         });
         console.log('[Auth] Login successful on attempt', i + 1);
-        // stop on success
         break;
       } catch (err) {
         lastErr = err;
         console.warn(`[Auth] Login attempt ${i + 1} failed:`, err.message);
-        // If server indicates password/phone required, try next payload. Otherwise, rethrow for non-validation errors.
+        
         const msg = String(err?.message || '').toLowerCase();
-        if (!msg.includes('password is required') && !msg.includes('phone is required') && !msg.includes('validation')) {
+        const isValidationError = msg.includes('password is required') || 
+                                 msg.includes('phone is required') || 
+                                 msg.includes('validation');
+        
+        if (!isValidationError) {
           throw err;
         }
-        // else continue to try alternate payload shapes
       }
     }
 
     if (!response) {
-      // all attempts failed
       console.error('[Auth] All login attempts failed:', lastErr?.message);
-      throw lastErr || new Error(`${ERROR_TYPES.VALIDATION}:Invalid authentication response`);
+      throw lastErr || new Error(`${this.errorTypes.VALIDATION}:Invalid authentication response`);
     }
 
-    // extractAuthData returns { userData, token }
     const { userData, token } = this.extractAuthData(response);
 
     if (!userData || !token) {
-      console.error('[Auth] Response extraction failed - userData:', userData, 'token:', !!token);
-      throw new Error(`${ERROR_TYPES.VALIDATION}:Invalid authentication response`);
+      console.error('[Auth] Response extraction failed');
+      throw new Error(`${this.errorTypes.VALIDATION}:Invalid authentication response`);
     }
 
-    console.log('[Auth] Login successful - storing user:', { id: userData.id, phone: userData.phone, role: userData.role });
+    console.log('[Auth] Login successful - storing user:', { 
+      id: userData.id, 
+      phone: userData.phone, 
+      role: userData.role 
+    });
+    
     this.storeTokens({ token });
     this.storeUser(userData);
 
     return this.normalizeUserData(userData);
   }
 
-  // Extract authentication data from various response formats
-  extractAuthData(response) {
-    console.log('[Auth] Extracting auth data from response:', response);
+  static extractAuthData(response) {
+    console.log('[Auth] Extracting auth data from response');
     let userData = null;
     let token = null;
 
-    // Try nested data.user format
     if (response.data?.user) {
       userData = response.data.user;
       token = response.data.token || response.token;
-    }
-    // Try response.user format
-    else if (response.user) {
+    } else if (response.user) {
       userData = response.user;
       token = response.token;
-    }
-    // Try response body is user object directly
-    else if (response.phone && response.role) {
+    } else if (response.phone && response.role) {
       userData = response;
       token = response.token || response.accessToken || response.access_token;
-    }
-    // Try data is user object
-    else if (response.data && response.data.phone && response.data.role) {
+    } else if (response.data && response.data.phone && response.data.role) {
       userData = response.data;
       token = response.token || response.data.token;
     }
@@ -315,133 +325,68 @@ class JEDApiService {
     return { userData, token };
   }
 
-  // Normalize user data structure
-  normalizeUserData(userData) {
+  static normalizeUserData(userData) {
     return {
       ...userData,
-      role: (userData.role?.toLowerCase() || 'installer')
+      role: (userData.role?.toLowerCase() || 'installer').trim()
     };
   }
 
-  // Add these methods to your JEDApiService class in src/services/api.js
+  // ==================== USER MANAGEMENT METHODS ====================
+  static async getProfile() {
+    const url = this.buildUrl(this.endpoints.AUTH.PROFILE, true);
+    const response = await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: 'user-profile'
+    });
 
-// User Management Methods
-async getUsers(params = {}) {
-  const query = new URLSearchParams(params).toString();
-  const url = this.buildApiUrl(`/users${query ? `?${query}` : ''}`);
-  
-  try {
-    return await this.makeRequest(url, { method: 'GET' });
-  } catch (error) {
-    // Handle permission errors specifically
-    if (error.message?.includes('PERMISSION_ERROR') || error.message?.includes('403')) {
-      console.warn('[API] User management requires admin permissions');
-      throw new Error('PERMISSION_ERROR:User management requires admin role');
+    if (response.user) {
+      this.storeUser(response.user);
+      this.clearCache();
     }
-    throw error;
+
+    return response;
   }
-}
 
-async createUser(userData) {
-  const url = this.buildApiUrl('/users');
-  return await this.makeRequest(url, {
-    method: 'POST',
-    body: JSON.stringify(userData),
-  });
-}
+  static async updateProfile(profileData) {
+    const url = this.buildUrl(this.endpoints.AUTH.PROFILE, true);
+    const response = await this.makeRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(profileData),
+    });
 
-async updateUser(userId, userData) {
-  const url = this.buildApiUrl(`/users/${userId}`);
-  return await this.makeRequest(url, {
-    method: 'PUT',
-    body: JSON.stringify(userData),
-  });
-}
-
-async deleteUser(userId) {
-  const url = this.buildApiUrl(`/users/${userId}`);
-  return await this.makeRequest(url, { method: 'DELETE' });
-}
-
-async getUserById(userId) {
-  const url = this.buildApiUrl(`/users/${userId}`);
-  return await this.makeRequest(url, { method: 'GET' });
-}
-
-async resetUserPassword(userId, passwordData) {
-  const url = this.buildApiUrl(`/users/${userId}/reset-password`);
-  return await this.makeRequest(url, {
-    method: 'POST',
-    body: JSON.stringify(passwordData),
-  });
-}
-
-async updateUserStatus(userId, statusData) {
-  const url = this.buildApiUrl(`/users/${userId}/status`);
-  return await this.makeRequest(url, {
-    method: 'PUT',
-    body: JSON.stringify(statusData),
-  });
-}
-
-// Add this method to check API capabilities
-async validateUserEndpoints() {
-  const endpoints = [
-    '/users',
-    '/users/:id',
-    '/users/:id/reset-password',
-    '/users/:id/status'
-  ];
-  
-  const availableEndpoints = [];
-  
-  for (const endpoint of endpoints) {
-    try {
-      const testUrl = endpoint.includes(':id') 
-        ? this.buildApiUrl('/users') 
-        : this.buildApiUrl(endpoint);
-      
-      const response = await fetch(testUrl, {
-        method: 'HEAD',
-        headers: this.buildHeaders()
-      });
-      
-      if (response.status !== 404) {
-        availableEndpoints.push(endpoint);
-      }
-    } catch (error) {
-      console.warn(`[API] Endpoint ${endpoint} may not be available:`, error.message);
+    if (response.user) {
+      this.storeUser(response.user);
+      this.clearCache();
     }
+    
+    return response;
   }
-  
-  return availableEndpoints;
-}
 
-  async changePassword(passwordData) {
-    const url = this.buildUrl('/change-password', true);
+  static async changePassword(passwordData) {
+    const url = this.buildUrl(this.endpoints.AUTH.CHANGE_PASSWORD, true);
     return await this.makeRequest(url, {
       method: 'PUT',
       body: JSON.stringify(passwordData),
     });
   }
 
-  async logout() {
+  static async logout() {
     try {
       const token = this.getAuthToken();
       if (token) {
-        const url = this.buildUrl('/logout', true);
+        const url = this.buildUrl(this.endpoints.AUTH.LOGOUT, true);
         try {
           console.log('[Auth] Attempting server logout...');
           await this.makeRequest(url, { method: 'POST' });
           console.log('[Auth] Server logout successful');
         } catch (err) {
-          // 404 means endpoint doesn't exist on backend — this is not critical
           if (err.message && err.message.includes('NOT_FOUND')) {
             console.warn('[Auth] Logout endpoint not found on server, proceeding with local logout');
           } else {
             console.warn('[Auth] Server logout failed:', err.message);
           }
-          // Continue with local logout regardless of server error
         }
       } else {
         console.log('[Auth] No token found, skipping server logout');
@@ -449,66 +394,71 @@ async validateUserEndpoints() {
     } catch (error) {
       console.error('[Auth] Logout error:', error);
     } finally {
-      console.log('[Auth] Clearing local tokens');
+      console.log('[Auth] Clearing local tokens and cache');
       this.clearTokens();
+      this.clearCache();
     }
   }
 
-  // JED Integration Methods
-  async completeInstallation(installationData) {
-    const url = this.buildUrl('/complete-installation');
+  // ==================== JED INTEGRATION METHODS ====================
+  static async completeInstallation(installationData) {
+    const url = this.buildUrl(this.endpoints.JED.COMPLETE_INSTALLATION);
     return await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(installationData),
     });
   }
 
-  async generatePaymentReference(meterData) {
-    const url = this.buildUrl('/generate-ref');
+  static async generatePaymentReference(meterData) {
+    const url = this.buildUrl(this.endpoints.JED.GENERATE_REF);
     return await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(meterData),
     });
   }
 
-  async confirmPayment(paymentData) {
-    const url = this.buildUrl('/confirm-payment');
+  static async confirmPayment(paymentData) {
+    const url = this.buildUrl(this.endpoints.JED.CONFIRM_PAYMENT);
     return await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(paymentData),
     });
   }
 
-  async handleRemitaWebhook(webhookEvents) {
-    const url = this.buildUrl('/remita/webhook');
-    return await this.makeRequest(url, {
-      method: 'POST',
-      body: JSON.stringify(webhookEvents),
+  static async getCustomerRequest(accountNumber) {
+    const url = this.buildUrl(this.endpoints.JED.GET_REQUEST_BY_ACCOUNT(accountNumber));
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `customer-request-${accountNumber}`
     });
   }
 
-  async getCustomerRequest(accountNumber) {
-    const url = this.buildUrl(`/requests/${accountNumber}`);
-    return await this.makeRequest(url, { method: 'GET' });
+  static async getAllCustomerRequests(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.JED.GET_ALL_REQUESTS, 
+      params, 
+      'JED'
+    );
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `all-requests-${JSON.stringify(params)}`
+    });
   }
 
-  async getAllCustomerRequests(params = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    const url = this.buildUrl(`/requests${queryString ? `?${queryString}` : ''}`);
-    return await this.makeRequest(url, { method: 'GET' });
-  }
-
-  // Admin Methods
-  async getDashboardStats() {
-    // Use the correct root-level dashboard-stats endpoint: /api/v1/dashboard-stats
-    // Note: This endpoint requires admin permissions
-    const url = this.buildApiUrl('/dashboard-stats');
+  // ==================== ADMIN & DASHBOARD METHODS ====================
+  static async getDashboardStats() {
+    const url = this.buildApiUrl(this.endpoints.ADMIN.DASHBOARD_STATS);
     console.log('[API] Calling dashboard stats endpoint:', url);
     
     try {
-      return await this.makeRequest(url, { method: 'GET' });
+      return await this.makeRequest(url, { 
+        method: 'GET',
+        useCache: true,
+        cacheKey: 'dashboard-stats'
+      });
     } catch (error) {
-      // If permission denied, throw a specific error for better handling
       if (error.message?.includes('PERMISSION_ERROR') || error.message?.includes('403')) {
         console.warn('[API] Dashboard stats requires admin permissions');
         throw new Error('PERMISSION_ERROR:Dashboard stats endpoint requires admin role');
@@ -517,20 +467,28 @@ async validateUserEndpoints() {
     }
   }
 
-  async getInstallerPerformance(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    const url = this.buildUrl(`/installer/performance${query ? `?${query}` : ''}`);
-    return await this.makeRequest(url, { method: 'GET' });
+  static async getInstallerPerformance(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.JED.GET_INSTALLER_PERFORMANCE, 
+      params, 
+      'JED'
+    );
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `installer-performance-${JSON.stringify(params)}`
+    });
   }
 
-  async getInstallerDashboard() {
-    // Installer-specific dashboard endpoint
-    // Falls back to calculating from customer requests if endpoint doesn't exist
+  static async getInstallerDashboard() {
     try {
-      const url = this.buildUrl('/installer/dashboard-stats');
-      return await this.makeRequest(url, { method: 'GET' });
+      const url = this.buildUrl(this.endpoints.JED.GET_INSTALLER_DASHBOARD);
+      return await this.makeRequest(url, { 
+        method: 'GET',
+        useCache: true,
+        cacheKey: 'installer-dashboard'
+      });
     } catch (error) {
-      // If endpoint doesn't exist, return null to trigger fallback calculation
       if (error.message?.includes('NOT_FOUND') || error.message?.includes('404')) {
         console.warn('[API] Installer dashboard endpoint not found, will calculate from requests');
         return null;
@@ -539,159 +497,291 @@ async validateUserEndpoints() {
     }
   }
 
-  // Meters endpoints (based on API documentation)
-  async uploadMeters(formData) {
-    // formData should be a FormData instance containing the file under 'file' or similar key
-    const url = this.buildApiUrl('/meters/upload');
+  // ==================== METERS MANAGEMENT METHODS ====================
+  static async uploadMeters(formData) {
+    const url = this.buildApiUrl(this.endpoints.METERS.UPLOAD);
     return await this.makeRequest(url, {
       method: 'POST',
       body: formData,
     });
   }
 
-  async downloadMetersTemplate() {
-    const url = this.buildApiUrl('/meters/template');
-    // Return the raw blob for download
-    const headers = this.buildHeaders();
-    if (headers['Content-Type']) delete headers['Content-Type'];
+  static async downloadMetersTemplate() {
+    const url = this.buildApiUrl(this.endpoints.METERS.TEMPLATE);
+    const headers = this.utils.buildHeaders();
+    delete headers['Content-Type'];
 
-    const resp = await fetch(url, { method: 'GET', headers });
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(text || `Failed to download template: ${resp.status}`);
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Failed to download template: ${response.status}`);
     }
-    return await resp.blob();
+    return await response.blob();
   }
 
-  async exportMeters(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    const url = this.buildApiUrl(`/meters/export${query ? `?${query}` : ''}`);
-    // Return blob
-    const headers = this.buildHeaders();
-    if (headers['Content-Type']) delete headers['Content-Type'];
+  static async exportMeters(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.METERS.EXPORT, 
+      params
+    );
+    const headers = this.utils.buildHeaders();
+    delete headers['Content-Type'];
 
-    const resp = await fetch(url, { method: 'GET', headers });
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(text || `Failed to export meters: ${resp.status}`);
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Failed to export meters: ${response.status}`);
     }
-    return await resp.blob();
+    return await response.blob();
   }
 
-  async getMeters(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    const url = this.buildApiUrl(`/meters${query ? `?${query}` : ''}`);
-    return await this.makeRequest(url, { method: 'GET' });
+  static async getMeters(params = {}) {
+    // Ensure only valid parameters are sent
+    const cleanParams = Object.fromEntries(
+      Object.entries(params).filter(([_, v]) => v != null && v !== '' && v !== 'ALL')
+    );
+    const queryString = new URLSearchParams(cleanParams).toString();
+    const url = `${this.buildApiUrl(this.endpoints.METERS.BASE)}?${queryString}`;
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `meters-${JSON.stringify(params)}`
+    });
   }
 
-  async getMeterStatistics() {
-    const url = this.buildApiUrl('/meters/statistics');
-    
-    try {
-      return await this.makeRequest(url, { method: 'GET' });
-    } catch (error) {
-      // If permission denied, throw a specific error for better handling
-      if (error.message?.includes('PERMISSION_ERROR') || error.message?.includes('403')) {
-        console.warn('[API] Meter statistics requires specific permissions');
-        throw new Error('PERMISSION_ERROR:Meter statistics endpoint requires elevated permissions');
-      }
-      throw error;
+  static async getMeterStatistics() {
+    const url = this.buildApiUrl(this.endpoints.METERS.STATISTICS);
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: 'meter-statistics'
+    });
+  }
+
+  static async getMeterById(id) {
+    const url = this.buildApiUrl(this.endpoints.METERS.BY_ID(id));
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `meter-${id}`
+    });
+  }
+
+  static async getMeterByNumber(meterNumber) {
+    const url = this.buildApiUrl(this.endpoints.METERS.BY_NUMBER(meterNumber));
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `meter-number-${meterNumber}`
+    });
+  }
+
+  static async deleteMeter(meterNumber) {
+    const url = this.buildApiUrl(this.endpoints.METERS.BY_ID(meterNumber));
+    const response = await this.makeRequest(url, { method: 'DELETE' });
+    this.clearCache();
+    return response;
+  }
+
+  static async exportCustomerRequests(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.METERS.CUSTOMER_REQUESTS_EXPORT,
+      params
+    );
+    const headers = this.utils.buildHeaders();
+    delete headers['Content-Type'];
+
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Failed to export customer requests: ${response.status}`);
     }
+    return await response.blob();
   }
 
-  async getMeterById(id) {
-    const url = this.buildApiUrl(`/meters/${id}`);
-    return await this.makeRequest(url, { method: 'GET' });
+  // ==================== UPLOADS METHODS ====================
+  static async uploadExcel(formData) {
+    const url = this.buildApiUrl(this.endpoints.UPLOADS.EXCEL);
+    return await this.uploadAndProcessExcel(url, formData);
   }
 
-  async getMeterByNumber(meterNumber) {
-    const url = this.buildApiUrl(`/meters/meter-number/${meterNumber}`);
-    return await this.makeRequest(url, { method: 'GET' });
+  static async uploadExcelFirstSheet(formData) {
+    const url = this.buildApiUrl(this.endpoints.UPLOADS.EXCEL_FIRST_SHEET);
+    return await this.uploadAndProcessExcel(url, formData);
   }
 
-  async deleteMeter(meterNumber) {
-    const url = this.buildApiUrl(`/meters/${meterNumber}`);
-    return await this.makeRequest(url, { method: 'DELETE' });
+  static async uploadExcelModified(formData) {
+    const url = this.buildApiUrl(this.endpoints.UPLOADS.EXCEL_MODIFIED);
+    return await this.uploadAndProcessExcel(url, formData);
   }
 
-  async exportCustomerRequests(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    const url = this.buildApiUrl(`/meters/customer-requests/export${query ? `?${query}` : ''}`);
-    const headers = this.buildHeaders();
-    if (headers['Content-Type']) delete headers['Content-Type'];
+  static async uploadAndProcessExcel(url, formData) {
+    const headers = this.utils.buildHeaders();
+    delete headers['Content-Type'];
 
-    const resp = await fetch(url, { method: 'GET', headers });
-    if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(text || `Failed to export customer requests: ${resp.status}`);
-    }
-    return await resp.blob();
-  }
-
-  // Uploads / Excel processing endpoints
-  async uploadAndProcessExcel(endpoint, formData) {
-    const url = this.buildApiUrl(endpoint);
-    const headers = this.buildHeaders();
-    // Let the browser set Content-Type for FormData
-    if (headers['Content-Type']) delete headers['Content-Type'];
-
-    const resp = await fetch(url, { method: 'POST', headers, body: formData });
-    if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(txt || `Upload failed: ${resp.status}`);
+    const response = await fetch(url, { method: 'POST', headers, body: formData });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Upload failed: ${response.status}`);
     }
 
-    const contentType = resp.headers.get('content-type') || '';
+    const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
-      return await resp.json();
+      return await response.json();
     }
-    // If server returns a modified file, return Blob
-    return await resp.blob();
+    return await response.blob();
   }
 
-  async uploadExcel(formData) {
-    return await this.uploadAndProcessExcel('/uploads/excel', formData);
-  }
-
-  async uploadExcelFirstSheet(formData) {
-    return await this.uploadAndProcessExcel('/uploads/excel-first-sheet', formData);
-  }
-
-  async uploadExcelModified(formData) {
-    // This endpoint may return a modified file; uploadAndProcessExcel will return JSON or Blob accordingly
-    return await this.uploadAndProcessExcel('/uploads/excel-modified', formData);
-  }
-
-  // Complaints Endpoint
-  async submitComplaint(complaintData) {
-    const url = this.buildApiUrl('/complaints');
+  // ==================== COMPLAINTS METHODS ====================
+  static async submitComplaint(complaintData) {
+    const url = this.buildApiUrl(this.endpoints.COMPLAINTS.BASE);
     return await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(complaintData),
     });
   }
 
-  async getComplaints(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    const url = this.buildApiUrl(`/complaints${query ? `?${query}` : ''}`);
-    return await this.makeRequest(url, { method: 'GET' });
+  static async getComplaints(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.COMPLAINTS.BASE,
+      params
+    );
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `complaints-${JSON.stringify(params)}`
+    });
   }
 
-  async getComplaintById(complaintId) {
-    const url = this.buildApiUrl(`/complaints/${complaintId}`);
-    return await this.makeRequest(url, { method: 'GET' });
+  static async getComplaintById(complaintId) {
+    const url = this.buildApiUrl(this.endpoints.COMPLAINTS.BY_ID(complaintId));
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `complaint-${complaintId}`
+    });
   }
 
-  // Token Management
-  getAuthToken() {
+  // ==================== SETTINGS MANAGEMENT METHODS ====================
+  static async getMeterTypes(params = {}) {
+    console.log('[API] Fetching meter types');
+    const cleanParams = Object.fromEntries(
+      Object.entries(params).filter(([_, v]) => v != null && v !== '')
+    );
+    const queryString = new URLSearchParams(cleanParams).toString();
+    const url = `${this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BASE)}?${queryString}`;
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `meter-types-${JSON.stringify(params)}`
+    });
+  }
+
+  static async getMeterTypeById(id) {
+    console.log('[API] Fetching meter type:', id);
+    const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `meter-type-${id}`
+    });
+  }
+
+  static async createMeterType(meterTypeData) {
+    console.log('[API] Creating meter type:', meterTypeData);
+    const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BASE);
+    const response = await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(meterTypeData),
+    });
+    this.clearCache();
+    return response;
+  }
+
+  static async updateMeterType(id, meterTypeData) {
+    console.log('[API] Updating meter type:', id, meterTypeData);
+    const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
+    const response = await this.makeRequest(url, {
+      method: 'PATCH',
+      body: JSON.stringify(meterTypeData),
+    });
+    this.clearCache();
+    return response;
+  }
+
+  static async deleteMeterType(id) {
+    console.log('[API] Deleting meter type:', id);
+    const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
+    const response = await this.makeRequest(url, { method: 'DELETE' });
+    this.clearCache();
+    return response;
+  }
+
+  // ==================== USER MANAGEMENT METHODS ====================
+  static async getUsers(params = {}) {
+    console.log('[API] Fetching users');
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.ADMIN.USERS.BASE, 
+      params,
+      'AUTH'
+    );
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `users-${JSON.stringify(params)}`
+    });
+  }
+
+  static async getUserById(userId) {
+    console.log('[API] Fetching user:', userId);
+    const url = this.buildUrl(this.endpoints.ADMIN.USERS.BY_ID(userId), true);
+    return await this.makeRequest(url, { 
+      method: 'GET',
+      useCache: true,
+      cacheKey: `user-${userId}`
+    });
+  }
+
+  static async createUser(userData) {
+    console.log('[API] Creating user:', userData.email);
+    const url = this.buildUrl(this.endpoints.ADMIN.USERS.BASE, true);
+    const response = await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+    this.clearCache();
+    return response;
+  }
+
+  static async updateUser(userId, userData) {
+    console.log('[API] Updating user:', userId);
+    const url = this.buildUrl(this.endpoints.ADMIN.USERS.BY_ID(userId), true);
+    const response = await this.makeRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(userData),
+    });
+    this.clearCache();
+    return response;
+  }
+
+  static async deleteUser(userId) {
+    console.log('[API] Deleting user:', userId);
+    const url = this.buildUrl(this.endpoints.ADMIN.USERS.BY_ID(userId), true);
+    const response = await this.makeRequest(url, { method: 'DELETE' });
+    this.clearCache();
+    return response;
+  }
+
+  // ==================== TOKEN & STORAGE MANAGEMENT ====================
+  static getAuthToken() {
     return localStorage.getItem('jedAuthToken');
   }
 
-  getRefreshToken() {
+  static getRefreshToken() {
     return localStorage.getItem('jedRefreshToken');
   }
 
-  storeTokens(tokens) {
+  static storeTokens(tokens) {
     if (tokens.token) {
       localStorage.setItem('jedAuthToken', tokens.token);
     }
@@ -700,17 +790,17 @@ async validateUserEndpoints() {
     }
   }
 
-  storeUser(userData) {
+  static storeUser(userData) {
     localStorage.setItem('jedUser', JSON.stringify(userData));
   }
 
-  clearTokens() {
+  static clearTokens() {
     localStorage.removeItem('jedAuthToken');
     localStorage.removeItem('jedRefreshToken');
     localStorage.removeItem('jedUser');
   }
 
-  getStoredUser() {
+  static getStoredUser() {
     try {
       const userStr = localStorage.getItem('jedUser');
       return userStr ? JSON.parse(userStr) : null;
@@ -720,55 +810,48 @@ async validateUserEndpoints() {
     }
   }
 
-  isAuthenticated() {
+  static isAuthenticated() {
     return !!this.getAuthToken() && !!this.getStoredUser();
   }
 
-  getUserRole() {
+  static getUserRole() {
     const user = this.getStoredUser();
     return user?.role || null;
   }
 
-  isAdmin() {
+  static isAdmin() {
     return this.getUserRole() === 'admin';
   }
 
-  isInstaller() {
+  static isInstaller() {
     return this.getUserRole() === 'installer';
   }
 
-  // API Integration Health Check
-async validateApiIntegration() {
-  console.log('[API Health Check] Starting validation...');
-  const checks = {
-    baseUrl: !!this.config.BASE_URL,
-    authEndpoint: !!this.config.ENDPOINTS.AUTH,
-    jedEndpoint: !!this.config.ENDPOINTS.JED,
-    hasTokenStorage: !!localStorage,
-    methods: {
-      login: typeof this.login === 'function',
-      getProfile: typeof this.getProfile === 'function',
-      getUsers: typeof this.getUsers === 'function', // NEW
-      createUser: typeof this.createUser === 'function', // NEW
-      updateUser: typeof this.updateUser === 'function', // NEW
-      deleteUser: typeof this.deleteUser === 'function', // NEW
-      getAllCustomerRequests: typeof this.getAllCustomerRequests === 'function',
-      getDashboardStats: typeof this.getDashboardStats === 'function',
-      getInstallerDashboard: typeof this.getInstallerDashboard === 'function',
-      uploadExcel: typeof this.uploadExcel === 'function',
-      downloadMetersTemplate: typeof this.downloadMetersTemplate === 'function'
-    }
-  };
-  
-  console.log('[API Health Check] Results:', checks);
-  const allPass = Object.values(checks).every(v => v === true || (typeof v === 'object' && Object.values(v).every(vv => vv === true)));
-  console.log('[API Health Check]', allPass ? 'PASSED' : 'FAILED');
-  return allPass;
-}
+  // ==================== HEALTH CHECK & VALIDATION ====================
+  static async validateApiIntegration() {
+    console.log('[API Health Check] Starting validation...');
+    const checks = {
+      baseUrl: !!this.config.BASE_URL,
+      authEndpoint: !!this.config.ENDPOINT_GROUPS.AUTH,
+      jedEndpoint: !!this.config.ENDPOINT_GROUPS.JED,
+      hasTokenStorage: !!localStorage,
+      methods: {
+        login: typeof this.login === 'function',
+        getMeterTypes: typeof this.getMeterTypes === 'function',
+        getUsers: typeof this.getUsers === 'function',
+        getDashboardStats: typeof this.getDashboardStats === 'function',
+      }
+    };
+    
+    console.log('[API Health Check] Results:', checks);
+    const allPass = Object.values(checks.methods).every(v => v === true);
+    console.log('[API Health Check]', allPass ? 'PASSED ✅' : 'FAILED ❌');
+    return allPass;
+  }
 }
 
 // Export both the class and a singleton instance
 const jedApi = new JEDApiService();
 
-export { JEDApiService, ERROR_TYPES };
-export default jedApi;
+export { JEDApiService, ERROR_TYPES }; // Keep class export for potential extension
+export default JEDApiService; // Export the class as default

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { JEDApiService } from '../services/api';
+import JEDApiService from '../services/api';
 import { formatCurrencyNGN } from '../../utils/currency';
 import { 
   BarChart,
@@ -301,10 +301,8 @@ function AdminDashboard({ isInstallerView = false }) {
         setLoading(true);
         setError(null);
 
-        const api = new JEDApiService();
-
         // Fetch installations first (works for both admin and installer)
-        const installationsResponse = await api.getAllCustomerRequests({
+        const installationsResponse = await JEDApiService.getAllCustomerRequests({
           page: 1,
           limit: 5
         });
@@ -328,7 +326,7 @@ function AdminDashboard({ isInstallerView = false }) {
         if (isAdmin) {
           // Admin: Fetch from dashboard stats endpoint
           try {
-            const statsResponse = await api.getDashboardStats();
+            const statsResponse = await JEDApiService.getDashboardStats();
             const payload = statsResponse?.data ?? statsResponse ?? {};
 
             const normalized = {
@@ -347,7 +345,7 @@ function AdminDashboard({ isInstallerView = false }) {
         } else {
           // Installer: Try installer-specific endpoint first, then fallback to calculation
           try {
-            const installerStatsResponse = await api.getInstallerDashboard();
+            const installerStatsResponse = await JEDApiService.getInstallerDashboard();
             if (installerStatsResponse) {
               const payload = installerStatsResponse?.data ?? installerStatsResponse ?? {};
               const normalized = {
@@ -401,27 +399,25 @@ function AdminDashboard({ isInstallerView = false }) {
   }, [user, showInstallerData, isAdmin]);
 
   const handleExportData = async (exportType, format) => {
-    const api = new JEDApiService();
-    
     try {
       let blob;
       let filename;
 
       switch (exportType) {
         case 'meters':
-          blob = await api.exportMeters({ format });
+          blob = await JEDApiService.exportMeters({ format });
           filename = `meters_export_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
           break;
         case 'pending':
-          blob = await api.exportCustomerRequests({ status: 'pending', format });
+          blob = await JEDApiService.exportCustomerRequests({ status: 'pending', format });
           filename = `pending_requests_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
           break;
         case 'completed':
-          blob = await api.exportCustomerRequests({ status: 'completed', format });
+          blob = await JEDApiService.exportCustomerRequests({ status: 'completed', format });
           filename = `completed_requests_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
           break;
         default:
-          blob = await api.exportCustomerRequests({ format });
+          blob = await JEDApiService.exportCustomerRequests({ format });
           filename = `all_requests_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
       }
 

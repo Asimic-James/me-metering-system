@@ -4,16 +4,18 @@ import JEDApiService from '../services/api';
 import { 
   Calendar, MapPin, User, Phone, Clock, CheckCircle, 
   AlertCircle, Navigation, FileText, Search, Filter,
-  Zap, // For single phase
-  Cpu, // For three phase
-  Battery, // For available meters
-  Wrench, // For installed meters
-  AlertTriangle, // For faulty meters
+  Zap, 
+  Cpu, 
+  Battery, 
+  Wrench, 
+  AlertTriangle, 
   RefreshCw,
   ChevronLeft,
   ChevronRight,
   Download,
-  Upload
+  Upload,
+  ChevronsLeft,   
+  ChevronsRight    
 } from 'lucide-react';
 
 // Constants for better maintainability
@@ -48,8 +50,148 @@ const TABS = [
   { id: 'query', label: 'Meter Query' }
 ];
 
+// Shared hook for meter data fetching
+const useMeterData = (initialFilters = {}) => {
+  const [meters, setMeters] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 25,
+    total: 0,
+    pages: 0
+  });
+  const [filters, setFilters] = useState({
+    status: 'ALL',
+    phaseType: 'ALL',
+    searchTerm: '',
+    searchField: 'meterNumber',
+    ...initialFilters
+  });
+
+  const fetchMeters = useCallback(async (page = 1, currentFilters = filters, pageLimit = null) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const params = {
+        page,
+        limit: pageLimit || pagination.limit
+      };
+
+      if (currentFilters.status !== 'ALL') {
+        params.status = currentFilters.status;
+      }
+
+      if (currentFilters.phaseType !== 'ALL') {
+        params.phaseType = currentFilters.phaseType;
+      }
+
+      if (currentFilters.searchTerm && currentFilters.searchField) {
+        params[currentFilters.searchField] = currentFilters.searchTerm;
+      }
+
+      console.log('[MeterData] Fetching meters with params:', params);
+      const response = await JEDApiService.getMeters(params);
+      
+      let metersData = [];
+      let paginationData = {};
+      
+      if (response.success) {
+        metersData = response.data || [];
+        paginationData = response.pagination || {};
+      } else if (Array.isArray(response.data)) {
+        metersData = response.data;
+        paginationData = response.pagination || {};
+      } else if (Array.isArray(response)) {
+        metersData = response;
+      } else {
+        metersData = response.data || [];
+        paginationData = response.pagination || {};
+      }
+
+      console.log('[MeterData] Meters received:', metersData.length, 'items');
+      
+      setMeters(metersData);
+      setPagination(prev => ({
+        ...prev,
+        page: paginationData.page || page,
+        limit: paginationData.limit || pageLimit || prev.limit,
+        total: paginationData.total || metersData.length,
+        pages: paginationData.pages || Math.ceil((paginationData.total || metersData.length) / (paginationData.limit || pageLimit || prev.limit))
+      }));
+    } catch (err) {
+      console.error('[MeterData] Error fetching meters:', err);
+      setError(err.message || 'Failed to load meters');
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.limit, filters]);
+
+  const updateFilters = useCallback((newFilters) => {
+    setFilters(newFilters);
+    fetchMeters(1, newFilters);
+  }, [fetchMeters]);
+
+  const changePage = useCallback((page, newLimit = null) => {
+    if (newLimit && newLimit !== pagination.limit) {
+      setPagination(prev => ({ ...prev, limit: newLimit }));
+      fetchMeters(1, filters, newLimit);
+    } else {
+      fetchMeters(page, filters);
+    }
+  }, [fetchMeters, filters, pagination.limit]);
+
+  const exportMeters = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = {};
+      
+      if (filters.status !== 'ALL') {
+        params.status = filters.status;
+      }
+      if (filters.phaseType !== 'ALL') {
+        params.phaseType = filters.phaseType;
+      }
+      if (filters.searchTerm && filters.searchField) {
+        params[filters.searchField] = filters.searchTerm;
+      }
+
+      const blob = await JEDApiService.exportMeters(params);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `meters-export-${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[MeterData] Export failed:', err);
+      setError('Failed to export meters');
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    fetchMeters(1, filters);
+  }, [fetchMeters]);
+
+  return {
+    meters,
+    loading,
+    error,
+    pagination,
+    filters,
+    fetchMeters: () => fetchMeters(pagination.page, filters),
+    updateFilters,
+    changePage,
+    exportMeters
+  };
+};
+
 // Custom hook for meter statistics
-// Custom hook for meter statistics with real-time calculation
 const useMeterStatistics = () => {
   const [meterStats, setMeterStats] = useState({
     totalMeters: 0,
@@ -117,261 +259,6 @@ const useMeterStatistics = () => {
     error,
     hasPermission,
     refetch: fetchMeterStatistics
-  };
-};
-
-// Enhanced useMeterInventory hook with export functionality
-const useMeterInventory = () => {
-  const [meters, setMeters] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 10,
-    total: 0,
-    pages: 0
-  });
-  const [filters, setFilters] = useState({
-    status: 'ALL',
-    phaseType: 'ALL'
-  });
-
-  const fetchMeters = useCallback(async (page = 1, statusFilter = 'ALL', phaseFilter = 'ALL') => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const params = {
-        page,
-        limit: pagination.limit
-      };
-
-      if (statusFilter !== 'ALL') {
-        params.status = statusFilter;
-      }
-
-      if (phaseFilter !== 'ALL') {
-        params.phaseType = phaseFilter;
-      }
-
-      console.log('[MeterInventory] Fetching meters with params:', params);
-      const response = await JEDApiService.getMeters(params);
-      
-      let metersData = [];
-      let paginationData = {};
-      
-      if (response.success) {
-        metersData = response.data || [];
-        paginationData = response.pagination || {};
-      } else if (Array.isArray(response.data)) {
-        metersData = response.data;
-        paginationData = response.pagination || {};
-      } else if (Array.isArray(response)) {
-        metersData = response;
-      } else {
-        metersData = response.data || [];
-        paginationData = response.pagination || {};
-      }
-
-      console.log('[MeterInventory] Meters received:', metersData.length, 'items');
-      setMeters(metersData);
-      setPagination(prev => ({
-        ...prev,
-        page: paginationData.page || page,
-        total: paginationData.total || metersData.length,
-        pages: paginationData.pages || Math.ceil((paginationData.total || metersData.length) / pagination.limit)
-      }));
-    } catch (err) {
-      console.error('[MeterInventory] Error fetching meters:', err);
-      setError(err.message || 'Failed to load meters');
-    } finally {
-      setLoading(false);
-    }
-  }, [pagination.limit]);
-
-  const exportMeters = useCallback(async () => {
-    try {
-      setLoading(true);
-      const params = {};
-      
-      if (filters.status !== 'ALL') {
-        params.status = filters.status;
-      }
-      if (filters.phaseType !== 'ALL') {
-        params.phaseType = filters.phaseType;
-      }
-
-      const blob = await JEDApiService.exportMeters(params);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `meters-export-${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('[MeterInventory] Export failed:', err);
-      setError('Failed to export meters');
-    } finally {
-      setLoading(false);
-    }
-  }, [filters]);
-
-  const updateFilters = useCallback((newFilters) => {
-    setFilters(newFilters);
-    fetchMeters(1, newFilters.status, newFilters.phaseType);
-  }, [fetchMeters]);
-
-  const changePage = useCallback((page) => {
-    fetchMeters(page, filters.status, filters.phaseType);
-  }, [fetchMeters, filters.status, filters.phaseType]);
-
-  useEffect(() => {
-    fetchMeters(1, 'ALL', 'ALL');
-  }, [fetchMeters]);
-
-  return {
-    meters,
-    loading,
-    error,
-    pagination,
-    filters,
-    fetchMeters: () => fetchMeters(pagination.page, filters.status, filters.phaseType),
-    updateFilters,
-    changePage,
-    exportMeters
-  };
-};
-
-// Custom hook for advanced meter query with search
-const useMeterQuery = () => {
-  const [meters, setMeters] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 10,
-    total: 0,
-    pages: 0
-  });
-  const [filters, setFilters] = useState({
-    status: 'ALL',
-    phaseType: 'ALL',
-    searchTerm: '',
-    searchField: 'meterNumber'
-  });
-
-  const fetchMeters = useCallback(async (page = 1, filters = {}) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const params = {
-        page,
-        limit: pagination.limit
-      };
-
-      if (filters.status !== 'ALL') {
-        params.status = filters.status;
-      }
-
-      if (filters.phaseType !== 'ALL') {
-        params.phaseType = filters.phaseType;
-      }
-
-      if (filters.searchTerm && filters.searchField) {
-        params[filters.searchField] = filters.searchTerm;
-      }
-
-      console.log('[MeterQuery] Fetching meters with params:', params);
-      const response = await JEDApiService.getMeters(params);
-      
-      let metersData = [];
-      let paginationData = {};
-      
-      if (response.success) {
-        metersData = response.data || [];
-        paginationData = response.pagination || {};
-      } else if (Array.isArray(response.data)) {
-        metersData = response.data;
-        paginationData = response.pagination || {};
-      } else {
-        metersData = response.data || [];
-        paginationData = response.pagination || {};
-      }
-
-      console.log('[MeterQuery] Meters received:', metersData.length, 'items');
-      setMeters(metersData);
-      setPagination(prev => ({
-        ...prev,
-        page: paginationData.page || page,
-        total: paginationData.total || metersData.length,
-        pages: paginationData.pages || Math.ceil((paginationData.total || metersData.length) / pagination.limit)
-      }));
-    } catch (err) {
-      console.error('[MeterQuery] Error fetching meters:', err);
-      setError(err.message || 'Failed to load meters');
-    } finally {
-      setLoading(false);
-    }
-  }, [pagination.limit]);
-
-  const updateFilters = useCallback((newFilters) => {
-    setFilters(newFilters);
-    fetchMeters(1, newFilters);
-  }, [fetchMeters]);
-
-  const changePage = useCallback((page) => {
-    fetchMeters(page, filters);
-  }, [fetchMeters, filters]);
-
-  const exportMeters = useCallback(async () => {
-    try {
-      setLoading(true);
-      const params = {};
-      
-      if (filters.status !== 'ALL') {
-        params.status = filters.status;
-      }
-      if (filters.phaseType !== 'ALL') {
-        params.phaseType = filters.phaseType;
-      }
-      if (filters.searchTerm && filters.searchField) {
-        params[filters.searchField] = filters.searchTerm;
-      }
-
-      const blob = await JEDApiService.exportMeters(params);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `meter-query-${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('[MeterQuery] Export failed:', err);
-      setError('Failed to export meters');
-    } finally {
-      setLoading(false);
-    }
-  }, [filters]);
-
-  useEffect(() => {
-    fetchMeters(1, filters);
-  }, [fetchMeters]);
-
-  return {
-    meters,
-    loading,
-    error,
-    pagination,
-    filters,
-    fetchMeters: () => fetchMeters(pagination.page, filters),
-    updateFilters,
-    changePage,
-    exportMeters
   };
 };
 
@@ -679,6 +566,31 @@ const MeterTable = ({ meters, loading }) => {
   );
 };
 
+// Loading Skeleton Component
+const MeterLoadingSkeleton = () => (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+    {[...Array(6)].map((_, i) => (
+      <div key={i} className="bg-white rounded-lg shadow-md p-4 sm:p-6 animate-pulse">
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+            <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <div className="h-6 bg-gray-200 rounded w-16"></div>
+            <div className="h-6 bg-gray-200 rounded w-20"></div>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="h-3 bg-gray-200 rounded"></div>
+          <div className="h-3 bg-gray-200 rounded"></div>
+          <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 // Installation Form Component
 const InstallationForm = ({ 
   job, 
@@ -921,7 +833,6 @@ const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
     <div className="bg-white rounded-lg shadow-md p-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex flex-col sm:flex-row gap-3 flex-1">
-          {/* Status Filter */}
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
@@ -938,7 +849,6 @@ const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
             </select>
           </div>
 
-          {/* Phase Type Filter */}
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">Phase Type</label>
             <select
@@ -956,7 +866,6 @@ const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex items-center gap-2 sm:self-end">
           <button
             onClick={onExport}
@@ -1002,7 +911,6 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
     <div className="bg-white rounded-lg shadow-md p-4">
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-          {/* Search Field */}
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">Search Field</label>
             <select
@@ -1017,7 +925,6 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
             </select>
           </div>
 
-          {/* Search Term */}
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">Search Term</label>
             <input
@@ -1033,7 +940,6 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex flex-col sm:flex-row gap-4 flex-1">
-            {/* Status Filter */}
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
@@ -1050,7 +956,6 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
               </select>
             </div>
 
-            {/* Phase Type Filter */}
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Phase Type</label>
               <select
@@ -1068,7 +973,6 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
             </div>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex items-center gap-2 sm:self-end">
             <button
               onClick={onExport}
@@ -1093,39 +997,84 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
   );
 };
 
-// Pagination Component
+// Enhanced Pagination Component
 const Pagination = ({ pagination, onPageChange, loading }) => {
-  const { page, pages, total } = pagination;
+  const { page, pages, total, limit } = pagination;
 
   if (pages <= 1) return null;
 
+  const getPageNumbers = () => {
+    const delta = 2;
+    const range = [];
+    const rangeWithDots = [];
+
+    for (
+      let i = Math.max(2, page - delta);
+      i <= Math.min(pages - 1, page + delta);
+      i++
+    ) {
+      range.push(i);
+    }
+
+    if (page - delta > 2) {
+      rangeWithDots.push(1, '...');
+    } else {
+      rangeWithDots.push(1);
+    }
+
+    rangeWithDots.push(...range);
+
+    if (page + delta < pages - 1) {
+      rangeWithDots.push('...', pages);
+    } else if (pages > 1) {
+      rangeWithDots.push(pages);
+    }
+
+    return rangeWithDots;
+  };
+
+  const pageNumbers = getPageNumbers();
+  const startItem = (page - 1) * limit + 1;
+  const endItem = Math.min(page * limit, total);
+
   return (
-    <div className="flex items-center justify-between bg-white rounded-lg shadow-md p-4">
-      <div className="text-sm text-gray-700">
-        Showing page {page} of {pages} ({total} total meters)
+    <div className="flex flex-col sm:flex-row items-center justify-between bg-white rounded-lg shadow-md p-4 gap-4">
+      <div className="text-sm text-gray-700 order-2 sm:order-1">
+        Showing <span className="font-medium">{startItem}</span> to{' '}
+        <span className="font-medium">{endItem}</span> of{' '}
+        <span className="font-medium">{total}</span> results
       </div>
-      
-      <div className="flex items-center space-x-2">
+
+      <div className="flex items-center space-x-2 order-1 sm:order-2">
+        <button
+          onClick={() => onPageChange(1)}
+          disabled={page <= 1 || loading}
+          className="p-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed hidden sm:block"
+          title="First page"
+        >
+          <ChevronsLeft className="w-4 h-4" />
+        </button>
+
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1 || loading}
           className="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ChevronLeft className="w-4 h-4" />
-          Previous
+          <span className="hidden sm:inline">Previous</span>
         </button>
-        
+
         <div className="flex items-center space-x-1">
-          {Array.from({ length: Math.min(5, pages) }, (_, i) => {
-            let pageNum;
-            if (pages <= 5) {
-              pageNum = i + 1;
-            } else if (page <= 3) {
-              pageNum = i + 1;
-            } else if (page >= pages - 2) {
-              pageNum = pages - 4 + i;
-            } else {
-              pageNum = page - 2 + i;
+          {pageNumbers.map((pageNum, index) => {
+            if (pageNum === '...') {
+              return (
+                <span
+                  key={`ellipsis-${index}`}
+                  className="px-3 py-2 text-gray-500"
+                >
+                  ...
+                </span>
+              );
             }
 
             return (
@@ -1133,10 +1082,10 @@ const Pagination = ({ pagination, onPageChange, loading }) => {
                 key={pageNum}
                 onClick={() => onPageChange(pageNum)}
                 disabled={loading}
-                className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                className={`min-w-[40px] px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   page === pageNum
                     ? 'bg-blue-600 text-white'
-                    : 'text-gray-700 hover:bg-gray-50'
+                    : 'text-gray-700 hover:bg-gray-50 border border-gray-300'
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {pageNum}
@@ -1150,9 +1099,33 @@ const Pagination = ({ pagination, onPageChange, loading }) => {
           disabled={page >= pages || loading}
           className="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Next
+          <span className="hidden sm:inline">Next</span>
           <ChevronRight className="w-4 h-4" />
         </button>
+
+        <button
+          onClick={() => onPageChange(pages)}
+          disabled={page >= pages || loading}
+          className="p-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed hidden sm:block"
+          title="Last page"
+        >
+          <ChevronsRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex items-center space-x-2 text-sm text-gray-700 order-3">
+        <span className="hidden md:inline">Items per page:</span>
+        <select
+          value={limit}
+          onChange={(e) => onPageChange(1, parseInt(e.target.value))}
+          disabled={loading}
+          className="px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+        >
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
       </div>
     </div>
   );
@@ -1164,7 +1137,6 @@ const MeterInventory = ({ meterInventory }) => {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Filter Controls */}
       <MeterFilterControls
         filters={filters}
         onFilterChange={updateFilters}
@@ -1173,7 +1145,6 @@ const MeterInventory = ({ meterInventory }) => {
         onExport={exportMeters}
       />
 
-      {/* Error State */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center gap-2 text-red-800">
@@ -1183,7 +1154,8 @@ const MeterInventory = ({ meterInventory }) => {
         </div>
       )}
 
-      {/* Meters Grid */}
+      {loading && <MeterLoadingSkeleton />}
+
       {!loading && meters.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -1192,7 +1164,6 @@ const MeterInventory = ({ meterInventory }) => {
             ))}
           </div>
           
-          {/* Pagination */}
           <Pagination
             pagination={pagination}
             onPageChange={changePage}
@@ -1201,7 +1172,6 @@ const MeterInventory = ({ meterInventory }) => {
         </>
       )}
 
-      {/* Empty State */}
       {!loading && meters.length === 0 && (
         <EmptyState 
           hasFilters={filters.status !== 'ALL' || filters.phaseType !== 'ALL'} 
@@ -1218,7 +1188,6 @@ const MeterQuery = ({ meterQuery }) => {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Query Filter Controls */}
       <QueryFilterControls
         filters={filters}
         onFilterChange={updateFilters}
@@ -1227,7 +1196,6 @@ const MeterQuery = ({ meterQuery }) => {
         onExport={exportMeters}
       />
 
-      {/* Error State */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center gap-2 text-red-800">
@@ -1237,26 +1205,31 @@ const MeterQuery = ({ meterQuery }) => {
         </div>
       )}
 
-      {/* Results Summary */}
       {!loading && meters.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="text-sm text-blue-800">
-              Found {pagination.total} meters matching your criteria
+              Found <span className="font-semibold">{pagination.total}</span> meters matching your criteria
             </div>
-            <div className="text-xs text-blue-600">
-              Page {pagination.page} of {pagination.pages}
+            <div className="text-xs text-blue-600 flex items-center gap-2">
+              <span>Page {pagination.page} of {pagination.pages}</span>
+              <span>•</span>
+              <span>Showing {((pagination.page - 1) * pagination.limit) + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)}</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Meters Table */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+          <span className="ml-3 text-gray-600">Loading meters...</span>
+        </div>
+      )}
+
       {!loading && meters.length > 0 ? (
         <>
           <MeterTable meters={meters} loading={loading} />
-          
-          {/* Pagination */}
           <Pagination
             pagination={pagination}
             onPageChange={changePage}
@@ -1273,12 +1246,13 @@ const MeterQuery = ({ meterQuery }) => {
   );
 };
 
+// Main Component
 function MeterSchedule({ onComplete }) {
   const { user } = useAuth();
   const { scheduledJobs, updateJobStatus } = useScheduleData();
   const { meterStats, loading: statsLoading, error: statsError, refetch: refetchStats } = useMeterStatistics();
-  const meterInventory = useMeterInventory();
-  const meterQuery = useMeterQuery();
+  const meterInventory = useMeterData({ searchTerm: '', searchField: 'meterNumber' });
+  const meterQuery = useMeterData({ searchTerm: '', searchField: 'meterNumber' });
   
   const [activeTab, setActiveTab] = useState('schedule');
   const [selectedJob, setSelectedJob] = useState(null);
@@ -1286,13 +1260,11 @@ function MeterSchedule({ onComplete }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [installationLoading, setInstallationLoading] = useState(false);
 
-  // Debug logging
   useEffect(() => {
     console.log('[MeterSchedule] Component mounted');
     console.log('[MeterSchedule] Active tab:', activeTab);
   }, [activeTab]);
 
-  // Filter jobs by status and search
   const filteredJobs = useMemo(() => {
     return scheduledJobs.filter(job => {
       const matchesTab = activeTab === 'schedule' || job.status === activeTab;
@@ -1306,7 +1278,6 @@ function MeterSchedule({ onComplete }) {
     });
   }, [scheduledJobs, activeTab, searchTerm]);
 
-  // Stats calculation for jobs
   const jobStats = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return {
@@ -1317,7 +1288,6 @@ function MeterSchedule({ onComplete }) {
     };
   }, [scheduledJobs]);
 
-  // Stats cards configuration using API data
   const statsCards = useMemo(() => {
     const cards = [
       { 
@@ -1379,18 +1349,15 @@ function MeterSchedule({ onComplete }) {
     return cards;
   }, [meterStats, statsLoading, statsError]);
 
-  // Handle job selection
   const handleSelectJob = useCallback((job) => {
     setSelectedJob(job);
     setShowInstallForm(false);
   }, []);
 
-  // Handle start installation
   const handleStartInstallation = useCallback(() => {
     setShowInstallForm(true);
   }, []);
 
-  // Handle complete installation
   const handleCompleteInstallation = useCallback(async (formData) => {
     if (!selectedJob) return;
 
@@ -1467,17 +1434,14 @@ function MeterSchedule({ onComplete }) {
     }
   }, [selectedJob, user, onComplete, updateJobStatus, refetchStats, meterInventory, meterQuery]);
 
-  // Handle cancel installation
   const handleCancelInstallation = useCallback(() => {
     setShowInstallForm(false);
   }, []);
 
-  // Handle search change
   const handleSearchChange = useCallback((e) => {
     setSearchTerm(e.target.value);
   }, []);
 
-  // Handle tab change
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
     if (tabId !== 'schedule') {
@@ -1488,7 +1452,6 @@ function MeterSchedule({ onComplete }) {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
         <div className="min-w-0">
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">Meter Management</h2>
@@ -1510,14 +1473,12 @@ function MeterSchedule({ onComplete }) {
         )}
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4">
         {statsCards.map((card, index) => (
           <StatsCard key={index} {...card} />
         ))}
       </div>
 
-      {/* Tabs */}
       <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
         <div className="flex space-x-1 sm:space-x-2 overflow-x-auto">
           {TABS.map((tab) => (
@@ -1536,10 +1497,8 @@ function MeterSchedule({ onComplete }) {
         </div>
       </div>
 
-      {/* Schedule Tab Content */}
       {activeTab === 'schedule' && (
         <>
-          {/* Search for Schedule */}
           <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
               <div className="flex space-x-1 sm:space-x-2 overflow-x-auto">
@@ -1575,7 +1534,6 @@ function MeterSchedule({ onComplete }) {
                 </button>
               </div>
 
-              {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
@@ -1589,9 +1547,7 @@ function MeterSchedule({ onComplete }) {
             </div>
           </div>
 
-          {/* Main Content Area for Schedule */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-            {/* Jobs List */}
             <div className="lg:col-span-2 space-y-3 sm:space-y-4">
               {filteredJobs.length > 0 ? (
                 filteredJobs.map(job => (
@@ -1610,7 +1566,6 @@ function MeterSchedule({ onComplete }) {
               )}
             </div>
 
-            {/* Job Details / Installation Form */}
             <div className="lg:col-span-1">
               <JobDetails
                 job={selectedJob}
@@ -1625,12 +1580,10 @@ function MeterSchedule({ onComplete }) {
         </>
       )}
 
-      {/* Inventory Tab Content */}
       {activeTab === 'inventory' && (
         <MeterInventory meterInventory={meterInventory} />
       )}
 
-      {/* Query Tab Content */}
       {activeTab === 'query' && (
         <MeterQuery meterQuery={meterQuery} />
       )}

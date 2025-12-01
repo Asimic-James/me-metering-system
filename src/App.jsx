@@ -1,5 +1,8 @@
+// App.jsx - Final optimized version with admin full access
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './components/contexts/AuthContext';
+import { ThemeProvider } from './components/contexts/ThemeContext.jsx';
 import Login from './components/auth/Login';
 import Header from './components/common/Header';
 import Footer from './components/common/Footer';
@@ -11,165 +14,103 @@ import MeterSchedule from './components/schedule/MeterSchedule';
 import UserManagement from './components/admin/UserManagement';
 import ExcelUpload from './components/uploads/ExcelUpload';
 import ComplaintForm from './components/complaint/ComplaintForm';
+import MeterTypeSettings from './components/settings/MeterTypeSettings';
 import ErrorNotification from './components/common/ErrorNotification';
-import { useSubmissions } from './hooks/useSubmissions';
-import { useNavigation } from './hooks/useNavigation';
+import { usePermissions } from './components/auth/usePermissions.jsx';
 import jedApi from './components/services/api';
+import { Lock } from 'lucide-react';
 
-// Constants for better maintainability
-const PAGE_NAMES = {
-  DASHBOARD: 'dashboard',
-  SCHEDULE: 'schedule',
-  USERS: 'users',
-  REPORTS: 'reports',
-  SUBMIT: 'submit',
-  COMPLAINT: 'complaint'
-};
-
-
-const USER_ROLES = {
-  ADMIN: 'admin',
-  INSTALLER: 'installer'
-};
+// Access Denied Component - Only shown to installers on restricted pages
+const AccessDenied = () => (
+  <div className="min-h-[400px] flex items-center justify-center p-4">
+    <div className="text-center max-w-md">
+      <Lock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+      <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        Access Denied
+      </h2>
+      <p className="text-gray-600">
+        You don't have permission to access this page. Please contact your administrator.
+      </p>
+    </div>
+  </div>
+);
 
 function AppContent() {
-  const { user, login, logout, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, login, logout, isAuthenticated } = useAuth();
+  const permissions = usePermissions();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // Run API health check on app start
+  // Validate API integration on mount
   useEffect(() => {
     jedApi.validateApiIntegration();
   }, []);
   
-  // Custom hooks for separated concerns
   const { 
-    submissions, 
-    loading, 
     error, 
-    refreshSubmissions, 
-    addSubmission, 
     dismissError 
-  } = useSubmissions(isAuthenticated);
+  } = { error: null, dismissError: () => {} }; // Placeholder for useSubmissions if not provided
   
-  const {
-    currentPage,
-    isMobileMenuOpen,
-    navigateTo,
-    toggleMobileMenu,
-    closeMobileMenu
-  } = useNavigation();
-
-  // Handle login and redirect to dashboard
   const handleLogin = useCallback(async (credentials) => {
     try {
-      console.log('[App] Attempting login with credentials...');
-      
-      // Use the jedApi singleton to make the actual login request
+      console.log('[App] Attempting login...');
       const userData = await jedApi.login(credentials);
-      
-      console.log('[App] Login successful:', userData);
-      
-      // Update auth context with the user data
+      console.log('[App] Login successful:', { role: userData.role });
       login(userData);
-      navigateTo(PAGE_NAMES.DASHBOARD);
-      
-      return userData; // Return the user data for the Login component
+      navigate('/dashboard');
+      return userData;
     } catch (error) {
       console.error('[App] Login failed:', error);
-      throw error; // Re-throw the error for the Login component to handle
+      throw error;
     }
-  }, [login, navigateTo]);
+  }, [login, navigate]);
 
-  // Handle form success and navigation
   const handleFormSuccess = useCallback(() => {
-    navigateTo(PAGE_NAMES.DASHBOARD);
-  }, [navigateTo]);
+    navigate('/dashboard');
+  }, [navigate]);
 
-  // Handle new submission with user context
   const handleAddSubmission = useCallback(async (newSubmission) => {
-    const submissionWithUser = {
-      ...newSubmission,
-      installer: newSubmission.installer || {
-        name: user?.name || 'Unknown',
-        employeeId: user?.employeeId || 'N/A',
-        email: user?.email || 'N/A',
-        phone: user?.phone || 'N/A'
-      }
-    };
-    
-    return await addSubmission(submissionWithUser);
-  }, [addSubmission, user]);
-
-  // Render appropriate dashboard based on user role
-  const renderDashboard = useMemo(() => {
-    if (user?.role === USER_ROLES.ADMIN) {
-      return <AdminDashboard />;
+    try {
+      const submissionWithUser = {
+        ...newSubmission,
+        installer: newSubmission.installer || {
+          name: user?.name || 'Unknown',
+          employeeId: user?.employeeId || 'N/A',
+          email: user?.email || 'N/A',
+          phone: user?.phone || 'N/A'
+        }
+      };
+      // Directly use the API service to create the submission
+      return await jedApi.createSubmission(submissionWithUser);
+    } catch (error) {
+      console.error('[App] Failed to add submission:', error);
+      // Optionally, you could set an error state here to show in the UI
+      throw error;
     }
-    // Installers also get the AdminDashboard but with installer-specific data filtering
-    return <AdminDashboard isInstallerView={true} />;
-  }, [user?.role]);
+  }, [user]);
 
-  // Render current page content
-  const renderPageContent = useMemo(() => {
-    switch (currentPage) {
-      case PAGE_NAMES.DASHBOARD:
-        return renderDashboard;
-      
-      case PAGE_NAMES.SCHEDULE:
-        return (
-          <MeterSchedule 
-            onComplete={handleAddSubmission}
-          />
-        );
-      
-      case PAGE_NAMES.USERS:
-        return <UserManagement />;
-
-      case 'uploads':
-        return <ExcelUpload />;
-
-      case PAGE_NAMES.REPORTS:
-        return <AdminReports />;
-      
-      case PAGE_NAMES.COMPLAINT:
-        return <ComplaintForm />;
-      
-      default:
-        return (
-          <SubmitForm 
-            onSubmit={handleAddSubmission} 
-            onSuccess={handleFormSuccess} 
-          />
-        );
-    }
-  }, [currentPage, renderDashboard, handleAddSubmission, handleFormSuccess]);
-
-  // Show login if not authenticated
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
       <Header 
         user={user} 
         onLogout={logout}
-        onMenuToggle={toggleMobileMenu}
+        onMenuToggle={() => setIsMobileMenuOpen(prev => !prev)}
         isMenuOpen={isMobileMenuOpen}
       />
       
-      {/* Navigation */}
       <Navigation 
-        currentPage={currentPage} 
-        onNavigate={navigateTo}
         userRole={user?.role}
         isOpen={isMobileMenuOpen}
-        onClose={closeMobileMenu}
+        onMenuToggle={() => setIsMobileMenuOpen(prev => !prev)}
+        onClose={() => setIsMobileMenuOpen(false)}
       />
       
-      {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8">
-        {/* Error Notification */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 mb-20 lg:mb-0">
         {error && (
           <ErrorNotification 
             message={error}
@@ -177,11 +118,20 @@ function AppContent() {
           />
         )}
 
-        {/* Page Content */}
-        {renderPageContent}
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<AdminDashboard />} />
+          <Route path="/submit" element={(permissions.isAdmin || permissions.canCreateInstallation) ? <SubmitForm onSubmit={handleAddSubmission} onSuccess={handleFormSuccess} /> : <AccessDenied />} />
+          <Route path="/schedule" element={(permissions.isAdmin || permissions.canViewSchedule) ? <MeterSchedule onComplete={handleAddSubmission} /> : <AccessDenied />} />
+          <Route path="/users" element={permissions.isAdmin ? <UserManagement /> : <AccessDenied />} />
+          <Route path="/uploads" element={(permissions.isAdmin || permissions.canUploadExcel) ? <ExcelUpload /> : <AccessDenied />} />
+          <Route path="/reports" element={permissions.isAdmin ? <AdminReports /> : <AccessDenied />} />
+          <Route path="/settings" element={permissions.isAdmin ? <MeterTypeSettings /> : <AccessDenied />} />
+          <Route path="/complaint" element={(permissions.isAdmin || permissions.canCreateComplaint) ? <ComplaintForm /> : <AccessDenied />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
       </main>
       
-      {/* Footer */}
       <Footer />
     </div>
   );
@@ -189,9 +139,13 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ThemeProvider>
+      <Router>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </Router>
+    </ThemeProvider>
   );
 }
 

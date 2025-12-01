@@ -1,7 +1,8 @@
 import { Power, User, LogOut, ChevronDown, Menu, X, Bell } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-// Constants for better maintainability
+// Header-specific constants
 const HEADER_STYLES = {
   gradient: 'bg-gradient-to-r from-blue-600 to-blue-700',
   mobile: {
@@ -17,71 +18,66 @@ const HEADER_STYLES = {
   }
 };
 
-function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
-  const [showDropdown, setShowDropdown] = useState(false);
-  const dropdownRef = useRef(null);
-
-  // Get user initials for avatar
-  const getUserInitials = useCallback(() => {
-    if (!user?.name) return 'U';
-    return user.name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  }, [user?.name]);
-
-  // Close dropdown when clicking outside
+// Header-specific hooks
+const useClickOutside = (ref, callback) => {
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowDropdown(false);
+      if (ref.current && !ref.current.contains(event.target)) {
+        callback();
       }
     };
 
-    if (showDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showDropdown]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [ref, callback]);
+};
 
-  // Handle dropdown toggle
+const getUserInitials = (user) => {
+  if (!user?.name) return 'U';
+  return user.name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
+
+function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
+  const navigate = useNavigate();
+
+  useClickOutside(dropdownRef, () => setShowDropdown(false));
+
   const handleDropdownToggle = useCallback(() => {
     setShowDropdown(prev => !prev);
   }, []);
 
-  // Handle logout with dropdown close
   const handleLogout = useCallback(() => {
     setShowDropdown(false);
     onLogout();
   }, [onLogout]);
 
-  // Handle profile navigation
   const handleProfileClick = useCallback(() => {
     setShowDropdown(false);
-    // TODO: Add profile navigation logic
     console.log('Navigate to profile');
   }, []);
 
-  // Handle settings navigation
   const handleSettingsClick = useCallback(() => {
     setShowDropdown(false);
-    // TODO: Add settings navigation logic
-    console.log('Navigate to settings');
-  }, []);
+    navigate('/settings');
+  }, [navigate]);
 
-  // Menu icon component
   const MenuIcon = useCallback(() => 
     isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />, 
   [isMenuOpen]);
 
-  // User info section for dropdown
+  // Header Sub-components
   const UserInfo = useCallback(() => (
     <div className="px-4 py-3 border-b border-gray-100">
       <div className="flex items-center gap-3">
         <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center font-bold text-white text-lg shadow-md">
-          {getUserInitials()}
+          {getUserInitials(user)}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-gray-900 truncate">{user.name}</p>
@@ -95,9 +91,8 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
         </div>
       </div>
     </div>
-  ), [user, getUserInitials]);
+  ), [user]);
 
-  // Dropdown menu items
   const DropdownMenuItems = useCallback(() => (
     <>
       <button
@@ -121,9 +116,8 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
     </>
   ), [handleProfileClick, handleSettingsClick]);
 
-  // Logo and brand section
   const LogoSection = useCallback(() => (
-    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
       <div className="flex-shrink-0">
         <div className="w-9 h-9 sm:w-10 sm:h-10 bg-white/10 backdrop-blur-sm rounded-lg flex items-center justify-center">
           <Power className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -143,7 +137,6 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
     </div>
   ), []);
 
-  // User avatar with dropdown trigger
   const UserAvatar = useCallback(() => (
     <button
       onClick={handleDropdownToggle}
@@ -152,10 +145,9 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
       aria-haspopup="true"
     >
       <div className={`${HEADER_STYLES.mobile.avatar} ${HEADER_STYLES.desktop.avatar} rounded-full flex items-center justify-center font-semibold text-sm shadow-md`}>
-        {getUserInitials()}
+        {getUserInitials(user)}
       </div>
 
-      {/* User Info - Hidden on small screens */}
       <div className="text-left hidden md:block">
         <p className="text-sm font-semibold leading-tight">{user.name}</p>
         <p className="text-xs text-blue-200 leading-tight capitalize">{user.role}</p>
@@ -167,9 +159,8 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
         }`} 
       />
     </button>
-  ), [user, showDropdown, getUserInitials, handleDropdownToggle]);
+  ), [user, showDropdown, handleDropdownToggle]);
 
-  // Notifications button
   const NotificationsButton = useCallback(() => (
     <button
       className="relative p-2 hover:bg-blue-700 rounded-lg transition-colors hidden sm:block"
@@ -180,20 +171,9 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
     </button>
   ), []);
 
-  // Mobile menu backdrop
-  const MobileBackdrop = useCallback(() => 
-    showDropdown ? (
-      <div
-        className="fixed inset-0 z-40 md:hidden"
-        onClick={() => setShowDropdown(false)}
-      />
-    ) : null
-  , [showDropdown]);
-
-  // Dropdown content
   const DropdownContent = useCallback(() => 
     showDropdown ? (
-      <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-50 animate-fade-in">
+      <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[60] animate-fade-in">
         <UserInfo />
         <div className="py-2">
           <DropdownMenuItems />
@@ -212,12 +192,10 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   , [showDropdown, UserInfo, DropdownMenuItems, handleLogout]);
 
   return (
-    <header className={`${HEADER_STYLES.gradient} text-white shadow-lg sticky top-0 z-50`}>
+    <header className={`${HEADER_STYLES.gradient} text-white shadow-lg sticky top-0 z-40`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
-          {/* Left Section: Mobile Menu + Logo */}
           <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-            {/* Mobile Menu Toggle */}
             <button
               onClick={onMenuToggle}
               className={HEADER_STYLES.mobile.menuButton}
@@ -225,18 +203,21 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
             >
               <MenuIcon />
             </button>
-
             <LogoSection />
           </div>
 
-          {/* Right Section: Notifications + User Menu */}
           {user && (
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <NotificationsButton />
               
               <div className="relative" ref={dropdownRef}>
                 <UserAvatar />
-                <MobileBackdrop />
+                {showDropdown && (
+                  <div
+                    className="fixed inset-0 z-40 md:hidden"
+                    onClick={() => setShowDropdown(false)}
+                  />
+                )}
                 <DropdownContent />
               </div>
             </div>

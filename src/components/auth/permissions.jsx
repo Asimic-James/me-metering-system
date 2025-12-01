@@ -1,300 +1,221 @@
-// Permission definitions with categories and metadata
-export const PERMISSIONS = Object.freeze({
-  // Dashboard & Overview
-  DASHBOARD: {
-    VIEW: 'view:dashboard',
-    VIEW_ADMIN: 'view:admin_dashboard',
-    VIEW_INSTALLER: 'view:installer_dashboard',
-  },
-  
-  // Installation Management
-  INSTALLATIONS: {
-    CREATE: 'create:installation',
-    VIEW: 'view:installations',
-    VIEW_ALL: 'view:all_installations',
-    MANAGE: 'manage:installations',
-    COMPLETE: 'complete:installation',
-  },
-  
-  // User Management
-  USERS: {
-    VIEW: 'view:users',
-    CREATE: 'create:user',
-    UPDATE: 'update:user',
-    DELETE: 'delete:user',
-    MANAGE: 'manage:users',
-  },
-  
-  // Reports & Analytics
-  REPORTS: {
-    VIEW: 'view:reports',
-    EXPORT: 'export:data',
-    GENERATE: 'generate:reports',
-  },
-  
-  // System & Settings
-  SYSTEM: {
-    MANAGE_SETTINGS: 'manage:settings',
-    VIEW_LOGS: 'view:logs',
-    MANAGE_INTEGRATIONS: 'manage:integrations',
-  },
-  
-  // Performance & Monitoring
-  PERFORMANCE: {
-    VIEW: 'view:performance',
-    VIEW_ALL: 'view:all_performance',
-    MANAGE_METRICS: 'manage:metrics',
-  },
-  
-  // Schedule & Planning
-  SCHEDULE: {
-    VIEW: 'view:schedule',
-    MANAGE: 'manage:schedule',
-    ASSIGN: 'assign:installations',
-  }
-});
+// src/components/auth/permissions.js
+// Optimized permissions system aligned with latest app version
 
 // Role definitions
 export const ROLES = Object.freeze({
   ADMIN: 'admin',
-  INSTALLER: 'installer',
-  SUPERVISOR: 'supervisor'
+  INSTALLER: 'installer'
 });
 
-// Precomputed permission sets for better performance
-const PERMISSION_SETS = (() => {
-  const sets = {};
-  
-  // Convert permissions to flat sets for quick lookup
-  for (const [category, permissions] of Object.entries(PERMISSIONS)) {
-    sets[category] = new Set(Object.values(permissions));
-  }
-  
-  // Create a complete set of all permissions
-  sets.ALL = new Set(
-    Object.values(PERMISSIONS).flatMap(category => Object.values(category))
-  );
-  
-  return Object.freeze(sets);
-})();
-
-// Role hierarchy with inheritance
-const ROLE_HIERARCHY = Object.freeze({
-  [ROLES.ADMIN]: [ROLES.SUPERVISOR, ROLES.INSTALLER],
-  [ROLES.SUPERVISOR]: [ROLES.INSTALLER],
-  [ROLES.INSTALLER]: []
-});
-
-// Precomputed role permissions with inheritance
-const ROLE_PERMISSIONS = (() => {
-  const basePermissions = {
-    [ROLES.ADMIN]: [
-      PERMISSIONS.DASHBOARD.VIEW,
-      PERMISSIONS.DASHBOARD.VIEW_ADMIN,
-      PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
-      PERMISSIONS.INSTALLATIONS.CREATE,
-      PERMISSIONS.INSTALLATIONS.VIEW,
-      PERMISSIONS.INSTALLATIONS.VIEW_ALL,
-      PERMISSIONS.INSTALLATIONS.MANAGE,
-      PERMISSIONS.INSTALLATIONS.COMPLETE,
-      PERMISSIONS.USERS.VIEW,
-      PERMISSIONS.USERS.CREATE,
-      PERMISSIONS.USERS.UPDATE,
-      PERMISSIONS.USERS.DELETE,
-      PERMISSIONS.USERS.MANAGE,
-      PERMISSIONS.REPORTS.VIEW,
-      PERMISSIONS.REPORTS.EXPORT,
-      PERMISSIONS.REPORTS.GENERATE,
-      PERMISSIONS.SYSTEM.MANAGE_SETTINGS,
-      PERMISSIONS.SYSTEM.VIEW_LOGS,
-      PERMISSIONS.SYSTEM.MANAGE_INTEGRATIONS,
-      PERMISSIONS.PERFORMANCE.VIEW,
-      PERMISSIONS.PERFORMANCE.VIEW_ALL,
-      PERMISSIONS.PERFORMANCE.MANAGE_METRICS,
-      PERMISSIONS.SCHEDULE.VIEW,
-      PERMISSIONS.SCHEDULE.MANAGE,
-      PERMISSIONS.SCHEDULE.ASSIGN,
-    ],
-    
-    [ROLES.INSTALLER]: [
-      PERMISSIONS.DASHBOARD.VIEW,
-      PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
-      PERMISSIONS.INSTALLATIONS.CREATE,
-      PERMISSIONS.INSTALLATIONS.VIEW,
-      PERMISSIONS.INSTALLATIONS.COMPLETE,
-      PERMISSIONS.SCHEDULE.VIEW,
-      PERMISSIONS.PERFORMANCE.VIEW,
-    ],
-    
-    [ROLES.SUPERVISOR]: [
-      PERMISSIONS.DASHBOARD.VIEW,
-      PERMISSIONS.DASHBOARD.VIEW_ADMIN,
-      PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
-      PERMISSIONS.INSTALLATIONS.CREATE,
-      PERMISSIONS.INSTALLATIONS.VIEW,
-      PERMISSIONS.INSTALLATIONS.VIEW_ALL,
-      PERMISSIONS.INSTALLATIONS.MANAGE,
-      PERMISSIONS.INSTALLATIONS.COMPLETE,
-      PERMISSIONS.USERS.VIEW,
-      PERMISSIONS.REPORTS.VIEW,
-      PERMISSIONS.REPORTS.EXPORT,
-      PERMISSIONS.PERFORMANCE.VIEW,
-      PERMISSIONS.PERFORMANCE.VIEW_ALL,
-      PERMISSIONS.SCHEDULE.VIEW,
-      PERMISSIONS.SCHEDULE.MANAGE,
-      PERMISSIONS.SCHEDULE.ASSIGN,
-    ]
-  };
-
-  // Apply inheritance and convert to Sets
-  const rolePermissions = {};
-  
-  for (const [role, permissions] of Object.entries(basePermissions)) {
-    const permissionSet = new Set(permissions);
-    
-    // Add inherited permissions
-    const inheritedRoles = ROLE_HIERARCHY[role] || [];
-    for (const inheritedRole of inheritedRoles) {
-      const inheritedPermissions = basePermissions[inheritedRole] || [];
-      inheritedPermissions.forEach(permission => permissionSet.add(permission));
-    }
-    
-    rolePermissions[role] = Object.freeze(permissionSet);
-  }
-  
-  return Object.freeze(rolePermissions);
-})();
-
-// Role metadata for UI display
-const ROLE_METADATA = Object.freeze({
-  [ROLES.ADMIN]: {
-    displayName: 'Administrator',
-    description: 'Full system access with all permissions',
-    level: 3,
-    color: 'purple'
+// Permission definitions organized by feature
+export const PERMISSIONS = Object.freeze({
+  // Dashboard permissions
+  DASHBOARD: {
+    VIEW: 'dashboard:view',
+    VIEW_ADMIN: 'dashboard:view_admin',
+    VIEW_INSTALLER: 'dashboard:view_installer'
   },
-  [ROLES.SUPERVISOR]: {
-    displayName: 'Supervisor',
-    description: 'Can manage installations and view reports',
-    level: 2,
-    color: 'blue'
+  
+  // Installation permissions
+  INSTALLATIONS: {
+    CREATE: 'installations:create',
+    VIEW: 'installations:view',
+    VIEW_ALL: 'installations:view_all',
+    MANAGE: 'installations:manage',
+    COMPLETE: 'installations:complete'
   },
-  [ROLES.INSTALLER]: {
-    displayName: 'Installer',
-    description: 'Can submit installations and view own schedule',
-    level: 1,
-    color: 'green'
+  
+  // User management permissions
+  USERS: {
+    VIEW: 'users:view',
+    CREATE: 'users:create',
+    UPDATE: 'users:update',
+    DELETE: 'users:delete',
+    MANAGE: 'users:manage'
+  },
+  
+  // Reports permissions
+  REPORTS: {
+    VIEW: 'reports:view',
+    EXPORT: 'reports:export',
+    GENERATE: 'reports:generate'
+  },
+  
+  // Schedule permissions
+  SCHEDULE: {
+    VIEW: 'schedule:view',
+    MANAGE: 'schedule:manage'
+  },
+  
+  // Settings permissions
+  SETTINGS: {
+    VIEW: 'settings:view',
+    MANAGE: 'settings:manage'
+  },
+  
+  // Upload permissions
+  UPLOADS: {
+    EXCEL: 'uploads:excel',
+    FILES: 'uploads:files'
+  },
+  
+  // Complaint permissions
+  COMPLAINTS: {
+    CREATE: 'complaints:create',
+    VIEW: 'complaints:view',
+    MANAGE: 'complaints:manage'
   }
 });
 
-// Feature access mapping
-const FEATURE_PERMISSIONS = Object.freeze({
+// Role-based permissions mapping
+const ROLE_PERMISSIONS = Object.freeze({
+  [ROLES.ADMIN]: new Set([
+    // Dashboard - Full access
+    PERMISSIONS.DASHBOARD.VIEW,
+    PERMISSIONS.DASHBOARD.VIEW_ADMIN,
+    PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
+    
+    // Installations - Full access
+    PERMISSIONS.INSTALLATIONS.CREATE,
+    PERMISSIONS.INSTALLATIONS.VIEW,
+    PERMISSIONS.INSTALLATIONS.VIEW_ALL,
+    PERMISSIONS.INSTALLATIONS.MANAGE,
+    PERMISSIONS.INSTALLATIONS.COMPLETE,
+    
+    // Users - Full access
+    PERMISSIONS.USERS.VIEW,
+    PERMISSIONS.USERS.CREATE,
+    PERMISSIONS.USERS.UPDATE,
+    PERMISSIONS.USERS.DELETE,
+    PERMISSIONS.USERS.MANAGE,
+    
+    // Reports - Full access
+    PERMISSIONS.REPORTS.VIEW,
+    PERMISSIONS.REPORTS.EXPORT,
+    PERMISSIONS.REPORTS.GENERATE,
+    
+    // Schedule - Full access
+    PERMISSIONS.SCHEDULE.VIEW,
+    PERMISSIONS.SCHEDULE.MANAGE,
+    
+    // Settings - Full access
+    PERMISSIONS.SETTINGS.VIEW,
+    PERMISSIONS.SETTINGS.MANAGE,
+    
+    // Uploads - Full access
+    PERMISSIONS.UPLOADS.EXCEL,
+    PERMISSIONS.UPLOADS.FILES,
+    
+    // Complaints - Full access
+    PERMISSIONS.COMPLAINTS.CREATE,
+    PERMISSIONS.COMPLAINTS.VIEW,
+    PERMISSIONS.COMPLAINTS.MANAGE
+  ]),
+  
+  [ROLES.INSTALLER]: new Set([
+    // Dashboard - Installer view only
+    PERMISSIONS.DASHBOARD.VIEW,
+    PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
+    
+    // Installations - Limited access
+    PERMISSIONS.INSTALLATIONS.CREATE,
+    PERMISSIONS.INSTALLATIONS.VIEW,
+    PERMISSIONS.INSTALLATIONS.COMPLETE,
+    
+    // Schedule - View only
+    PERMISSIONS.SCHEDULE.VIEW,
+    
+    // Uploads - Excel only
+    PERMISSIONS.UPLOADS.EXCEL,
+    
+    // Complaints - Create only
+    PERMISSIONS.COMPLAINTS.CREATE
+  ])
+});
+
+// Page access configuration - Maps pages to required permissions
+const PAGE_ACCESS = Object.freeze({
   dashboard: [PERMISSIONS.DASHBOARD.VIEW],
-  admin_dashboard: [PERMISSIONS.DASHBOARD.VIEW_ADMIN],
-  user_management: [PERMISSIONS.USERS.VIEW, PERMISSIONS.USERS.MANAGE],
-  installation_submission: [PERMISSIONS.INSTALLATIONS.CREATE],
-  schedule_management: [PERMISSIONS.SCHEDULE.VIEW, PERMISSIONS.SCHEDULE.MANAGE],
+  schedule: [PERMISSIONS.SCHEDULE.VIEW],
+  submit: [PERMISSIONS.INSTALLATIONS.CREATE],
+  users: [PERMISSIONS.USERS.VIEW],
   reports: [PERMISSIONS.REPORTS.VIEW],
-  performance_analytics: [PERMISSIONS.PERFORMANCE.VIEW],
-  meter_management: [PERMISSIONS.INSTALLATIONS.VIEW, PERMISSIONS.INSTALLATIONS.MANAGE],
-  system_settings: [PERMISSIONS.SYSTEM.MANAGE_SETTINGS]
+  uploads: [PERMISSIONS.UPLOADS.EXCEL],
+  settings: [PERMISSIONS.SETTINGS.VIEW],
+  complaint: [PERMISSIONS.COMPLAINTS.CREATE]
 });
 
-// Cache for permission checks
+// Permission check with caching
 const permissionCache = new Map();
 
 /**
- * Check if a user role has a specific permission
- * Uses caching for better performance
+ * Check if a role has a specific permission
  */
 export const hasPermission = (userRole, permission) => {
-  if (!userRole || !permission) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('hasPermission: Missing userRole or permission', { userRole, permission });
-    }
-    return false;
-  }
-
-  // Check cache first
+  if (!userRole || !permission) return false;
+  
+  // Admin has all permissions
+  if (userRole === ROLES.ADMIN) return true;
+  
+  // Check cache
   const cacheKey = `${userRole}:${permission}`;
   if (permissionCache.has(cacheKey)) {
     return permissionCache.get(cacheKey);
   }
-
+  
+  // Check permission
   const rolePermissions = ROLE_PERMISSIONS[userRole];
-  const hasPerm = rolePermissions ? rolePermissions.has(permission) : false;
+  const result = rolePermissions ? rolePermissions.has(permission) : false;
   
-  // Cache the result
-  permissionCache.set(cacheKey, hasPerm);
+  // Cache result
+  permissionCache.set(cacheKey, result);
   
-  return hasPerm;
+  return result;
 };
 
 /**
- * Check if user has all required permissions
+ * Check if role has all permissions
  */
 export const hasPermissions = (userRole, permissions) => {
-  if (!userRole || !permissions || !Array.isArray(permissions)) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('hasPermissions: Invalid parameters', { userRole, permissions });
-    }
-    return false;
-  }
-
-  // Short-circuit if empty array
+  if (!userRole || !Array.isArray(permissions)) return false;
   if (permissions.length === 0) return true;
-
+  
+  // Admin has all permissions
+  if (userRole === ROLES.ADMIN) return true;
+  
   return permissions.every(permission => hasPermission(userRole, permission));
 };
 
 /**
- * Check if user has at least one of the required permissions
+ * Check if role has any of the permissions
  */
 export const hasAnyPermission = (userRole, permissions) => {
-  if (!userRole || !permissions || !Array.isArray(permissions)) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('hasAnyPermission: Invalid parameters', { userRole, permissions });
-    }
-    return false;
-  }
-
-  // Short-circuit if empty array
+  if (!userRole || !Array.isArray(permissions)) return false;
   if (permissions.length === 0) return false;
-
+  
+  // Admin has all permissions
+  if (userRole === ROLES.ADMIN) return true;
+  
   return permissions.some(permission => hasPermission(userRole, permission));
 };
 
 /**
- * Check if user has a specific role or superior role
+ * Check if user can access a specific page
  */
-export const hasRole = (userRole, requiredRole) => {
-  if (!userRole || !requiredRole) return false;
-
-  if (userRole === requiredRole) return true;
-
-  // Check role hierarchy
-  const superiorRoles = ROLE_HIERARCHY[userRole] || [];
-  return superiorRoles.includes(requiredRole);
-};
-
-/**
- * Check if user can access a specific feature
- */
-export const canAccessFeature = (userRole, feature) => {
-  const requiredPermissions = FEATURE_PERMISSIONS[feature];
+export const canAccessPage = (userRole, pageName) => {
+  if (!userRole || !pageName) return false;
   
-  if (!requiredPermissions) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn(`Unknown feature: ${feature}`);
-    }
-    return false;
-  }
-
+  // Admin can access all pages
+  if (userRole === ROLES.ADMIN) return true;
+  
+  const requiredPermissions = PAGE_ACCESS[pageName];
+  if (!requiredPermissions) return false;
+  
   return hasAnyPermission(userRole, requiredPermissions);
 };
 
 /**
- * Get all permissions for a role (including inherited)
+ * Get all permissions for a role
  */
 export const getAllPermissionsForRole = (userRole) => {
   if (!userRole) return [];
@@ -304,173 +225,78 @@ export const getAllPermissionsForRole = (userRole) => {
 };
 
 /**
- * Get role display name
- */
-export const getRoleDisplayName = (role) => {
-  return ROLE_METADATA[role]?.displayName || role;
-};
-
-/**
- * Get role description
- */
-export const getRoleDescription = (role) => {
-  return ROLE_METADATA[role]?.description || 'No description available';
-};
-
-/**
  * Get role metadata
  */
 export const getRoleMetadata = (role) => {
-  return ROLE_METADATA[role] || {};
+  const metadata = {
+    [ROLES.ADMIN]: {
+      displayName: 'Administrator',
+      description: 'Full system access',
+      level: 2,
+      color: 'purple'
+    },
+    [ROLES.INSTALLER]: {
+      displayName: 'Installer',
+      description: 'Field technician',
+      level: 1,
+      color: 'blue'
+    }
+  };
+  
+  return metadata[role] || {};
 };
 
 /**
- * Get all available roles
+ * Get display name for a permission
  */
-export const getAvailableRoles = () => {
-  return Object.values(ROLES);
+export const getPermissionDisplayName = (permission) => {
+  const names = {
+    [PERMISSIONS.DASHBOARD.VIEW]: 'View Dashboard',
+    [PERMISSIONS.DASHBOARD.VIEW_ADMIN]: 'View Admin Dashboard',
+    [PERMISSIONS.DASHBOARD.VIEW_INSTALLER]: 'View Installer Dashboard',
+    [PERMISSIONS.INSTALLATIONS.CREATE]: 'Create Installation',
+    [PERMISSIONS.INSTALLATIONS.VIEW]: 'View Installations',
+    [PERMISSIONS.INSTALLATIONS.VIEW_ALL]: 'View All Installations',
+    [PERMISSIONS.INSTALLATIONS.MANAGE]: 'Manage Installations',
+    [PERMISSIONS.INSTALLATIONS.COMPLETE]: 'Complete Installations',
+    [PERMISSIONS.USERS.VIEW]: 'View Users',
+    [PERMISSIONS.USERS.CREATE]: 'Create Users',
+    [PERMISSIONS.USERS.UPDATE]: 'Update Users',
+    [PERMISSIONS.USERS.DELETE]: 'Delete Users',
+    [PERMISSIONS.USERS.MANAGE]: 'Manage Users',
+    [PERMISSIONS.REPORTS.VIEW]: 'View Reports',
+    [PERMISSIONS.REPORTS.EXPORT]: 'Export Reports',
+    [PERMISSIONS.REPORTS.GENERATE]: 'Generate Reports',
+    [PERMISSIONS.SCHEDULE.VIEW]: 'View Schedule',
+    [PERMISSIONS.SCHEDULE.MANAGE]: 'Manage Schedule',
+    [PERMISSIONS.SETTINGS.VIEW]: 'View Settings',
+    [PERMISSIONS.SETTINGS.MANAGE]: 'Manage Settings',
+    [PERMISSIONS.UPLOADS.EXCEL]: 'Upload Excel Files',
+    [PERMISSIONS.UPLOADS.FILES]: 'Upload Files',
+    [PERMISSIONS.COMPLAINTS.CREATE]: 'Create Complaints',
+    [PERMISSIONS.COMPLAINTS.VIEW]: 'View Complaints',
+    [PERMISSIONS.COMPLAINTS.MANAGE]: 'Manage Complaints'
+  };
+  
+  return names[permission] || permission;
 };
 
 /**
- * Get roles that the current user can assign
- */
-export const getAssignableRoles = (currentUserRole) => {
-  if (!currentUserRole) return [];
-  
-  const currentRoleLevel = ROLE_METADATA[currentUserRole]?.level || 0;
-  
-  return getAvailableRoles().filter(role => {
-    const roleLevel = ROLE_METADATA[role]?.level || 0;
-    return roleLevel < currentRoleLevel;
-  });
-};
-
-/**
- * Check if current user can assign a role to another user
- */
-export const canAssignRole = (currentUserRole, targetRole) => {
-  if (!currentUserRole || !targetRole) return false;
-  
-  const currentRoleLevel = ROLE_METADATA[currentUserRole]?.level || 0;
-  const targetRoleLevel = ROLE_METADATA[targetRole]?.level || 0;
-  
-  return targetRoleLevel < currentRoleLevel;
-};
-
-/**
- * Clear permission cache (useful for testing or role changes)
+ * Clear permission cache
  */
 export const clearPermissionCache = () => {
   permissionCache.clear();
 };
 
-/**
- * React Hook for permission management
- */
-export const usePermissions = (userRole) => {
-  const memoizedUtils = useMemo(() => ({
-    hasPermission: (permission) => hasPermission(userRole, permission),
-    hasPermissions: (permissions) => hasPermissions(userRole, permissions),
-    hasAnyPermission: (permissions) => hasAnyPermission(userRole, permissions),
-    hasRole: (role) => hasRole(userRole, role),
-    canAccessFeature: (feature) => canAccessFeature(userRole, feature),
-    getAllPermissions: () => getAllPermissionsForRole(userRole),
-    getRoleDisplayName: () => getRoleDisplayName(userRole),
-    getRoleDescription: () => getRoleDescription(userRole),
-    getRoleMetadata: () => getRoleMetadata(userRole),
-    getAssignableRoles: () => getAssignableRoles(userRole),
-    canAssignRole: (targetRole) => canAssignRole(userRole, targetRole)
-  }), [userRole]);
-
-  return memoizedUtils;
-};
-
-/**
- * Higher-Order Component for permission-based access control
- */
-export const withPermission = (WrappedComponent, requiredPermission) => {
-  const PermissionWrapper = ({ userRole, ...props }) => {
-    if (!hasPermission(userRole, requiredPermission)) {
-      return (
-        <div className="p-6 text-center bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="flex flex-col items-center justify-center space-y-3">
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900">Access Denied</h3>
-            <p className="text-gray-600 max-w-sm">
-              You don't have permission to access this content.
-            </p>
-          </div>
-        </div>
-      );
-    }
-    
-    return <WrappedComponent {...props} />;
-  };
-
-  // Set display name for better debugging
-  const wrappedComponentName = WrappedComponent.displayName || WrappedComponent.name || 'Component';
-  PermissionWrapper.displayName = `withPermission(${wrappedComponentName})`;
-  
-  return PermissionWrapper;
-};
-
-/**
- * Permission Guard component for conditional rendering
- */
-export const PermissionGuard = ({ 
-  userRole, 
-  permission, 
-  permissions, 
-  anyPermission, 
-  role, 
-  feature,
-  fallback = null,
-  children 
-}) => {
-  let hasAccess = false;
-
-  if (permission) {
-    hasAccess = hasPermission(userRole, permission);
-  } else if (permissions) {
-    hasAccess = hasPermissions(userRole, permissions);
-  } else if (anyPermission) {
-    hasAccess = hasAnyPermission(userRole, anyPermission);
-  } else if (role) {
-    hasAccess = hasRole(userRole, role);
-  } else if (feature) {
-    hasAccess = canAccessFeature(userRole, feature);
-  }
-
-  return hasAccess ? children : fallback;
-};
-
-// Export constants
-export { PERMISSION_SETS, ROLE_METADATA, FEATURE_PERMISSIONS };
-
-// Default export for convenience
 export default {
-  PERMISSIONS,
   ROLES,
-  ROLE_PERMISSIONS,
-  ROLE_HIERARCHY,
+  PERMISSIONS,
   hasPermission,
   hasPermissions,
   hasAnyPermission,
-  hasRole,
-  canAccessFeature,
+  canAccessPage,
   getAllPermissionsForRole,
-  getRoleDisplayName,
-  getRoleDescription,
   getRoleMetadata,
-  getAvailableRoles,
-  getAssignableRoles,
-  canAssignRole,
-  clearPermissionCache,
-  usePermissions,
-  withPermission,
-  PermissionGuard
+  getPermissionDisplayName,
+  clearPermissionCache
 };
