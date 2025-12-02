@@ -9,13 +9,13 @@ import Footer from './components/common/Footer';
 import Navigation from './components/common/Navigation';
 import AdminDashboard from './components/admin/AdminDashboard';
 import AdminReports from './components/admin/AdminReports';
-import SubmitForm from './components/submit/SubmitForm';
+import InstallationForm from './components/installation/InstallationForm';
 import MeterSchedule from './components/schedule/MeterSchedule';
 import UserManagement from './components/admin/UserManagement';
 import ExcelUpload from './components/uploads/ExcelUpload';
 import ComplaintForm from './components/complaint/ComplaintForm';
 import MeterTypeSettings from './components/settings/MeterTypeSettings';
-import ErrorNotification from './components/common/ErrorNotification';
+import ErrorNotification from './components/common/ErrorNotification'; // Uncommented
 import { usePermissions } from './components/auth/usePermissions';
 import jedApi from './components/services/api';
 import { Lock } from 'lucide-react';
@@ -38,6 +38,7 @@ const AccessDenied = () => (
 function AppContent() {
   const { user, login, logout, isAuthenticated } = useAuth();
   const permissions = usePermissions();
+  const [globalError, setGlobalError] = useState(null);
   
   // Validate API integration on mount
   useEffect(() => {
@@ -55,6 +56,7 @@ function AppContent() {
       return userData;
     } catch (error) {
       console.error('[App] Login failed:', error);
+      setGlobalError(error.message || 'Failed to log in. Please check your credentials.');
       throw error;
     }
   }, [login]);
@@ -79,10 +81,16 @@ function AppContent() {
       />
       
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 mb-20 lg:mb-0">
+        {globalError && (
+          <ErrorNotification
+            message={globalError}
+            onDismiss={() => setGlobalError(null)}
+          />
+        )}
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<AdminDashboard />} />
-          <Route path="/submit" element={permissions.isAdmin || permissions.canCreateInstallation ? <SubmitForm /> : <AccessDenied />} />
+          <Route path="/submit" element={permissions.isAdmin || permissions.canCreateInstallation ? <InstallationForm /> : <AccessDenied />} />
           <Route path="/schedule" element={permissions.isAdmin || permissions.canViewSchedule ? <MeterSchedule /> : <AccessDenied />} />
           <Route path="/users" element={permissions.isAdmin ? <UserManagement /> : <AccessDenied />} />
           <Route path="/uploads" element={permissions.isAdmin || permissions.canUploadExcel ? <ExcelUpload /> : <AccessDenied />} />

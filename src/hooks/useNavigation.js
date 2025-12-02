@@ -1,25 +1,53 @@
-import { useState, useCallback } from 'react';
+// src/hooks/useNavigation.js
+// Optimized navigation hook with settings page support
+import { useState, useCallback, useMemo } from 'react';
 
-// Constants for page names
-export const PAGE_NAMES = {
+// Page constants - aligned with app structure
+export const PAGE_NAMES = Object.freeze({
   DASHBOARD: 'dashboard',
   SCHEDULE: 'schedule',
+  SUBMIT: 'submit',
   USERS: 'users',
   REPORTS: 'reports',
-  SUBMIT: 'submit',
+  UPLOADS: 'uploads',
+  SETTINGS: 'settings',
   COMPLAINT: 'complaint'
-};
+});
 
+/**
+ * Navigation hook for managing app navigation state
+ */
 export const useNavigation = (initialPage = PAGE_NAMES.DASHBOARD) => {
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [navigationHistory, setNavigationHistory] = useState([initialPage]);
 
   // Navigate to a specific page
   const navigateTo = useCallback((page) => {
+    if (!page || page === currentPage) return;
+    
     setCurrentPage(page);
-    // Close mobile menu when navigating
     setIsMobileMenuOpen(false);
-  }, []);
+    
+    // Update navigation history
+    setNavigationHistory(prev => [...prev, page]);
+  }, [currentPage]);
+
+  // Navigate back to previous page
+  const navigateBack = useCallback(() => {
+    if (navigationHistory.length <= 1) {
+      navigateTo(PAGE_NAMES.DASHBOARD);
+      return;
+    }
+    
+    const newHistory = [...navigationHistory];
+    newHistory.pop(); // Remove current page
+    const previousPage = newHistory[newHistory.length - 1];
+    
+    setCurrentPage(previousPage);
+    setNavigationHistory(newHistory);
+    setIsMobileMenuOpen(false);
+  }, [navigationHistory, navigateTo]);
 
   // Toggle mobile menu
   const toggleMobileMenu = useCallback(() => {
@@ -36,34 +64,39 @@ export const useNavigation = (initialPage = PAGE_NAMES.DASHBOARD) => {
     setIsMobileMenuOpen(true);
   }, []);
 
-  // Check if current page is active
+  // Check if a page is active
   const isActivePage = useCallback((page) => {
     return currentPage === page;
   }, [currentPage]);
 
   // Get navigation state
-  const getNavigationState = useCallback(() => ({
+  const navigationState = useMemo(() => ({
     currentPage,
     isMobileMenuOpen,
-    canGoBack: currentPage !== PAGE_NAMES.DASHBOARD
-  }), [currentPage, isMobileMenuOpen]);
+    canGoBack: navigationHistory.length > 1,
+    historyLength: navigationHistory.length
+  }), [currentPage, isMobileMenuOpen, navigationHistory]);
 
   return {
-    // State
+    // Current state
     currentPage,
     isMobileMenuOpen,
+    navigationHistory,
     
-    // Actions
+    // Navigation actions
     navigateTo,
+    navigateBack,
     toggleMobileMenu,
     closeMobileMenu,
     openMobileMenu,
     
     // Queries
     isActivePage,
-    getNavigationState,
+    navigationState,
     
-    // Constants (for convenience)
+    // Constants
     PAGE_NAMES
   };
 };
+
+export default useNavigation;

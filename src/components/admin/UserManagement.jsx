@@ -1,6 +1,7 @@
 // src/components/admin/UserManagement.jsx
 // Refactored and optimized to align with latest app updates
 import { useState, useEffect, useCallback } from 'react';
+import ConfirmationModal from '../common/ConfirmationModal';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../auth/usePermissions';
 import jedApi from '../services/api';
@@ -32,7 +33,6 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
     phone: user?.phone || '',
     email: user?.email || '',
     role: user?.role || ROLES.INSTALLER,
-    employeeId: user?.employeeId || '',
     nin: user?.nin || '',
     password: '',
     confirmPassword: ''
@@ -66,16 +66,6 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
       newErrors.nin = 'NIN is required';
     } else if (!/^\d{11}$/.test(formData.nin)) {
       newErrors.nin = 'NIN must be 11 digits';
-    }
-
-    if (!user && !formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password && formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    }
-    
-    if (!user && formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
     }
 
     setErrors(newErrors);
@@ -192,20 +182,6 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
           </select>
         </div>
 
-        {/* Employee ID Field */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Employee ID
-          </label>
-          <input
-            type="text"
-            value={formData.employeeId}
-            onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            placeholder="EMP-001"
-          />
-        </div>
-
         {/* NIN Field */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -227,51 +203,6 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.nin}</p>
           )}
         </div>
-
-        {/* Password Fields - Only show for new users */}
-        {!user && (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Password *
-              </label>
-              <input
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-                  errors.password 
-                    ? 'border-red-300 dark:border-red-600' 
-                    : 'border-gray-300 dark:border-gray-600'
-                }`}
-                placeholder="Min 8 characters"
-              />
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Confirm Password *
-              </label>
-              <input
-                type="password"
-                value={formData.confirmPassword}
-                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-                  errors.confirmPassword 
-                    ? 'border-red-300 dark:border-red-600' 
-                    : 'border-gray-300 dark:border-gray-600'
-                }`}
-                placeholder="Repeat password"
-              />
-              {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.confirmPassword}</p>
-              )}
-            </div>
-          </>
-        )}
       </div>
 
       {/* Form Actions */}
@@ -317,6 +248,7 @@ function UserManagement() {
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [userToDelete, setUserToDelete] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState('all');
 
@@ -393,11 +325,18 @@ function UserManagement() {
       setActionLoading(`update-${editingUser.id}`);
       setError(null);
       
-      console.log('[UserManagement] Updating user:', editingUser.id);
+      // Construct the payload to match the API's expected format
       const payload = {
-        ...userData,
-        role: userData.role.toUpperCase(),
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        name: `${userData.firstName} ${userData.lastName}`.trim(),
+        email: userData.email,
+        phone: userData.phone,
+        role: userData.role,
+        nin: userData.nin,
       };
+
+      console.log('[UserManagement] Updating user:', editingUser.id, 'with payload:', payload);
       await jedApi.updateUser(editingUser.id, payload);
       
       setShowForm(false);
@@ -411,26 +350,26 @@ function UserManagement() {
     }
   }, [editingUser, fetchUsers]);
 
-  const handleDeleteUser = useCallback(async (userId, userName) => {
-    if (!window.confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
-      return;
-    }
-
+  const handleDeleteUser = useCallback(async () => {
+    if (!userToDelete) return;
+    
     try {
-      setActionLoading(`delete-${userId}`);
+      setActionLoading(`delete-${userToDelete.id}`);
       setError(null);
       
-      console.log('[UserManagement] Deleting user:', userId);
-      await jedApi.deleteUser(userId);
+      console.log('[UserManagement] Deleting user:', userToDelete.id);
+      await jedApi.deleteUser(userToDelete.id);
       
       await fetchUsers();
+      setUserToDelete(null); // Close modal on success
     } catch (err) {
       console.error('[UserManagement] Error deleting user:', err);
       setError(err.message || 'Failed to delete user');
+      // Keep the modal open on error so the user sees the message
     } finally {
       setActionLoading(null);
     }
-  }, [fetchUsers]);
+  }, [userToDelete, fetchUsers]);
 
   // Filter users based on search and role
   const filteredUsers = users.filter(user => {
@@ -534,6 +473,16 @@ function UserManagement() {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={!!userToDelete}
+        onClose={() => setUserToDelete(null)}
+        onConfirm={handleDeleteUser}
+        loading={actionLoading === `delete-${userToDelete?.id}`}
+        title="Delete User"
+        message={`Are you sure you want to delete the user "${userToDelete?.firstName} ${userToDelete?.lastName}"? This action cannot be undone.`}
+      />
+
       {/* Filters and Search */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="relative">
@@ -592,9 +541,6 @@ function UserManagement() {
                     Role
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Employee ID
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Status
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -635,9 +581,6 @@ function UserManagement() {
                         {user?.role || 'Unknown'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {user?.employeeId || 'N/A'}
-                    </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
                         user?.isActive !== false
@@ -666,7 +609,7 @@ function UserManagement() {
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteUser(user.id, `${user.firstName} ${user.lastName}`)}
+                          onClick={() => setUserToDelete(user)}
                           disabled={actionLoading === `delete-${user.id}`}
                           className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
                           title="Delete user"

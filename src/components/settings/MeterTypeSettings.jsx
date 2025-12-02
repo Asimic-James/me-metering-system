@@ -1,10 +1,11 @@
 // src/components/settings/MeterTypeSettings.jsx
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Settings, Plus, Edit2, Trash2, Check, X, 
-  AlertCircle, Loader2, Search, DollarSign 
+  Settings, Plus, Edit2, Trash2, Check, X,
+  AlertCircle, Loader2, Search
 } from 'lucide-react';
 import jedApi from '../services/api';
+import ConfirmationModal from '../common/ConfirmationModal';
 
 const MeterTypeSettings = () => {
   const [meterTypes, setMeterTypes] = useState([]);
@@ -13,12 +14,13 @@ const MeterTypeSettings = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [formData, setFormData] = useState({ 
-    name: '', 
-    description: '', 
-    amount: '' 
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    amount: ''
   });
   const [actionLoading, setActionLoading] = useState(null);
+  const [itemToDelete, setItemToDelete] = useState(null);
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -27,32 +29,55 @@ const MeterTypeSettings = () => {
     hasPrev: false,
     limit: 10
   });
-
-  // Fetch meter types
+  
+  // Fetch meter types - Updated to handle API response correctly
   const fetchMeterTypes = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
+
+      console.log('[Settings] Fetching meter types from /settings/meter-type');
       const response = await jedApi.getMeterTypes({
         page: pagination.currentPage,
         limit: pagination.limit,
         query: searchTerm
       });
-      
-      // Handle paginated response structure
-      const data = response?.success ? response.data : (response?.data || response || []);
-      const paginationData = response?.pagination || {
-        ...pagination,
+
+      console.log('[Settings] API Response:', response);
+
+      // Handle different response structures from the API
+      let data = [];
+      let paginationData = pagination;
+
+      if (response?.success && response?.data) {
+        // Response format: { success: true, data: [...], pagination: {...} }
+        data = Array.isArray(response.data) ? response.data : [];
+        paginationData = response.pagination || pagination;
+      } else if (Array.isArray(response?.data)) {
+        // Response format: { data: [...] }
+        data = response.data;
+      } else if (Array.isArray(response)) {
+        // Response is directly an array
+        data = response;
+      } else if (response?.meterTypes) {
+        // Response format: { meterTypes: [...] }
+        data = Array.isArray(response.meterTypes) ? response.meterTypes : [];
+      }
+
+      setMeterTypes(data);
+      setPagination(prev => ({
+        ...prev,
+        ...paginationData,
         totalCount: data.length,
-        totalPages: 1
-      };
-      setMeterTypes(Array.isArray(data) ? data : []);
-      
-      console.log('[Settings] Loaded meter types:', data);
+        totalPages: Math.ceil(data.length / prev.limit)
+      }));
+
+      console.log('[Settings] Loaded meter types:', data.length, 'items');
     } catch (err) {
       console.error('[Settings] Failed to fetch meter types:', err);
-      setError(err.message || 'Failed to load meter types');
-      setMeterTypes([]); // Set empty array on error
+      const errorMsg = String(err?.message || 'Failed to load meter types');
+      setError(errorMsg);
+      setMeterTypes([]);
     } finally {
       setLoading(false);
     }
@@ -60,7 +85,7 @@ const MeterTypeSettings = () => {
 
   useEffect(() => {
     fetchMeterTypes();
-  }, [fetchMeterTypes, pagination.currentPage]);
+  }, [fetchMeterTypes]);
 
   // Validate form data
   const validateForm = () => {
@@ -71,111 +96,136 @@ const MeterTypeSettings = () => {
 
     const amount = parseFloat(formData.amount);
     if (!formData.amount || isNaN(amount) || amount <= 0) {
-      setError('Amount must be greater than zero');
+      setError('Amount must be a positive number greater than zero');
       return false;
     }
 
     return true;
   };
 
-  // Create meter type
+  // Create meter type - POST /settings/meter-type
   const handleCreate = async () => {
     if (!validateForm()) return;
 
     try {
       setActionLoading('create');
       setError(null);
-      
-      const payload = {
-        name: formData.name.trim(),
-        amount: parseFloat(formData.amount)
-      };
 
-      console.log('[Settings] Creating meter type:', payload);
-      await jedApi.createMeterType(payload);
-      
-      await fetchMeterTypes();
-      setFormData({ name: '', description: '', amount: '' });
-      setIsCreating(false);
-    } catch (err) {
-      console.error('[Settings] Failed to create meter type:', err);
-      
-      // Parse backend validation errors
-      const errorMsg = err.message || 'Failed to create meter type';
-      if (errorMsg.includes('Validation failed')) {
-        setError(errorMsg.replace('Validation failed: ', ''));
-      } else {
-        setError(errorMsg);
-      }
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // Update meter type
-  const handleUpdate = async (id) => {
-    if (!validateForm()) return;
-
-    try {
-      setActionLoading(`update-${id}`);
-      setError(null);
-      
       const payload = {
         name: formData.name.trim(),
         amount: parseFloat(formData.amount),
         description: formData.description.trim() || undefined
       };
 
-      console.log('[Settings] Updating meter type:', id, payload);
-      await jedApi.updateMeterType(id, payload);
-      
+      console.log('[Settings] Creating meter type via POST /settings/meter-type:', payload);
+      const response = await jedApi.createMeterType(payload);
+      console.log('[Settings] Create response:', response);
+
+      await fetchMeterTypes();
+      setFormData({ name: '', description: '', amount: '' });
+      setIsCreating(false);
+
+      // Show success message briefly
+      const successMsg = response?.message || 'Meter type created successfully';
+      console.log('[Settings] ✓', successMsg);
+    } catch (err) {
+      console.error('[Settings] Failed to create meter type:', err);
+
+      // Parse backend validation errors
+      let errorMsg = String(err?.message || 'Failed to create meter type');
+
+      // Handle validation error format
+      if (errorMsg.includes('VALIDATION_ERROR:')) {
+        errorMsg = errorMsg.replace('VALIDATION_ERROR:', '');
+      } else if (errorMsg.includes('Validation failed')) {
+        errorMsg = errorMsg.replace('Validation failed: ', '');
+      }
+
+      setError(errorMsg);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Update meter type - PATCH /settings/meter-type/{id}
+  const handleUpdate = async (id) => {
+    if (!validateForm()) return;
+
+    try {
+      setActionLoading(`update-${id}`);
+      setError(null);
+
+      const payload = {
+        name: formData.name.trim(),
+        amount: parseFloat(formData.amount),
+        description: formData.description.trim() || undefined
+      };
+
+      console.log('[Settings] Updating meter type via PATCH /settings/meter-type/{id}:', id, payload);
+      const response = await jedApi.updateMeterType(id, payload);
+      console.log('[Settings] Update response:', response);
+
       await fetchMeterTypes();
       setEditingId(null);
       setFormData({ name: '', description: '', amount: '' });
+
+      // Show success message
+      const successMsg = response?.message || 'Meter type updated successfully';
+      console.log('[Settings] ✓', successMsg);
     } catch (err) {
       console.error('[Settings] Failed to update meter type:', err);
-      
-      const errorMsg = err.message || 'Failed to update meter type';
-      if (errorMsg.includes('Validation failed')) {
-        setError(errorMsg.replace('Validation failed: ', ''));
-      } else {
-        setError(errorMsg);
+
+      let errorMsg = String(err?.message || 'Failed to update meter type');
+
+      if (errorMsg.includes('VALIDATION_ERROR:')) {
+        errorMsg = errorMsg.replace('VALIDATION_ERROR:', '');
+      } else if (errorMsg.includes('Validation failed')) {
+        errorMsg = errorMsg.replace('Validation failed: ', '');
       }
+
+      setError(errorMsg);
     } finally {
       setActionLoading(null);
     }
   };
 
-  // Delete meter type
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to deactivate "${name}"?`)) {
-      return;
-    }
+  const handleDelete = useCallback(async () => {
+    if (!itemToDelete) return;
 
     try {
-      setActionLoading(`delete-${id}`);
+      setActionLoading(`delete-${itemToDelete.id}`);
       setError(null);
-      
-      console.log('[Settings] Deleting meter type:', id);
-      await jedApi.deleteMeterType(id);
+
+      console.log('[Settings] Deactivating meter type via DELETE /settings/meter-type/{id}:', itemToDelete.id);
+      const response = await jedApi.deleteMeterType(itemToDelete.id);
+      console.log('[Settings] Delete response:', response);
+
       await fetchMeterTypes();
+      setItemToDelete(null); // Close modal on success
+
+      // Show success message
+      const successMsg = response?.message || 'Meter type deactivated successfully';
+      console.log('[Settings] ✓', successMsg);
     } catch (err) {
       console.error('[Settings] Failed to delete meter type:', err);
-      setError(err.message || 'Failed to deactivate meter type');
+      const errorMsg = String(err?.message || 'Failed to deactivate meter type');
+      setError(errorMsg);
+      // Keep modal open on error
     } finally {
       setActionLoading(null);
     }
-  };
+  }, [itemToDelete, fetchMeterTypes]);
 
   // Start editing
   const startEdit = (meterType) => {
     setEditingId(meterType.id);
-    setFormData({ 
-      name: meterType.name, 
+    setFormData({
+      name: meterType.name,
       description: meterType.description || '',
       amount: meterType.amount?.toString() || ''
     });
     setIsCreating(false);
+    setError(null);
   };
 
   // Cancel editing
@@ -196,10 +246,18 @@ const MeterTypeSettings = () => {
     }).format(amount);
   };
 
-  // Filter meter types
-  const filteredMeterTypes = useMemo(() => meterTypes, [meterTypes]);
+  // Filter meter types based on search
+  const filteredMeterTypes = useMemo(() => {
+    if (!searchTerm.trim()) { return meterTypes; }
 
-  if (loading) {
+    const search = searchTerm.toLowerCase();
+    return meterTypes.filter(type =>
+      type.name?.toLowerCase().includes(search) ||
+      type.description?.toLowerCase().includes(search)
+    );
+  }, [meterTypes, searchTerm]);
+
+  if (loading && meterTypes.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -232,7 +290,8 @@ const MeterTypeSettings = () => {
             setFormData({ name: '', description: '', amount: '' });
             setError(null);
           }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          disabled={!!actionLoading}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
         >
           <Plus className="w-4 h-4" />
           Add Meter Type
@@ -273,6 +332,16 @@ const MeterTypeSettings = () => {
           className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
         />
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={!!itemToDelete}
+        onClose={() => setItemToDelete(null)}
+        onConfirm={handleDelete}
+        loading={actionLoading === `delete-${itemToDelete?.id}`}
+        title="Deactivate Meter Type"
+        message={`Are you sure you want to deactivate "${itemToDelete?.name}"? This action cannot be undone.`}
+      />
 
       {/* Create Form */}
       {isCreating && (
@@ -435,7 +504,7 @@ const MeterTypeSettings = () => {
                               title="Save"
                             >
                               {actionLoading === `update-${type.id}` ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <Loader2 className="w-4 h-4 animate-spin" /> 
                               ) : (
                                 <Check className="w-4 h-4" />
                               )}
@@ -488,7 +557,7 @@ const MeterTypeSettings = () => {
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => handleDelete(type.id, type.name)}
+                              onClick={() => setItemToDelete(type)}
                               disabled={actionLoading === `delete-${type.id}`}
                               className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
                               title="Deactivate"
@@ -510,37 +579,6 @@ const MeterTypeSettings = () => {
           </table>
         </div>
       </div>
-
-      {/* Pagination Controls */}
-      {pagination.totalPages > 1 && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-              Page <strong>{pagination.currentPage}</strong> of <strong>{pagination.totalPages}</strong> 
-              {' '}(<strong>{pagination.totalCount}</strong> total types)
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPagination(p => ({ ...p, currentPage: p.currentPage - 1 }))}
-                disabled={!pagination.hasPrev || loading}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                ← Prev
-              </button>
-              <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                Page {pagination.currentPage}
-              </span>
-              <button
-                onClick={() => setPagination(p => ({ ...p, currentPage: p.currentPage + 1 }))}
-                disabled={!pagination.hasNext || loading}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Next →
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Stats Footer */}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
