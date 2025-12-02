@@ -108,7 +108,7 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
     onClose?.();
   }, [onClose]);
 
-  // Base Navigation Item Component
+  // Base Navigation Item Component - Now uses NavLink for routing
   const NavItem = useCallback(({ item, variant = 'desktop' }) => {
     const Icon = item.icon;
     const isAccessible = isItemAccessible(item);

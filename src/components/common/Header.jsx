@@ -2,6 +2,7 @@ import { Power, User, LogOut, ChevronDown, Menu, X, Bell, Mail, Phone, MapPin, S
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import JEDApiService from '../services/api';
+import VerificationModal from '../auth/VerificationModal';
 
 // Header-specific constants
 const HEADER_STYLES = {
@@ -52,15 +53,20 @@ const getUserInitials = (user) => {
 };
 
 // Profile Modal Component
-const ProfileModal = ({ isOpen, onClose, user, profileData, loading, error }) => {
+const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVerification }) => {
   if (!isOpen) return null;
 
-  const DetailItem = ({ icon: Icon, label, value }) => (
+  const DetailItem = ({ icon: Icon, label, value, isVerified, verificationType, contact }) => (
     <div className="flex items-start gap-3">
       <Icon className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" />
       <div>
         <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-sm font-medium text-gray-800">{value || 'Not provided'}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-gray-800">{value || 'Not provided'}</p>
+          {isVerified === false && onStartVerification && (
+            <button onClick={() => onStartVerification(verificationType, contact)} className="text-xs text-blue-600 hover:underline font-semibold">Verify</button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -103,10 +109,9 @@ const ProfileModal = ({ isOpen, onClose, user, profileData, loading, error }) =>
                 <DetailItem icon={Mail} label="Email" value={profileData.email} />
                 <DetailItem icon={Phone} label="Phone" value={profileData.phone} />
                 <DetailItem icon={MapPin} label="Home Address" value={profileData.homeAddress} />
-                <DetailItem icon={MapPin} label="Office Address" value={profileData.officeAddress} />
                 <DetailItem icon={Shield} label="NIN" value={profileData.nin} />
-                <DetailItem icon={profileData.isEmailVerified ? CheckCircle : AlertCircle} label="Email Verified" value={profileData.isEmailVerified ? 'Yes' : 'No'} />
-                <DetailItem icon={profileData.isPhoneVerified ? CheckCircle : AlertCircle} label="Phone Verified" value={profileData.isPhoneVerified ? 'Yes' : 'No'} />
+                <DetailItem icon={profileData.isEmailVerified ? CheckCircle : AlertCircle} label="Email Verified" value={profileData.isEmailVerified ? 'Yes' : 'No'} isVerified={profileData.isEmailVerified} verificationType="email" contact={profileData.email} onStartVerification={onStartVerification} />
+                <DetailItem icon={profileData.isPhoneVerified ? CheckCircle : AlertCircle} label="Phone Verified" value={profileData.isPhoneVerified ? 'Yes' : 'No'} isVerified={profileData.isPhoneVerified} verificationType="phone" contact={profileData.phone} onStartVerification={onStartVerification} />
                 <DetailItem icon={profileData.isActive ? CheckCircle : AlertCircle} label="Account Active" value={profileData.isActive ? 'Yes' : 'No'} />
               </div>
             </div>
@@ -123,6 +128,8 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   const [profileData, setProfileData] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState(null);
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  const [verificationDetails, setVerificationDetails] = useState({ type: 'phone', contact: '' });
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
@@ -163,6 +170,19 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
     setShowDropdown(false);
     navigate('/settings');
   }, [navigate]);
+
+  const handleStartVerification = useCallback((type, contact) => {
+    console.log(`Starting verification for ${type}: ${contact}`);
+    setVerificationDetails({ type, contact });
+    setShowProfileModal(false); // Close profile modal
+    setIsVerificationModalOpen(true); // Open verification modal
+  }, []);
+
+  const handleVerificationSuccess = useCallback(() => {
+    console.log('Verification successful!');
+    setIsVerificationModalOpen(false);
+    handleProfileClick(); // Re-fetch profile to show updated status
+  }, [handleProfileClick]);
 
   const MenuIcon = useCallback(() => 
     isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />, 
@@ -326,6 +346,15 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
         profileData={profileData}
         loading={profileLoading}
         error={profileError}
+        onStartVerification={handleStartVerification}
+      />
+
+      <VerificationModal
+        isOpen={isVerificationModalOpen}
+        onClose={() => setIsVerificationModalOpen(false)}
+        verificationType={verificationDetails.type}
+        contactInfo={verificationDetails.contact}
+        onVerificationSuccess={handleVerificationSuccess}
       />
     </header>
   );

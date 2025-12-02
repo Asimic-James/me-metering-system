@@ -45,7 +45,6 @@ const PHASE_TYPE_OPTIONS = [
 ];
 
 const TABS = [
-  { id: 'schedule', label: 'Installation Schedule' },
   { id: 'inventory', label: 'Meter Inventory' },
   { id: 'query', label: 'Meter Query' }
 ];
@@ -266,12 +265,14 @@ const useMeterStatistics = () => {
 const StatsCard = ({ title, value, icon: Icon, bgColor, iconColor, loading = false, error = false }) => (
   <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 hover:shadow-lg transition-shadow duration-200">
     <div className="flex items-center justify-between">
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <p className="text-gray-500 text-sm font-medium mb-1 truncate">{title}</p>
         <p className={`text-2xl sm:text-3xl font-bold ${error ? 'text-red-600' : 'text-gray-900'}`}>
           {loading ? '...' : error ? 'Error' : value}
         </p>
-        {error && <p className="text-xs text-red-500 mt-1">Failed to load</p>}
+        {error && (
+          <p className="text-xs text-red-500 mt-1">Failed to load</p>
+        )}
       </div>
       <div className={`${bgColor} rounded-full p-2 sm:p-3 flex-shrink-0 ml-4`}>
         <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${iconColor}`} />

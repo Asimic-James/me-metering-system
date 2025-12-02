@@ -550,7 +550,7 @@ function AdminDashboard({ isInstallerView = false }) {
             <RecentInstallations 
               installations={recentInstallations}
               totalCount={requestsTotalCount}
-              onViewAll={() => console.log('Navigate to full reports')}
+              onViewAll={() => navigate('/reports')}
             />
           </div>
 

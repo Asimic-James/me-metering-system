@@ -17,19 +17,20 @@ if (typeof window !== 'undefined' && window.DEBUG_API) {
 }
 
 class JEDApiService {
-  // Static properties for configuration
-  static config = API_CONFIG;
-  static endpoints = ENDPOINTS;
-  static errorTypes = ERROR_TYPES;
-  static errorCodes = ERROR_CODES;
-  static utils = API_UTILS;
+  constructor() {
+    this.config = API_CONFIG;
+    this.endpoints = ENDPOINTS;
+    this.errorTypes = ERROR_TYPES;
+    this.errorCodes = ERROR_CODES;
+    this.utils = API_UTILS;
     
-  // Static cache properties
-  static requestCache = new Map();
-  static cacheTimeout = 30000; // 30 seconds
+    // Request cache for deduplication
+    this.requestCache = new Map();
+    this.cacheTimeout = 30000; // 30 seconds
+  }
 
   // Enhanced request method with caching and better error handling
-  static async makeRequest(url, options = {}) {
+  async makeRequest(url, options = {}) {
     const { 
       maxRetries = this.config.RETRY_CONFIG.MAX_RETRIES,
       useCache = false,
@@ -112,7 +113,7 @@ class JEDApiService {
   }
 
   // Cache management methods
-  static getCachedResponse(key) {
+  getCachedResponse(key) {
     const cached = this.requestCache.get(key);
     if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
       return cached.data;
@@ -121,19 +122,19 @@ class JEDApiService {
     return null;
   }
 
-  static setCachedResponse(key, data) {
+  setCachedResponse(key, data) {
     this.requestCache.set(key, {
       data,
       timestamp: Date.now()
     });
   }
 
-  static clearCache() {
+  clearCache() {
     this.requestCache.clear();
   }
 
   // Handle API response with consistent error formatting
-  static async handleResponse(response) {
+  async handleResponse(response) {
     console.log(`[API] Response: ${response.status} ${response.statusText}`);
 
     const contentType = response.headers.get('content-type');
@@ -169,7 +170,7 @@ class JEDApiService {
   }
 
   // Enhanced error handling with specific error types
-  static handleErrorResponse(response, data) {
+  handleErrorResponse(response, data) {
     const { status } = response;
 
     if (status === 401) {
@@ -177,7 +178,7 @@ class JEDApiService {
       throw new Error(`${this.errorTypes.AUTH}:${data?.message || 'Invalid credentials'}`);
     }
 
-    const errorMsg = String(data?.message || data?.error || '').toLowerCase();
+    const errorMsg = (data?.message || data?.error || '').toString().toLowerCase();
     const isHtmlError = errorMsg.includes('doctype') || errorMsg.includes('<!');
     
     if (isHtmlError) {
@@ -201,7 +202,7 @@ class JEDApiService {
   }
 
   // Enhanced error handling with specific error categorization
-  static enhanceError(error) {
+  enhanceError(error) {
     if (error.message && error.message.includes('401')) {
       this.clearTokens();
       return new Error('Authentication required. Please login again.');
@@ -219,17 +220,17 @@ class JEDApiService {
   }
 
   // URL construction using config utilities
-  static buildUrl(endpoint, isAuthEndpoint = false) {
+  buildUrl(endpoint, isAuthEndpoint = false) {
     const group = isAuthEndpoint ? 'AUTH' : 'JED';
     return this.utils.buildUrl(endpoint, group);
   }
 
-  static buildApiUrl(endpoint) {
+  buildApiUrl(endpoint) {
     return this.utils.buildApiUrl(endpoint);
   }
 
   // ==================== AUTHENTICATION METHODS ====================
-  static async register(userData) {
+  async register(userData) {
     console.log('[Auth] Register:', { phone: userData.phone, role: userData.role });
     const url = this.buildUrl(this.endpoints.AUTH.REGISTER, true);
     
@@ -239,7 +240,7 @@ class JEDApiService {
     });
   }
 
-  static async login(credentials) {
+  async login(credentials) {
     console.log('[Auth] Login request:', { phone: credentials.phone, hasPassword: !!credentials.password });
     const url = this.buildUrl(this.endpoints.AUTH.LOGIN, true);
     
@@ -302,7 +303,7 @@ class JEDApiService {
     return this.normalizeUserData(userData);
   }
 
-  static extractAuthData(response) {
+  extractAuthData(response) {
     console.log('[Auth] Extracting auth data from response');
     let userData = null;
     let token = null;
@@ -325,15 +326,48 @@ class JEDApiService {
     return { userData, token };
   }
 
-  static normalizeUserData(userData) {
+  normalizeUserData(userData) {
     return {
       ...userData,
       role: (userData.role?.toLowerCase() || 'installer').trim()
     };
   }
 
+  // ==================== VERIFICATION METHODS ====================
+  async sendPhoneOTP(data) {
+    const url = this.buildUrl(this.endpoints.AUTH.SEND_PHONE_OTP, true);
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async verifyPhone(data) {
+    const url = this.buildUrl(this.endpoints.AUTH.VERIFY_PHONE, true);
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async sendEmailOTP(data) {
+    const url = this.buildUrl(this.endpoints.AUTH.SEND_EMAIL_OTP, true);
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async verifyEmail(data) {
+    const url = this.buildUrl(this.endpoints.AUTH.VERIFY_EMAIL, true);
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   // ==================== USER MANAGEMENT METHODS ====================
-  static async getProfile() {
+  async getProfile() {
     const url = this.buildUrl(this.endpoints.AUTH.PROFILE, true);
     const response = await this.makeRequest(url, { 
       method: 'GET',
@@ -349,7 +383,7 @@ class JEDApiService {
     return response;
   }
 
-  static async updateProfile(profileData) {
+  async updateProfile(profileData) {
     const url = this.buildUrl(this.endpoints.AUTH.PROFILE, true);
     const response = await this.makeRequest(url, {
       method: 'PUT',
@@ -364,7 +398,7 @@ class JEDApiService {
     return response;
   }
 
-  static async changePassword(passwordData) {
+  async changePassword(passwordData) {
     const url = this.buildUrl(this.endpoints.AUTH.CHANGE_PASSWORD, true);
     return await this.makeRequest(url, {
       method: 'PUT',
@@ -372,7 +406,7 @@ class JEDApiService {
     });
   }
 
-  static async logout() {
+  async logout() {
     try {
       const token = this.getAuthToken();
       if (token) {
@@ -401,7 +435,7 @@ class JEDApiService {
   }
 
   // ==================== JED INTEGRATION METHODS ====================
-  static async completeInstallation(installationData) {
+  async completeInstallation(installationData) {
     const url = this.buildUrl(this.endpoints.JED.COMPLETE_INSTALLATION);
     return await this.makeRequest(url, {
       method: 'POST',
@@ -409,7 +443,7 @@ class JEDApiService {
     });
   }
 
-  static async generatePaymentReference(meterData) {
+  async generatePaymentReference(meterData) {
     const url = this.buildUrl(this.endpoints.JED.GENERATE_REF);
     return await this.makeRequest(url, {
       method: 'POST',
@@ -417,7 +451,7 @@ class JEDApiService {
     });
   }
 
-  static async confirmPayment(paymentData) {
+  async confirmPayment(paymentData) {
     const url = this.buildUrl(this.endpoints.JED.CONFIRM_PAYMENT);
     return await this.makeRequest(url, {
       method: 'POST',
@@ -425,7 +459,7 @@ class JEDApiService {
     });
   }
 
-  static async getCustomerRequest(accountNumber) {
+  async getCustomerRequest(accountNumber) {
     const url = this.buildUrl(this.endpoints.JED.GET_REQUEST_BY_ACCOUNT(accountNumber));
     return await this.makeRequest(url, { 
       method: 'GET',
@@ -434,7 +468,7 @@ class JEDApiService {
     });
   }
 
-  static async getAllCustomerRequests(params = {}) {
+  async getAllCustomerRequests(params = {}) {
     const url = this.utils.buildUrlWithParams(
       this.endpoints.JED.GET_ALL_REQUESTS, 
       params, 
@@ -448,7 +482,7 @@ class JEDApiService {
   }
 
   // ==================== ADMIN & DASHBOARD METHODS ====================
-  static async getDashboardStats() {
+  async getDashboardStats() {
     const url = this.buildApiUrl(this.endpoints.ADMIN.DASHBOARD_STATS);
     console.log('[API] Calling dashboard stats endpoint:', url);
     
@@ -467,7 +501,7 @@ class JEDApiService {
     }
   }
 
-  static async getInstallerPerformance(params = {}) {
+  async getInstallerPerformance(params = {}) {
     const url = this.utils.buildUrlWithParams(
       this.endpoints.JED.GET_INSTALLER_PERFORMANCE, 
       params, 
@@ -480,7 +514,7 @@ class JEDApiService {
     });
   }
 
-  static async getInstallerDashboard() {
+  async getInstallerDashboard() {
     try {
       const url = this.buildUrl(this.endpoints.JED.GET_INSTALLER_DASHBOARD);
       return await this.makeRequest(url, { 
@@ -498,7 +532,7 @@ class JEDApiService {
   }
 
   // ==================== METERS MANAGEMENT METHODS ====================
-  static async uploadMeters(formData) {
+  async uploadMeters(formData) {
     const url = this.buildApiUrl(this.endpoints.METERS.UPLOAD);
     return await this.makeRequest(url, {
       method: 'POST',
@@ -506,7 +540,7 @@ class JEDApiService {
     });
   }
 
-  static async downloadMetersTemplate() {
+  async downloadMetersTemplate() {
     const url = this.buildApiUrl(this.endpoints.METERS.TEMPLATE);
     const headers = this.utils.buildHeaders();
     delete headers['Content-Type'];
@@ -519,7 +553,7 @@ class JEDApiService {
     return await response.blob();
   }
 
-  static async exportMeters(params = {}) {
+  async exportMeters(params = {}) {
     const url = this.utils.buildUrlWithParams(
       this.endpoints.METERS.EXPORT, 
       params
@@ -535,8 +569,7 @@ class JEDApiService {
     return await response.blob();
   }
 
-  static async getMeters(params = {}) {
-    // Ensure only valid parameters are sent
+  async getMeters(params = {}) {
     const cleanParams = Object.fromEntries(
       Object.entries(params).filter(([_, v]) => v != null && v !== '' && v !== 'ALL')
     );
@@ -549,7 +582,7 @@ class JEDApiService {
     });
   }
 
-  static async getMeterStatistics() {
+  async getMeterStatistics() {
     const url = this.buildApiUrl(this.endpoints.METERS.STATISTICS);
     return await this.makeRequest(url, { 
       method: 'GET',
@@ -558,7 +591,7 @@ class JEDApiService {
     });
   }
 
-  static async getMeterById(id) {
+  async getMeterById(id) {
     const url = this.buildApiUrl(this.endpoints.METERS.BY_ID(id));
     return await this.makeRequest(url, { 
       method: 'GET',
@@ -567,7 +600,7 @@ class JEDApiService {
     });
   }
 
-  static async getMeterByNumber(meterNumber) {
+  async getMeterByNumber(meterNumber) {
     const url = this.buildApiUrl(this.endpoints.METERS.BY_NUMBER(meterNumber));
     return await this.makeRequest(url, { 
       method: 'GET',
@@ -576,14 +609,14 @@ class JEDApiService {
     });
   }
 
-  static async deleteMeter(meterNumber) {
+  async deleteMeter(meterNumber) {
     const url = this.buildApiUrl(this.endpoints.METERS.BY_ID(meterNumber));
     const response = await this.makeRequest(url, { method: 'DELETE' });
     this.clearCache();
     return response;
   }
 
-  static async exportCustomerRequests(params = {}) {
+  async exportCustomerRequests(params = {}) {
     const url = this.utils.buildUrlWithParams(
       this.endpoints.METERS.CUSTOMER_REQUESTS_EXPORT,
       params
@@ -600,22 +633,22 @@ class JEDApiService {
   }
 
   // ==================== UPLOADS METHODS ====================
-  static async uploadExcel(formData) {
+  async uploadExcel(formData) {
     const url = this.buildApiUrl(this.endpoints.UPLOADS.EXCEL);
     return await this.uploadAndProcessExcel(url, formData);
   }
 
-  static async uploadExcelFirstSheet(formData) {
+  async uploadExcelFirstSheet(formData) {
     const url = this.buildApiUrl(this.endpoints.UPLOADS.EXCEL_FIRST_SHEET);
     return await this.uploadAndProcessExcel(url, formData);
   }
 
-  static async uploadExcelModified(formData) {
+  async uploadExcelModified(formData) {
     const url = this.buildApiUrl(this.endpoints.UPLOADS.EXCEL_MODIFIED);
     return await this.uploadAndProcessExcel(url, formData);
   }
 
-  static async uploadAndProcessExcel(url, formData) {
+  async uploadAndProcessExcel(url, formData) {
     const headers = this.utils.buildHeaders();
     delete headers['Content-Type'];
 
@@ -633,7 +666,7 @@ class JEDApiService {
   }
 
   // ==================== COMPLAINTS METHODS ====================
-  static async submitComplaint(complaintData) {
+  async submitComplaint(complaintData) {
     const url = this.buildApiUrl(this.endpoints.COMPLAINTS.BASE);
     return await this.makeRequest(url, {
       method: 'POST',
@@ -641,13 +674,11 @@ class JEDApiService {
     });
   }
 
-  static async getComplaints(params = {}) {
-    const cleanParams = Object.fromEntries(
-      Object.entries(params).filter(([_, v]) => v != null && v !== '')
+  async getComplaints(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.COMPLAINTS.BASE,
+      params
     );
-    const queryString = new URLSearchParams(cleanParams).toString();
-    const url = `${this.buildApiUrl(this.endpoints.COMPLAINTS.BASE)}?${queryString}`;
-
     return await this.makeRequest(url, { 
       method: 'GET',
       useCache: true,
@@ -655,7 +686,7 @@ class JEDApiService {
     });
   }
 
-  static async getComplaintById(complaintId) {
+  async getComplaintById(complaintId) {
     const url = this.buildApiUrl(this.endpoints.COMPLAINTS.BY_ID(complaintId));
     return await this.makeRequest(url, { 
       method: 'GET',
@@ -665,7 +696,7 @@ class JEDApiService {
   }
 
   // ==================== SETTINGS MANAGEMENT METHODS ====================
-  static async getMeterTypes(params = {}) {
+  async getMeterTypes(params = {}) {
     console.log('[API] Fetching meter types');
     const cleanParams = Object.fromEntries(
       Object.entries(params).filter(([_, v]) => v != null && v !== '')
@@ -679,7 +710,7 @@ class JEDApiService {
     });
   }
 
-  static async getMeterTypeById(id) {
+  async getMeterTypeById(id) {
     console.log('[API] Fetching meter type:', id);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
     return await this.makeRequest(url, { 
@@ -689,7 +720,7 @@ class JEDApiService {
     });
   }
 
-  static async createMeterType(meterTypeData) {
+  async createMeterType(meterTypeData) {
     console.log('[API] Creating meter type:', meterTypeData);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BASE);
     const response = await this.makeRequest(url, {
@@ -700,18 +731,18 @@ class JEDApiService {
     return response;
   }
 
-  static async updateMeterType(id, meterTypeData) {
+  async updateMeterType(id, meterTypeData) {
     console.log('[API] Updating meter type:', id, meterTypeData);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
     const response = await this.makeRequest(url, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(meterTypeData),
     });
     this.clearCache();
     return response;
   }
 
-  static async deleteMeterType(id) {
+  async deleteMeterType(id) {
     console.log('[API] Deleting meter type:', id);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
     const response = await this.makeRequest(url, { method: 'DELETE' });
@@ -720,7 +751,7 @@ class JEDApiService {
   }
 
   // ==================== USER MANAGEMENT METHODS ====================
-  static async getUsers(params = {}) {
+  async getUsers(params = {}) {
     console.log('[API] Fetching users');
     const cleanParams = Object.fromEntries(
       Object.entries(params).filter(([_, v]) => v != null && v !== '')
@@ -735,9 +766,9 @@ class JEDApiService {
     });
   }
 
-  static async getUserById(userId) {
+  async getUserById(userId) {
     console.log('[API] Fetching user:', userId);
-    const url = this.buildUrl(this.endpoints.ADMIN.USERS.BY_ID(userId), true);
+    const url = this.buildApiUrl(this.endpoints.ADMIN.USERS.BY_ID(userId));
     return await this.makeRequest(url, { 
       method: 'GET',
       useCache: true,
@@ -745,9 +776,9 @@ class JEDApiService {
     });
   }
 
-  static async createUser(userData) {
+  async createUser(userData) {
     console.log('[API] Creating user:', userData.email);
-    const url = this.buildUrl(this.endpoints.ADMIN.USERS.BASE, true);
+    const url = this.buildApiUrl(this.endpoints.ADMIN.USERS.BASE);
     const response = await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(userData),
@@ -756,9 +787,9 @@ class JEDApiService {
     return response;
   }
 
-  static async updateUser(userId, userData) {
+  async updateUser(userId, userData) {
     console.log('[API] Updating user:', userId);
-    const url = this.buildUrl(this.endpoints.ADMIN.USERS.BY_ID(userId), true);
+    const url = this.buildApiUrl(this.endpoints.ADMIN.USERS.BY_ID(userId));
     const response = await this.makeRequest(url, {
       method: 'PUT',
       body: JSON.stringify(userData),
@@ -767,24 +798,24 @@ class JEDApiService {
     return response;
   }
 
-  static async deleteUser(userId) {
+  async deleteUser(userId) {
     console.log('[API] Deleting user:', userId);
-    const url = this.buildUrl(this.endpoints.ADMIN.USERS.BY_ID(userId), true);
+    const url = this.buildApiUrl(this.endpoints.ADMIN.USERS.BY_ID(userId));
     const response = await this.makeRequest(url, { method: 'DELETE' });
     this.clearCache();
     return response;
   }
 
   // ==================== TOKEN & STORAGE MANAGEMENT ====================
-  static getAuthToken() {
+  getAuthToken() {
     return localStorage.getItem('jedAuthToken');
   }
 
-  static getRefreshToken() {
+  getRefreshToken() {
     return localStorage.getItem('jedRefreshToken');
   }
 
-  static storeTokens(tokens) {
+  storeTokens(tokens) {
     if (tokens.token) {
       localStorage.setItem('jedAuthToken', tokens.token);
     }
@@ -793,17 +824,17 @@ class JEDApiService {
     }
   }
 
-  static storeUser(userData) {
+  storeUser(userData) {
     localStorage.setItem('jedUser', JSON.stringify(userData));
   }
 
-  static clearTokens() {
+  clearTokens() {
     localStorage.removeItem('jedAuthToken');
     localStorage.removeItem('jedRefreshToken');
     localStorage.removeItem('jedUser');
   }
 
-  static getStoredUser() {
+  getStoredUser() {
     try {
       const userStr = localStorage.getItem('jedUser');
       return userStr ? JSON.parse(userStr) : null;
@@ -813,25 +844,25 @@ class JEDApiService {
     }
   }
 
-  static isAuthenticated() {
+  isAuthenticated() {
     return !!this.getAuthToken() && !!this.getStoredUser();
   }
 
-  static getUserRole() {
+  getUserRole() {
     const user = this.getStoredUser();
     return user?.role || null;
   }
 
-  static isAdmin() {
+  isAdmin() {
     return this.getUserRole() === 'admin';
   }
 
-  static isInstaller() {
+  isInstaller() {
     return this.getUserRole() === 'installer';
   }
 
   // ==================== HEALTH CHECK & VALIDATION ====================
-  static async validateApiIntegration() {
+  async validateApiIntegration() {
     console.log('[API Health Check] Starting validation...');
     const checks = {
       baseUrl: !!this.config.BASE_URL,
@@ -856,5 +887,5 @@ class JEDApiService {
 // Export both the class and a singleton instance
 const jedApi = new JEDApiService();
 
-export { JEDApiService, ERROR_TYPES }; // Keep class export for potential extension
-export default JEDApiService; // Export the class as default
+export { JEDApiService, ERROR_TYPES };
+export default jedApi;

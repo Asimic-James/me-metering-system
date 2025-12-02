@@ -27,11 +27,13 @@ const ROLES = {
 // User Form Component
 const UserForm = ({ user, onSubmit, onCancel, loading }) => {
   const [formData, setFormData] = useState({
-    name: user?.name || '',
+    firstName: user?.firstName || (user?.name ? user.name.split(' ')[0] : ''),
+    lastName: user?.lastName || (user?.name ? user.name.split(' ').slice(1).join(' ') : ''),
     phone: user?.phone || '',
     email: user?.email || '',
     role: user?.role || ROLES.INSTALLER,
     employeeId: user?.employeeId || '',
+    nin: user?.nin || '',
     password: '',
     confirmPassword: ''
   });
@@ -41,8 +43,11 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
   const validateForm = () => {
     const newErrors = {};
     
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = 'First Name is required';
+    }
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = 'Last Name is required';
     }
     
     if (!formData.phone.trim()) {
@@ -57,6 +62,12 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
       newErrors.email = 'Invalid email format';
     }
     
+    if (!formData.nin.trim()) {
+      newErrors.nin = 'NIN is required';
+    } else if (!/^\d{11}$/.test(formData.nin)) {
+      newErrors.nin = 'NIN must be 11 digits';
+    }
+
     if (!user && !formData.password) {
       newErrors.password = 'Password is required';
     } else if (formData.password && formData.password.length < 8) {
@@ -81,24 +92,45 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        {/* Name Field */}
+        {/* First Name Field */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Name *
+            First Name *
           </label>
           <input
             type="text"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            value={formData.firstName}
+            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
             className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-              errors.name 
+              errors.firstName 
                 ? 'border-red-300 dark:border-red-600' 
                 : 'border-gray-300 dark:border-gray-600'
             }`}
-            placeholder="John Doe"
+            placeholder="John"
           />
-          {errors.name && (
-            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.name}</p>
+          {errors.firstName && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.firstName}</p>
+          )}
+        </div>
+
+        {/* Last Name Field */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Last Name *
+          </label>
+          <input
+            type="text"
+            value={formData.lastName}
+            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
+              errors.lastName 
+                ? 'border-red-300 dark:border-red-600' 
+                : 'border-gray-300 dark:border-gray-600'
+            }`}
+            placeholder="Doe"
+          />
+          {errors.lastName && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.lastName}</p>
           )}
         </div>
 
@@ -172,6 +204,28 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
             placeholder="EMP-001"
           />
+        </div>
+
+        {/* NIN Field */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            NIN *
+          </label>
+          <input
+            type="text"
+            value={formData.nin}
+            onChange={(e) => setFormData({ ...formData, nin: e.target.value })}
+            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
+              errors.nin 
+                ? 'border-red-300 dark:border-red-600' 
+                : 'border-gray-300 dark:border-gray-600'
+            }`}
+            placeholder="11-digit NIN"
+            maxLength={11}
+          />
+          {errors.nin && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.nin}</p>
+          )}
         </div>
 
         {/* Password Fields - Only show for new users */}
@@ -317,8 +371,12 @@ function UserManagement() {
       setActionLoading('create');
       setError(null);
       
-      console.log('[UserManagement] Creating user:', userData.email);
-      await jedApi.createUser(userData);
+      const payload = {
+        ...userData,
+        role: userData.role.toUpperCase(),
+      };
+      console.log('[UserManagement] Creating user:', payload.email);
+      await jedApi.createUser(payload);
       
       setShowForm(false);
       await fetchUsers();
@@ -336,7 +394,11 @@ function UserManagement() {
       setError(null);
       
       console.log('[UserManagement] Updating user:', editingUser.id);
-      await jedApi.updateUser(editingUser.id, userData);
+      const payload = {
+        ...userData,
+        role: userData.role.toUpperCase(),
+      };
+      await jedApi.updateUser(editingUser.id, payload);
       
       setShowForm(false);
       setEditingUser(null);
@@ -373,7 +435,7 @@ function UserManagement() {
   // Filter users based on search and role
   const filteredUsers = users.filter(user => {
     const searchLower = searchQuery.toLowerCase();
-    const userName = user?.name || '';
+    const userName = `${user?.firstName || ''} ${user?.lastName || ''}`;
     const userEmail = user?.email || '';
     const userPhone = user?.phone || '';
     
@@ -547,12 +609,12 @@ function UserManagement() {
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
                           <span className="text-white font-semibold text-sm">
-                            {(user?.name || 'U').charAt(0).toUpperCase()}
+                            {((user?.firstName || 'U')[0] + (user?.lastName || ''))[0].toUpperCase()}
                           </span>
                         </div>
                         <div>
                           <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {user?.name || 'Unknown User'}
+                            {`${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown User'}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
                             {user?.email || 'No email'}
@@ -604,7 +666,7 @@ function UserManagement() {
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteUser(user.id, user.name)}
+                          onClick={() => handleDeleteUser(user.id, `${user.firstName} ${user.lastName}`)}
                           disabled={actionLoading === `delete-${user.id}`}
                           className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
                           title="Delete user"

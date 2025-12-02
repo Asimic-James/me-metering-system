@@ -1,6 +1,7 @@
 // src/components/contexts/AuthContext.jsx
+// Updated with better error handling and performance optimizations
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import jedApi from '../services/api';
+import JEDApiService from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -15,7 +16,12 @@ export const AuthProvider = ({ children }) => {
     
     return {
       ...userData,
-      role: userData.role?.toLowerCase()?.trim() || 'installer'
+      role: userData.role?.toLowerCase()?.trim() || 'installer',
+      // Ensure all required fields are present
+      id: userData.id,
+      phone: userData.phone,
+      name: userData.name || userData.phone,
+      email: userData.email || null
     };
   }, []);
 
@@ -26,10 +32,10 @@ export const AuthProvider = ({ children }) => {
       
       try {
         setError(null);
-        const [storedUser, token] = await Promise.all([
-          jedApi.getStoredUser(),
-          jedApi.getAuthToken()
-        ]);
+        
+        // Check for both user and token
+        const storedUser = JEDApiService.getStoredUser();
+        const token = JEDApiService.getAuthToken();
 
         if (storedUser && token) {
           const normalizedUser = normalizeUser(storedUser);
@@ -43,17 +49,26 @@ export const AuthProvider = ({ children }) => {
           setUser(normalizedUser);
         } else {
           console.log('[AuthContext] No valid session found');
+          
           // Clear any partial/corrupted data
           if (storedUser && !token) {
-            await jedApi.clearTokens();
+            console.warn('[AuthContext] Found user without token, clearing storage');
+            JEDApiService.clearTokens();
           }
+          
           setUser(null);
         }
       } catch (error) {
         console.error('[AuthContext] Error initializing auth:', error);
         setError(error.message);
+        
         // Clear potentially corrupted data
-        await jedApi.clearTokens();
+        try {
+          JEDApiService.clearTokens();
+        } catch (clearError) {
+          console.error('[AuthContext] Error clearing tokens:', clearError);
+        }
+        
         setUser(null);
       } finally {
         setLoading(false);
@@ -63,12 +78,19 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
   }, [normalizeUser]);
 
+  // Login function
   const login = useCallback(async (userData) => {
-    console.log('[AuthContext] Login called with user data:', userData);
+    console.log('[AuthContext] Login called with user data');
     
     try {
       setError(null);
+      
+      // Normalize and validate user data
       const normalizedUser = normalizeUser(userData);
+      
+      if (!normalizedUser.id || !normalizedUser.phone || !normalizedUser.role) {
+        throw new Error('Invalid user data: missing required fields');
+      }
       
       console.log('[AuthContext] Setting user:', {
         id: normalizedUser.id,
@@ -79,29 +101,46 @@ export const AuthProvider = ({ children }) => {
       setUser(normalizedUser);
       
       // Verify storage consistency
-      const [storedUser, token] = await Promise.all([
-        jedApi.getStoredUser(),
-        jedApi.getAuthToken()
-      ]);
+      const storedUser = JEDApiService.getStoredUser();
+      const token = JEDApiService.getAuthToken();
       
-      console.log('[AuthContext] Storage verification - User:', !!storedUser, 'Token:', !!token);
+      if (!storedUser || !token) {
+        console.error('[AuthContext] Storage verification failed - User:', !!storedUser, 'Token:', !!token);
+        throw new Error('Failed to store authentication data');
+      }
+      
+      console.log('[AuthContext] Login successful, storage verified');
     } catch (error) {
       console.error('[AuthContext] Login error:', error);
       setError(error.message);
+      
+      // Cleanup on error
+      setUser(null);
       throw error;
     }
   }, [normalizeUser]);
 
+  // Logout function
   const logout = useCallback(async () => {
     console.log('[AuthContext] Logout called');
     
     try {
       setError(null);
-      await jedApi.logout();
+      
+      // Call API logout (handles both server and local cleanup)
+      await JEDApiService.logout();
+      
+      console.log('[AuthContext] Logout successful');
     } catch (error) {
       console.error('[AuthContext] Logout error:', error);
       setError(error.message);
+      
       // Force clear local state even if API call fails
+      try {
+        JEDApiService.clearTokens();
+      } catch (clearError) {
+        console.error('[AuthContext] Error clearing tokens:', clearError);
+      }
     } finally {
       setUser(null);
       setError(null);
@@ -109,13 +148,18 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // Update user function
   const updateUser = useCallback(async (updates) => {
     console.log('[AuthContext] Updating user with:', updates);
     
     try {
       setError(null);
+      
       setUser(prev => {
-        if (!prev) return null;
+        if (!prev) {
+          console.warn('[AuthContext] Cannot update user - no user logged in');
+          return null;
+        }
         
         const updated = {
           ...prev,
@@ -124,11 +168,14 @@ export const AuthProvider = ({ children }) => {
           role: (updates.role || prev.role)?.toLowerCase()?.trim() || 'installer'
         };
         
-        // Update localStorage asynchronously
-        jedApi.storeUser(updated).catch(error => {
-          console.error('[AuthContext] Failed to store updated user:', error);
+        // Update localStorage
+        try {
+          JEDApiService.storeUser(updated);
+          console.log('[AuthContext] User data updated in storage');
+        } catch (storageError) {
+          console.error('[AuthContext] Failed to store updated user:', storageError);
           setError('Failed to save user data');
-        });
+        }
         
         return updated;
       });
@@ -139,7 +186,45 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // Refresh user data from server
+  const refreshUser = useCallback(async () => {
+    console.log('[AuthContext] Refreshing user data...');
+    
+    try {
+      setError(null);
+      
+      if (!user) {
+        console.warn('[AuthContext] Cannot refresh - no user logged in');
+        return;
+      }
+      
+      const response = await JEDApiService.getProfile();
+      
+      if (response.user) {
+        const normalizedUser = normalizeUser(response.user);
+        setUser(normalizedUser);
+        console.log('[AuthContext] User data refreshed');
+      }
+    } catch (error) {
+      console.error('[AuthContext] Error refreshing user:', error);
+      
+      // If refresh fails with auth error, logout
+      if (error.message?.includes('AUTH_ERROR') || error.message?.includes('401')) {
+        console.warn('[AuthContext] Auth error during refresh, logging out');
+        await logout();
+      } else {
+        setError(error.message);
+      }
+    }
+  }, [user, normalizeUser, logout]);
+
+  // Clear error function
   const clearError = useCallback(() => setError(null), []);
+
+  // Check authentication status
+  const isAuthenticated = useMemo(() => {
+    return Boolean(user && JEDApiService.getAuthToken());
+  }, [user]);
 
   // Memoized context value to prevent unnecessary re-renders
   const value = useMemo(() => ({
@@ -147,19 +232,20 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     updateUser,
+    refreshUser,
     error,
     clearError,
-    isAuthenticated: Boolean(user && jedApi.getAuthToken()),
+    isAuthenticated,
     loading
-  }), [user, login, logout, updateUser, error, clearError, loading]);
+  }), [user, login, logout, updateUser, refreshUser, error, clearError, isAuthenticated, loading]);
 
   // Show loading state with consistent styling
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 transition-colors">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading authentication...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading authentication...</p>
         </div>
       </div>
     );
