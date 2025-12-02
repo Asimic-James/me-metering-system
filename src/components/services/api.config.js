@@ -3,7 +3,7 @@
  * Base URL: https://pharez-api.onrender.com/api/v1
  * API Documentation: https://pharez-api.onrender.com/api-docs
  * 
- * Enhanced with better environment handling, error types, and utility functions
+ * Enhanced with verification endpoints and better environment handling
  */
 
 // Environment Configuration with validation
@@ -38,11 +38,13 @@ export const API_CONFIG = {
   // API Endpoint Groups - Updated to match service patterns
   ENDPOINT_GROUPS: {
     AUTH: '/auth',
+    VERIFICATION: '/verification',
     JED: '/external/jed',
-    ADMIN: '/admin',
+    ADMIN: '',  // FIXED: Empty prefix - admin endpoints are at root level
     REPORTS: '/reports',
     METERS: '/meters',
-    SETTINGS: '/settings',
+    USERS: '', // User endpoints are at the root level
+    SETTINGS: '',  // Empty prefix for root-level settings endpoints
     COMPLAINTS: '/complaints',
     UPLOADS: '/uploads'
   },
@@ -63,7 +65,7 @@ export const API_CONFIG = {
   FEATURES: {
     RETRY_FAILED_REQUESTS: true,
     CACHE_RESPONSES: true,
-    LOG_REQUESTS: import.meta.env.DEV, // Use dev mode instead of process.env
+    LOG_REQUESTS: import.meta.env.DEV,
   }
 };
 
@@ -74,7 +76,8 @@ export const ERROR_TYPES = {
   PERMISSION: 'PERMISSION_ERROR',
   NOT_FOUND: 'NOT_FOUND',
   SERVER: 'SERVER_ERROR',
-  NETWORK: 'NETWORK_ERROR'
+  NETWORK: 'NETWORK_ERROR',
+  VERIFICATION: 'VERIFICATION_ERROR'
 };
 
 // API Endpoints - Organized by functionality with better consistency
@@ -89,6 +92,14 @@ export const ENDPOINTS = {
     REFRESH_TOKEN: '/refresh-token',
     FORGOT_PASSWORD: '/forgot-password',
     RESET_PASSWORD: '/reset-password',
+  },
+  
+  // ==================== VERIFICATION ENDPOINTS ====================
+  VERIFICATION: {
+    SEND_PHONE_OTP: '/send-phone-otp',
+    VERIFY_PHONE: '/verify-phone',
+    SEND_EMAIL_OTP: '/send-email-otp',
+    VERIFY_EMAIL: '/verify-email',
   },
   
   // ==================== JED INTEGRATION ENDPOINTS ====================
@@ -126,17 +137,24 @@ export const ENDPOINTS = {
     CUSTOMER_REQUESTS_EXPORT: '/meters/customer-requests/export',
   },
   
+  // ==================== USER MANAGEMENT ENDPOINTS ====================
+  USERS: {
+    BASE: '/users',
+    BY_ID: (userId) => `/users/${userId}`,
+    STATUS: (userId) => `/users/${userId}/status`,
+  },
+
   // ==================== ADMIN ENDPOINTS ====================
   ADMIN: {
     // User Management
     USERS: {
-      BASE: '/users',
-      BY_ID: (userId) => `/users/${userId}`,
-      STATUS: (userId) => `/users/${userId}/status`,
+      BASE: '/auth/users',  // FIXED: Auth users endpoint
+      BY_ID: (userId) => `/auth/users/${userId}`,
+      STATUS: (userId) => `/auth/users/${userId}/status`,
     },
     
     // Dashboard & Analytics
-    DASHBOARD_STATS: '/dashboard-stats',
+    DASHBOARD_STATS: '/dashboard-stats',  // FIXED: Root-level endpoint
     SYSTEM_ANALYTICS: '/analytics',
     PERFORMANCE_REPORTS: '/reports/performance',
     
@@ -147,6 +165,7 @@ export const ENDPOINTS = {
   },
   
   // ==================== SETTINGS ENDPOINTS ====================
+  // FIXED: These are root-level endpoints, not prefixed with /settings group
   SETTINGS: {
     METER_TYPES: {
       BASE: '/settings/meter-type',
@@ -218,6 +237,15 @@ export const STATUS = {
     PENDING_VERIFICATION: 'pending_verification',
   },
   
+  // Verification Status
+  VERIFICATION: {
+    PENDING: 'pending',
+    SENT: 'sent',
+    VERIFIED: 'verified',
+    EXPIRED: 'expired',
+    FAILED: 'failed',
+  },
+  
   // System Status
   SYSTEM: {
     OPERATIONAL: 'operational',
@@ -236,6 +264,15 @@ export const ERROR_CODES = {
     ACCESS_DENIED: 'AUTH_003',
     INVALID_TOKEN: 'AUTH_004',
     SESSION_EXPIRED: 'AUTH_005',
+  },
+  
+  // Verification Errors
+  VERIFICATION: {
+    INVALID_OTP: 'VER_001',
+    OTP_EXPIRED: 'VER_002',
+    TOO_MANY_ATTEMPTS: 'VER_003',
+    ALREADY_VERIFIED: 'VER_004',
+    SEND_FAILED: 'VER_005',
   },
   
   // Validation Errors
@@ -267,24 +304,29 @@ export const ERROR_CODES = {
 export const API_UTILS = {
   /**
    * Build full URL for an endpoint with group support
-   * @param {string} endpoint - The endpoint path
-   * @param {string} group - Endpoint group (AUTH, JED, etc.)
-   * @returns {string} Full URL
+   * FIXED: Better handling of empty group prefixes
    */
   buildUrl: (endpoint, group = 'JED') => {
-    // Handle absolute URLs
     if (endpoint.startsWith('http')) {
       return endpoint;
     }
     
-    const baseGroup = API_CONFIG.ENDPOINT_GROUPS[group] || '';
-    return `${API_CONFIG.BASE_URL}${API_CONFIG.API_VERSION}${baseGroup}${endpoint}`;
+    const baseGroup = API_CONFIG.ENDPOINT_GROUPS[group];
+    
+    // Handle undefined or null group
+    if (baseGroup === undefined || baseGroup === null) {
+      console.warn(`[API Config] Unknown endpoint group: ${group}, using default`);
+      return `${API_CONFIG.BASE_URL}${API_CONFIG.API_VERSION}${endpoint}`;
+    }
+    
+    // Handle empty string group (root level endpoints like settings)
+    const groupPath = baseGroup === '' ? '' : baseGroup;
+    
+    return `${API_CONFIG.BASE_URL}${API_CONFIG.API_VERSION}${groupPath}${endpoint}`;
   },
   
   /**
    * Build API URL without group prefix (for root endpoints)
-   * @param {string} endpoint - The endpoint path
-   * @returns {string} Full URL
    */
   buildApiUrl: (endpoint) => {
     if (endpoint.startsWith('http')) {
@@ -295,8 +337,6 @@ export const API_UTILS = {
   
   /**
    * Build query string from parameters
-   * @param {Object} params - Query parameters
-   * @returns {string} Query string
    */
   buildQueryString: (params) => {
     if (!params || Object.keys(params).length === 0) {
@@ -321,21 +361,20 @@ export const API_UTILS = {
   
   /**
    * Build full URL with query parameters
-   * @param {string} endpoint - The endpoint path
-   * @param {Object} queryParams - Query parameters
-   * @param {string} group - Endpoint group
-   * @returns {string} Full URL with query string
+   * FIXED: Support for root-level endpoints without group
    */
-  buildUrlWithParams: (endpoint, queryParams = {}, group = 'JED') => {
-    const baseUrl = API_UTILS.buildUrl(endpoint, group);
+  buildUrlWithParams: (endpoint, queryParams = {}, group = null) => {
+    // If no group specified, use buildApiUrl for root-level endpoints
+    const baseUrl = group !== null 
+      ? API_UTILS.buildUrl(endpoint, group)
+      : API_UTILS.buildApiUrl(endpoint);
+    
     const queryString = API_UTILS.buildQueryString(queryParams);
     return `${baseUrl}${queryString}`;
   },
   
   /**
    * Check if response is successful
-   * @param {Response} response - Fetch response
-   * @returns {boolean} Whether response is successful
    */
   isSuccessResponse: (response) => {
     return response.ok && response.status >= 200 && response.status < 300;
@@ -343,8 +382,6 @@ export const API_UTILS = {
   
   /**
    * Get error message from response
-   * @param {Response} response - Fetch response
-   * @returns {Promise<string>} Error message
    */
   getErrorMessage: async (response) => {
     try {
@@ -357,8 +394,6 @@ export const API_UTILS = {
   
   /**
    * Get timeout duration based on endpoint type
-   * @param {string} endpoint - The endpoint path
-   * @returns {number} Timeout in milliseconds
    */
   getTimeout: (endpoint) => {
     const longRunningEndpoints = [
@@ -370,14 +405,12 @@ export const API_UTILS = {
     ];
     
     return longRunningEndpoints.some(e => endpoint.includes(e)) 
-      ? 60000 // 60 seconds for long-running operations
+      ? 60000
       : API_CONFIG.TIMEOUT;
   },
   
   /**
    * Check if request should be retried based on error
-   * @param {Error} error - The error object
-   * @returns {boolean} Whether to retry
    */
   shouldRetry: (error) => {
     if (!API_CONFIG.FEATURES.RETRY_FAILED_REQUESTS) {
@@ -390,7 +423,7 @@ export const API_UTILS = {
       'Failed to fetch'
     ];
     
-    const retryableStatuses = [502, 503, 504]; // Gateway errors
+    const retryableStatuses = [502, 503, 504];
     
     return retryableErrors.some(retryableError => 
       error.message?.includes(retryableError) || 
@@ -400,8 +433,6 @@ export const API_UTILS = {
   
   /**
    * Calculate retry delay with exponential backoff
-   * @param {number} attempt - Current attempt number
-   * @returns {number} Delay in milliseconds
    */
   calculateRetryDelay: (attempt) => {
     const delay = API_CONFIG.RETRY_CONFIG.BASE_DELAY * Math.pow(2, attempt);
@@ -410,16 +441,11 @@ export const API_UTILS = {
   
   /**
    * Delay utility for retries
-   * @param {number} ms - Milliseconds to delay
-   * @returns {Promise} Promise that resolves after delay
    */
   delay: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
   
   /**
    * Build headers with authentication
-   * @param {Object} customHeaders - Additional headers
-   * @param {string} authToken - Authentication token
-   * @returns {Object} Headers object
    */
   buildHeaders: (customHeaders = {}, authToken = null) => {
     const headers = {
@@ -450,6 +476,7 @@ export default {
   REQUEST_STATUS: STATUS.REQUEST,
   PAYMENT_STATUS: STATUS.PAYMENT,
   INSTALLATION_STATUS: STATUS.INSTALLATION,
+  VERIFICATION_STATUS: STATUS.VERIFICATION,
   
   // Helper functions
   buildUrl: API_UTILS.buildUrl,

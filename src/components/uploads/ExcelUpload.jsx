@@ -2,18 +2,46 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { PERMISSIONS, hasPermission } from '../auth/permissions.jsx';
 import jedApi from '../services/api';
-import { AlertCircle, Upload, Download } from 'lucide-react';
+import { ENDPOINTS } from '../services/api.config.js';
+import { AlertCircle, Upload, Download, FileCheck2, FileX2, Percent, List, FileDown } from 'lucide-react';
+
+const UPLOAD_MODES = {
+  METERS: {
+    value: 'meters',
+    label: 'Upload New Meters',
+    description: 'Standard process for adding new meters to the system.',
+    endpoint: ENDPOINTS.METERS.UPLOAD,
+    apiGroup: 'METERS'
+  },
+  PROCESS_DEFAULT: {
+    value: 'process-default',
+    label: 'Process (Server Default)',
+    description: 'Use the server\'s default Excel processing logic.',
+    endpoint: ENDPOINTS.UPLOADS.EXCEL
+  },
+  PROCESS_FIRST_SHEET: {
+    value: 'process-first-sheet',
+    label: 'Process First Sheet Only',
+    description: 'Only data from the first sheet of the Excel file will be processed.',
+    endpoint: ENDPOINTS.UPLOADS.EXCEL_FIRST_SHEET
+  },
+  PROCESS_MODIFIED: {
+    value: 'process-modified',
+    label: 'Process & Download Modified File',
+    description: 'The server will process the file and return a modified version for download.',
+    endpoint: ENDPOINTS.UPLOADS.EXCEL_MODIFIED
+  }
+};
 
 function ExcelUpload() {
   const { user } = useAuth();
   const [file, setFile] = useState(null);
-  const [uploadType, setUploadType] = useState('meters'); // meters | excel | first-sheet | modified
+  const [uploadMode, setUploadMode] = useState(UPLOAD_MODES.METERS.value);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
   const [error, setError] = useState(null);
   const [uploadResult, setUploadResult] = useState(null);
 
-  // FIX: Use the correct permission path
   if (!hasPermission(user?.role, PERMISSIONS.INSTALLATIONS.CREATE)) {
     return (
       <div className="p-8 text-center">
@@ -53,70 +81,58 @@ function ExcelUpload() {
   };
 
   const handleUpload = async () => {
-    if (!file) return setError('Please select a file to upload.');
+    if (!file) {
+      setError('Please select a file to upload.');
+      return;
+    }
 
     setUploading(true);
     setError(null);
     setMessage('Uploading...');
     setUploadResult(null);
 
+    const selectedMode = Object.values(UPLOAD_MODES).find(m => m.value === uploadMode);
+
     try {
-      const fd = new FormData();
-      fd.append('file', file);
+      const formData = new FormData();
+      formData.append('file', file);
       
-      // include installer info when available
-      const storedUser = jedApi.getStoredUser?.() || null;
-      if (storedUser) {
-        fd.append('installerId', storedUser.id || storedUser.employeeId || storedUser.phone || '');
+      const storedUser = jedApi.getStoredUser();
+      if (storedUser?.id) {
+        formData.append('installerId', storedUser.id);
       }
 
-      let resp;
-      
-      // Use the meters upload endpoint for the new API
-      if (uploadType === 'meters') {
-        resp = await jedApi.uploadMeters(fd);
-        
-        // Handle the response with the new format
-        if (resp.success) {
-          setUploadResult(resp.data);
-          setMessage(resp.message || 'Meters uploaded successfully');
-        } else {
-          throw new Error(resp.message || 'Upload failed');
-        }
-      } 
-      // Keep existing functionality for other upload types
-      else if (uploadType === 'excel') {
-        resp = await jedApi.uploadExcel(fd);
-      } else if (uploadType === 'first-sheet') {
-        resp = await jedApi.uploadExcelFirstSheet(fd);
+      let response;
+      if (selectedMode.apiGroup === 'METERS') {
+        response = await jedApi.uploadMeters(formData);
       } else {
-        resp = await jedApi.uploadExcelModified(fd);
+        response = await jedApi.processExcelUpload(selectedMode.endpoint, formData);
       }
 
-      // Handle non-meters responses (existing functionality)
-      if (uploadType !== 'meters') {
-        // If server returned a Blob (modified file), prompt download
-        if (resp instanceof Blob) {
-          const url = URL.createObjectURL(resp);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'processed.xlsx';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-          setMessage('Processed file downloaded');
-        } else {
-          // assume JSON response
-          setMessage(resp?.message || 'Upload successful');
-        }
+      // Handle different response types
+      if (response instanceof Blob) {
+        const url = URL.createObjectURL(response);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'processed_file.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setMessage('Processed file downloaded successfully.');
+      } else if (response.success && response.data) { // Standard meters upload response
+        setUploadResult(response.data);
+        setMessage(response.message || 'Meters uploaded successfully.');
+      } else { // Other JSON responses
+        setMessage(response.message || 'Upload completed successfully.');
       }
 
-      // clear selected file on success
       setFile(null);
+      document.querySelector('input[type="file"]').value = ''; // Reset file input
     } catch (err) {
       console.error('Upload failed', err);
-      setError(err?.message || 'Upload failed.');
+      const errorMessage = err.message.includes(':') ? err.message.split(':')[1].trim() : err.message;
+      setError(errorMessage || 'An unknown error occurred during upload.');
       setMessage(null);
     } finally {
       setUploading(false);
@@ -132,12 +148,12 @@ function ExcelUpload() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Upload Meters (Excel)</h1>
           <p className="text-gray-600">Upload meters in bulk using an Excel file.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex-shrink-0">
           <button 
             onClick={handleDownloadTemplate} 
             className="inline-flex items-center gap-2 bg-white border px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
@@ -148,7 +164,7 @@ function ExcelUpload() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow p-6">
+      <div className="bg-white rounded-xl border p-6">
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Select Excel file</label>
@@ -168,51 +184,23 @@ function ExcelUpload() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Upload mode</label>
-            <div className="flex gap-4 flex-wrap">
-              <label className="inline-flex items-center gap-2">
-                <input 
-                  type="radio" 
-                  name="mode" 
-                  value="meters" 
-                  checked={uploadType === 'meters'} 
-                  onChange={() => setUploadType('meters')} 
-                  className="text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm">Upload Meters</span>
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input 
-                  type="radio" 
-                  name="mode" 
-                  value="excel" 
-                  checked={uploadType === 'excel'} 
-                  onChange={() => setUploadType('excel')} 
-                  className="text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm">Upload & process (server default)</span>
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input 
-                  type="radio" 
-                  name="mode" 
-                  value="first-sheet" 
-                  checked={uploadType === 'first-sheet'} 
-                  onChange={() => setUploadType('first-sheet')} 
-                  className="text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm">Upload only first sheet</span>
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input 
-                  type="radio" 
-                  name="mode" 
-                  value="modified" 
-                  checked={uploadType === 'modified'} 
-                  onChange={() => setUploadType('modified')} 
-                  className="text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm">Upload & return modified file</span>
-              </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {Object.values(UPLOAD_MODES).map(mode => (
+                <label key={mode.value} className={`flex items-start p-3 border rounded-lg cursor-pointer transition-all ${uploadMode === mode.value ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 'bg-white hover:bg-gray-50'}`}>
+                  <input 
+                    type="radio" 
+                    name="upload-mode" 
+                    value={mode.value} 
+                    checked={uploadMode === mode.value} 
+                    onChange={() => setUploadMode(mode.value)} 
+                    className="mt-1 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="ml-3">
+                    <span className="font-medium text-gray-800">{mode.label}</span>
+                    <p className="text-sm text-gray-500">{mode.description}</p>
+                  </div>
+                </label>
+              ))}
             </div>
           </div>
 
@@ -238,29 +226,26 @@ function ExcelUpload() {
           {uploadResult && (
             <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Upload Results</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <div className="text-center p-3 bg-white rounded border">
-                  <div className="text-2xl font-bold text-gray-900">{uploadResult.totalRows}</div>
-                  <div className="text-sm text-gray-600">Total Rows</div>
-                </div>
-                <div className="text-center p-3 bg-green-50 rounded border border-green-200">
-                  <div className="text-2xl font-bold text-green-700">{uploadResult.created}</div>
-                  <div className="text-sm text-green-600">Created</div>
-                </div>
-                <div className="text-center p-3 bg-red-50 rounded border border-red-200">
-                  <div className="text-2xl font-bold text-red-700">{uploadResult.failed}</div>
-                  <div className="text-sm text-red-600">Failed</div>
-                </div>
-                <div className="text-center p-3 bg-blue-50 rounded border border-blue-200">
-                  <div className="text-2xl font-bold text-blue-700">{uploadResult.successRate || Math.round((uploadResult.created / uploadResult.totalRows) * 100)}%</div>
-                  <div className="text-sm text-blue-600">Success Rate</div>
-                </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <StatCard icon={List} label="Total Rows" value={uploadResult.totalRows} />
+                <StatCard icon={FileCheck2} label="Created" value={uploadResult.created} color="green" />
+                <StatCard icon={FileX2} label="Failed" value={uploadResult.failed} color="red" />
+                <StatCard icon={Percent} label="Success Rate" value={`${uploadResult.successRate || Math.round((uploadResult.created / uploadResult.totalRows) * 100)}%`} color="blue" />
               </div>
 
               {/* Error Details */}
               {uploadResult.errors && uploadResult.errors.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="font-medium text-gray-900 mb-2">Errors ({uploadResult.errors.length}):</h4>
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-medium text-gray-900">Error Details ({uploadResult.errors.length})</h4>
+                    <button
+                      onClick={() => exportErrorsToCSV(uploadResult.errors)}
+                      className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                    >
+                      <FileDown className="w-4 h-4" />
+                      Export Errors
+                    </button>
+                  </div>
                   <div className="max-h-60 overflow-y-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-100">
@@ -288,12 +273,12 @@ function ExcelUpload() {
 
           {/* Messages and Errors */}
           {message && !uploadResult && (
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
               {message}
             </div>
           )}
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {error}
             </div>
           )}
@@ -302,5 +287,44 @@ function ExcelUpload() {
     </div>
   );
 }
+
+const StatCard = ({ icon: Icon, label, value, color = 'gray' }) => {
+  const colors = {
+    gray: 'text-gray-600 bg-gray-50 border-gray-200',
+    green: 'text-green-700 bg-green-50 border-green-200',
+    red: 'text-red-700 bg-red-50 border-red-200',
+    blue: 'text-blue-700 bg-blue-50 border-blue-200',
+  };
+  const textColors = {
+    gray: 'text-gray-900',
+    green: 'text-green-700',
+    red: 'text-red-700',
+    blue: 'text-blue-700',
+  }
+  return (
+    <div className={`flex items-center p-3 rounded-lg border ${colors[color]}`}>
+      <Icon className={`w-6 h-6 mr-3 ${textColors[color]}`} />
+      <div>
+        <div className={`text-2xl font-bold ${textColors[color]}`}>{value}</div>
+        <div className="text-sm font-medium">{label}</div>
+      </div>
+    </div>
+  );
+};
+
+const exportErrorsToCSV = (errors) => {
+  const headers = ['Row', 'Meter Number', 'Error'];
+  const rows = errors.map(e => [e.row + 1, e.meterNumber, `"${e.error.replace(/"/g, '""')}"`]);
+  const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'upload_errors.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+};
 
 export default ExcelUpload;

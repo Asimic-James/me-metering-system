@@ -133,15 +133,15 @@ class JEDApiService {
     this.requestCache.clear();
   }
 
-  // Handle API response with consistent error formatting
+  // FIXED: Handle API response with consistent error formatting
   async handleResponse(response) {
     console.log(`[API] Response: ${response.status} ${response.statusText}`);
 
-    const contentType = response.headers.get('content-type');
+    const contentType = response.headers.get('content-type') || '';
     let data;
 
     try {
-      if (contentType?.includes('text/html') || contentType?.includes('text/plain')) {
+      if (contentType.includes('text/html') || contentType.includes('text/plain')) {
         const text = await response.text();
         console.warn('[API] Received HTML/text response instead of JSON:', text.substring(0, 100));
         
@@ -149,7 +149,7 @@ class JEDApiService {
           throw new Error(`HTTP ${response.status}: Server returned HTML error page`);
         }
         data = { message: text };
-      } else if (contentType?.includes('application/json')) {
+      } else if (contentType.includes('application/json')) {
         data = await response.json();
       } else {
         const text = await response.text();
@@ -169,23 +169,27 @@ class JEDApiService {
     return data;
   }
 
-  // Enhanced error handling with specific error types
+  // FIXED: Enhanced error handling with specific error types
   handleErrorResponse(response, data) {
     const { status } = response;
 
+    // Handle 401 errors first
     if (status === 401) {
       this.clearTokens();
       throw new Error(`${this.errorTypes.AUTH}:${data?.message || 'Invalid credentials'}`);
     }
 
-    const errorMsg = (data?.message || data?.error || '').toString().toLowerCase();
-    const isHtmlError = errorMsg.includes('doctype') || errorMsg.includes('<!');
+    // FIXED: Safely check error message with proper null/undefined handling
+    const errorMsg = data?.message || data?.error || '';
+    const errorMsgStr = String(errorMsg).toLowerCase(); // Convert to string safely
+    const isHtmlError = errorMsgStr.includes('doctype') || errorMsgStr.includes('<!');
     
     if (isHtmlError) {
       console.error('[API] Server returned HTML error page — possible CORS or server issue');
       throw new Error(`${this.errorTypes.SERVER}:Server responded with an error page — check CORS and API endpoint`);
     }
 
+    // Map status codes to error messages
     const errorMap = {
       400: `${this.errorTypes.VALIDATION}:${data?.message || 'Invalid request'}`,
       403: `${this.errorTypes.PERMISSION}:${data?.message || 'Access denied'}`,
@@ -201,14 +205,18 @@ class JEDApiService {
     throw new Error(errorMessage);
   }
 
-  // Enhanced error handling with specific error categorization
+  // FIXED: Enhanced error handling with specific error categorization
   enhanceError(error) {
-    if (error.message && error.message.includes('401')) {
+    // Safely check error message
+    const errorMsg = error?.message || '';
+    const errorMsgStr = String(errorMsg).toLowerCase();
+    
+    if (errorMsgStr.includes('401')) {
       this.clearTokens();
       return new Error('Authentication required. Please login again.');
     }
 
-    if (error.name === 'TypeError' || error.message.toLowerCase().includes('network')) {
+    if (error.name === 'TypeError' || errorMsgStr.includes('network')) {
       return new Error(`${this.errorTypes.NETWORK}:Unable to connect to server`);
     }
 
@@ -219,13 +227,25 @@ class JEDApiService {
     return error;
   }
 
-  // URL construction using config utilities
+  // FIXED: URL construction using config utilities with validation
   buildUrl(endpoint, isAuthEndpoint = false) {
+    // Ensure endpoint is a string
+    if (!endpoint || typeof endpoint !== 'string') {
+      console.error('[API] Invalid endpoint provided:', endpoint);
+      throw new Error('Invalid endpoint: must be a non-empty string');
+    }
+    
     const group = isAuthEndpoint ? 'AUTH' : 'JED';
     return this.utils.buildUrl(endpoint, group);
   }
 
   buildApiUrl(endpoint) {
+    // Ensure endpoint is a string
+    if (!endpoint || typeof endpoint !== 'string') {
+      console.error('[API] Invalid endpoint provided:', endpoint);
+      throw new Error('Invalid endpoint: must be a non-empty string');
+    }
+    
     return this.utils.buildApiUrl(endpoint);
   }
 
@@ -416,7 +436,8 @@ class JEDApiService {
           await this.makeRequest(url, { method: 'POST' });
           console.log('[Auth] Server logout successful');
         } catch (err) {
-          if (err.message && err.message.includes('NOT_FOUND')) {
+          const errMsg = String(err?.message || '').toLowerCase();
+          if (errMsg.includes('not_found') || errMsg.includes('404')) {
             console.warn('[Auth] Logout endpoint not found on server, proceeding with local logout');
           } else {
             console.warn('[Auth] Server logout failed:', err.message);
@@ -493,7 +514,8 @@ class JEDApiService {
         cacheKey: 'dashboard-stats'
       });
     } catch (error) {
-      if (error.message?.includes('PERMISSION_ERROR') || error.message?.includes('403')) {
+      const errMsg = String(error?.message || '').toLowerCase();
+      if (errMsg.includes('permission_error') || errMsg.includes('403')) {
         console.warn('[API] Dashboard stats requires admin permissions');
         throw new Error('PERMISSION_ERROR:Dashboard stats endpoint requires admin role');
       }
@@ -523,7 +545,8 @@ class JEDApiService {
         cacheKey: 'installer-dashboard'
       });
     } catch (error) {
-      if (error.message?.includes('NOT_FOUND') || error.message?.includes('404')) {
+      const errMsg = String(error?.message || '').toLowerCase();
+      if (errMsg.includes('not_found') || errMsg.includes('404')) {
         console.warn('[API] Installer dashboard endpoint not found, will calculate from requests');
         return null;
       }
@@ -633,22 +656,8 @@ class JEDApiService {
   }
 
   // ==================== UPLOADS METHODS ====================
-  async uploadExcel(formData) {
-    const url = this.buildApiUrl(this.endpoints.UPLOADS.EXCEL);
-    return await this.uploadAndProcessExcel(url, formData);
-  }
-
-  async uploadExcelFirstSheet(formData) {
-    const url = this.buildApiUrl(this.endpoints.UPLOADS.EXCEL_FIRST_SHEET);
-    return await this.uploadAndProcessExcel(url, formData);
-  }
-
-  async uploadExcelModified(formData) {
-    const url = this.buildApiUrl(this.endpoints.UPLOADS.EXCEL_MODIFIED);
-    return await this.uploadAndProcessExcel(url, formData);
-  }
-
-  async uploadAndProcessExcel(url, formData) {
+  async processExcelUpload(endpoint, formData) {
+    const url = this.utils.buildUrl(endpoint, 'UPLOADS');
     const headers = this.utils.buildHeaders();
     delete headers['Content-Type'];
 
@@ -697,12 +706,13 @@ class JEDApiService {
 
   // ==================== SETTINGS MANAGEMENT METHODS ====================
   async getMeterTypes(params = {}) {
-    console.log('[API] Fetching meter types');
-    const cleanParams = Object.fromEntries(
-      Object.entries(params).filter(([_, v]) => v != null && v !== '')
+    console.log('[API] Fetching meter types from /settings/meter-type');
+    // Use buildApiUrl (root level) instead of buildUrl with group
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.SETTINGS.METER_TYPES.BASE, 
+      params
     );
-    const queryString = new URLSearchParams(cleanParams).toString();
-    const url = `${this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BASE)}?${queryString}`;
+    console.log('[API] Final URL:', url);
     return await this.makeRequest(url, { 
       method: 'GET',
       useCache: true,
@@ -713,6 +723,7 @@ class JEDApiService {
   async getMeterTypeById(id) {
     console.log('[API] Fetching meter type:', id);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
+    console.log('[API] Final URL:', url);
     return await this.makeRequest(url, { 
       method: 'GET',
       useCache: true,
@@ -723,6 +734,7 @@ class JEDApiService {
   async createMeterType(meterTypeData) {
     console.log('[API] Creating meter type:', meterTypeData);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BASE);
+    console.log('[API] Final URL:', url);
     const response = await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(meterTypeData),
@@ -734,6 +746,7 @@ class JEDApiService {
   async updateMeterType(id, meterTypeData) {
     console.log('[API] Updating meter type:', id, meterTypeData);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
+    console.log('[API] Final URL:', url);
     const response = await this.makeRequest(url, {
       method: 'PATCH',
       body: JSON.stringify(meterTypeData),
@@ -745,6 +758,7 @@ class JEDApiService {
   async deleteMeterType(id) {
     console.log('[API] Deleting meter type:', id);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
+    console.log('[API] Final URL:', url);
     const response = await this.makeRequest(url, { method: 'DELETE' });
     this.clearCache();
     return response;
@@ -753,12 +767,11 @@ class JEDApiService {
   // ==================== USER MANAGEMENT METHODS ====================
   async getUsers(params = {}) {
     console.log('[API] Fetching users');
-    const cleanParams = Object.fromEntries(
-      Object.entries(params).filter(([_, v]) => v != null && v !== '')
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.USERS.BASE, 
+      params,
+      'USERS'
     );
-    const queryString = new URLSearchParams(cleanParams).toString();
-    const url = `${this.buildApiUrl(this.endpoints.ADMIN.USERS.BASE)}?${queryString}`;
-
     return await this.makeRequest(url, { 
       method: 'GET',
       useCache: true,
@@ -768,7 +781,7 @@ class JEDApiService {
 
   async getUserById(userId) {
     console.log('[API] Fetching user:', userId);
-    const url = this.buildApiUrl(this.endpoints.ADMIN.USERS.BY_ID(userId));
+    const url = this.utils.buildUrl(this.endpoints.USERS.BY_ID(userId), 'USERS');
     return await this.makeRequest(url, { 
       method: 'GET',
       useCache: true,
@@ -778,7 +791,7 @@ class JEDApiService {
 
   async createUser(userData) {
     console.log('[API] Creating user:', userData.email);
-    const url = this.buildApiUrl(this.endpoints.ADMIN.USERS.BASE);
+    const url = this.utils.buildUrl(this.endpoints.USERS.BASE, 'USERS');
     const response = await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(userData),
@@ -789,7 +802,7 @@ class JEDApiService {
 
   async updateUser(userId, userData) {
     console.log('[API] Updating user:', userId);
-    const url = this.buildApiUrl(this.endpoints.ADMIN.USERS.BY_ID(userId));
+    const url = this.utils.buildUrl(this.endpoints.USERS.BY_ID(userId), 'USERS');
     const response = await this.makeRequest(url, {
       method: 'PUT',
       body: JSON.stringify(userData),
@@ -800,7 +813,7 @@ class JEDApiService {
 
   async deleteUser(userId) {
     console.log('[API] Deleting user:', userId);
-    const url = this.buildApiUrl(this.endpoints.ADMIN.USERS.BY_ID(userId));
+    const url = this.utils.buildUrl(this.endpoints.USERS.BY_ID(userId), 'USERS');
     const response = await this.makeRequest(url, { method: 'DELETE' });
     this.clearCache();
     return response;
