@@ -1,5 +1,96 @@
-import { useState } from 'react';
-import { Power, Phone, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+// src/components/auth/Login.jsx
+// Modern, mobile-first login with best practices
+import { useState, useCallback, useEffect } from 'react';
+import { Power, Phone, Lock, Eye, EyeOff, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import InfoModal from '../common/InfoModal';
+
+// Validation rules
+const VALIDATION = {
+  PHONE: /^0\d{10}$/,
+  PASSWORD_MIN: 6
+};
+
+// Input field component - Moved outside Login to prevent re-rendering issues
+const InputField = ({ 
+  label, 
+  name, 
+  type, 
+  value,
+  error,
+  isTouched,
+  isSubmitting,
+  icon: Icon, 
+  placeholder, 
+  autoComplete,
+  showToggle = false,
+  onChange,
+  onBlur,
+  onTogglePassword,
+  maxLength
+}) => (
+  <div className="space-y-2">
+    <label 
+      htmlFor={name}
+      className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+    >
+      {label}
+    </label>
+    <div className="relative">
+      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <Icon className={`h-5 w-5 ${error && isTouched ? 'text-red-500' : 'text-gray-400 dark:text-gray-500'}`} />
+      </div>
+      <input
+        type={type}
+        id={name}
+        name={name}
+        value={value}
+        onChange={onChange}
+        onBlur={onBlur}
+        disabled={isSubmitting}
+        maxLength={maxLength}
+        className={`
+          block w-full pl-10 ${showToggle ? 'pr-10' : 'pr-3'} py-3
+          border rounded-lg
+          focus:ring-2 focus:ring-blue-500 focus:border-transparent
+          disabled:opacity-50 disabled:cursor-not-allowed
+          transition-all duration-200
+          text-gray-900 dark:text-white
+          placeholder-gray-400 dark:placeholder-gray-500
+          ${error && isTouched
+            ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/10 focus:ring-red-500'
+            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
+          }
+        `}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        aria-invalid={error && isTouched ? 'true' : 'false'}
+        aria-describedby={error && isTouched ? `${name}-error` : undefined}
+      />
+      {showToggle && (
+        <button
+          type="button"
+          onClick={onTogglePassword}
+          disabled={isSubmitting}
+          className="absolute inset-y-0 right-0 pr-3 flex items-center"
+          tabIndex={-1}
+          aria-label={type === 'text' ? 'Hide password' : 'Show password'}
+        >
+          {type === 'text' ? (
+            <EyeOff className="h-5 w-5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" />
+          ) : (
+            <Eye className="h-5 w-5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors" />
+          )}
+        </button>
+      )}
+    </div>
+    {error && isTouched && (
+      <p id={`${name}-error`} className="text-sm text-red-600 dark:text-red-400 flex items-start gap-1.5" role="alert">
+        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+        <span>{error}</span>
+      </p>
+    )}
+  </div>
+);
 
 function Login({ onLogin }) {
   const [formData, setFormData] = useState({
@@ -11,294 +102,296 @@ function Login({ onLogin }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [modalContent, setModalContent] = useState({ isOpen: false, title: '', message: '' });
+  const [touched, setTouched] = useState({});
 
-  const validateForm = () => {
-    const newErrors = {};
-
-    // Phone validation
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    } else if (!/^0\d{10}$/.test(formData.phone)) {
-      newErrors.phone = 'Phone number must start with 0 and be 11 digits';
-    }
-
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    
-    setFormData(prev => ({ 
-      ...prev, 
-      [name]: type === 'checkbox' ? checked : value 
-    }));
-    
-    // Clear field-specific error
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-    
-    // Clear general login error
+  // Auto-dismiss error after 5 seconds
+  useEffect(() => {
     if (loginError) {
-      setLoginError('');
+      const timer = setTimeout(() => setLoginError(''), 5000);
+      return () => clearTimeout(timer);
     }
-  };
+  }, [loginError]);
 
-  // Removed handleQuickLogin function
+  // Real-time validation
+  const validateField = useCallback((name, value) => {
+    switch (name) {
+      case 'phone':
+        if (!value.trim()) return 'Phone number is required';
+        if (!VALIDATION.PHONE.test(value)) return 'Enter valid 11-digit phone (e.g., 08012345678)';
+        return '';
+      case 'password':
+        if (!value) return 'Password is required';
+        if (value.length < VALIDATION.PASSWORD_MIN) return `Password must be at least ${VALIDATION.PASSWORD_MIN} characters`;
+        return '';
+      default:
+        return '';
+    }
+  }, []);
 
-  const handleSubmit = async (e) => {
+  // Handle input changes with real-time validation
+  const handleInputChange = useCallback((e) => {
+    const { name, value, type, checked } = e.target;
+    const newValue = type === 'checkbox' ? checked : value;
+    
+    setFormData(prev => ({ ...prev, [name]: newValue }));
+    
+    // Validate if field has been touched
+    if (touched[name]) {
+      const error = validateField(name, newValue);
+      setErrors(prev => ({ ...prev, [name]: error }));
+    }
+    
+    if (loginError) setLoginError('');
+  }, [touched, validateField, loginError]);
+
+  // Handle field blur for validation
+  const handleBlur = useCallback((e) => {
+    const { name, value } = e.target;
+    setTouched(prev => ({ ...prev, [name]: true }));
+    
+    const error = validateField(name, value);
+    setErrors(prev => ({ ...prev, [name]: error }));
+  }, [validateField]);
+
+  // Toggle password visibility
+  const togglePassword = useCallback(() => {
+    setShowPassword(prev => !prev);
+  }, []);
+
+  // Form validation
+  const validateForm = useCallback(() => {
+    const phoneError = validateField('phone', formData.phone);
+    const passwordError = validateField('password', formData.password);
+    
+    const newErrors = {
+      phone: phoneError,
+      password: passwordError
+    };
+    
+    setErrors(newErrors);
+    setTouched({ phone: true, password: true });
+    
+    return !phoneError && !passwordError;
+  }, [formData, validateField]);
+
+  // Handle submit
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsSubmitting(true);
     setLoginError('');
 
     try {
-      console.log('[Login] Submitting credentials...');
-      
-      // Call the login function passed from App
-      const result = await onLogin(
-        {
-          phone: formData.phone,
-          password: formData.password
-        },
-        formData.rememberMe
-      );
-
-      console.log('[Login] Login successful:', result);
-
-      // Handle API response
-      if (!result || typeof result !== 'object') {
-        console.error('[Login] Invalid response format:', result);
-        throw new Error('Unexpected server response');
-      }
-
-      console.log('[Login] Authentication complete, user:', result);
-      // Success - user will be redirected by App component
-
+      await onLogin({
+        phone: formData.phone,
+        password: formData.password
+      });
     } catch (error) {
       console.error('[Login] Error:', error);
       
-      // User-friendly error messages
       let errorMessage = 'Login failed. Please try again.';
+      const msg = String(error?.message || '').toLowerCase();
       
-      if (error.message.startsWith('AUTH_ERROR:')) {
-        // Handle authentication-specific errors
-        errorMessage = error.message.replace('AUTH_ERROR:', '').trim();
-      } else if (error.message.includes('fetch') || error.message.includes('Network')) {
-        errorMessage = 'Unable to connect to server. Please check your internet connection.';
-      } else if (error.message.includes('timeout')) {
-        errorMessage = 'Request timed out. Please try again.';
-      } else if (error.message.includes('Unexpected')) {
-        errorMessage = 'Server error. Please try again later.';
+      if (msg.includes('auth_error') || msg.includes('invalid credentials')) {
+        errorMessage = 'Invalid phone number or password';
+      } else if (msg.includes('network') || msg.includes('fetch')) {
+        errorMessage = 'Connection error. Check your internet';
+      } else if (msg.includes('timeout')) {
+        errorMessage = 'Request timed out. Try again';
       } else if (error.message) {
-        errorMessage = error.message;
+        errorMessage = error.message.replace(/^[A-Z_]+:/, '').trim();
       }
       
       setLoginError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [formData, onLogin, validateForm]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-blue-100 to-indigo-100 flex items-center justify-center px-4 py-12">
-      <div className="max-w-md w-full space-y-8">
-        {/* Logo and Header */}
-        <div className="text-center">
-          <div className="flex justify-center mb-6">
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-4 rounded-2xl shadow-xl">
-              <Power className="w-12 h-12 text-white" />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex flex-col">
+      {/* Top decoration */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600"></div>
+      
+      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        <div className="w-full max-w-md space-y-6 sm:space-y-8">
+          {/* Header */}
+          <div className="text-center space-y-4">
+            <div className="flex justify-center">
+              <div className="relative">
+                <div className="absolute inset-0 bg-blue-600 rounded-2xl blur-xl opacity-30 animate-pulse"></div>
+                <div className="relative bg-gradient-to-br from-blue-600 to-indigo-600 p-3 sm:p-4 rounded-2xl shadow-xl">
+                  <Power className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+                Welcome Back
+              </h1>
+              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
+                ME Meter Management System
+              </p>
+              <div className="flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-500">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Secure Login Portal</span>
+              </div>
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            JED Meter Management
-          </h2>
-          <p className="text-sm text-gray-600 font-medium">
-            ME Metering Integration (JEDC Partnership)
-          </p>
-          <p className="text-xs text-gray-500 mt-2">
-            Sign in to access your account
-          </p>
-        </div>
 
-        {/* Login Form */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Error Message */}
+          {/* Login Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            {/* Error Banner */}
             {loginError && (
-              <div className="bg-red-50 border-l-4 border-red-500 rounded-r-lg p-4 animate-fade-in">
-                <div className="flex items-start">
-                  <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 mr-3 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-red-800">{loginError}</p>
+              <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                      {loginError}
+                    </p>
                   </div>
+                  <button
+                    onClick={() => setLoginError('')}
+                    className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
+                    aria-label="Dismiss error"
+                  >
+                    <AlertCircle className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* Phone Number Field */}
-            <div>
-              <label htmlFor="phone" className="block text-sm font-semibold text-gray-700 mb-2">
-                Phone Number
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Phone className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="tel"
-                  id="phone"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  disabled={isSubmitting}
-                  maxLength="11"
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed transition-all ${
-                    errors.phone ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                  }`}
-                  placeholder="08012345678"
-                  autoComplete="tel"
-                />
-              </div>
-              {errors.phone && (
-                <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                  <AlertCircle className="w-4 h-4" />
-                  {errors.phone}
-                </p>
-              )}
-            </div>
+            {/* Form Content */}
+            <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
+              <InputField
+                label="Phone Number"
+                name="phone"
+                type="tel"
+                value={formData.phone}
+                error={errors.phone}
+                isTouched={touched.phone}
+                isSubmitting={isSubmitting}
+                icon={Phone}
+                placeholder="08012345678"
+                autoComplete="tel"
+                onChange={handleInputChange}
+                onBlur={handleBlur}
+                maxLength={11}
+              />
 
-            {/* Password Field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  id="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  disabled={isSubmitting}
-                  className={`block w-full pl-10 pr-10 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed transition-all ${
-                    errors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter your password"
-                  autoComplete="current-password"
-                />
+              <InputField
+                label="Password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                value={formData.password}
+                error={errors.password}
+                isTouched={touched.password}
+                isSubmitting={isSubmitting}
+                icon={Lock}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                showToggle
+                onChange={handleInputChange}
+                onBlur={handleBlur}
+                onTogglePassword={togglePassword}
+              />
+
+              {/* Remember & Forgot */}
+              <div className="flex items-center justify-between text-sm">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    name="rememberMe"
+                    checked={formData.rememberMe}
+                    onChange={handleInputChange}
+                    disabled={isSubmitting}
+                    className="w-4 h-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2 cursor-pointer"
+                  />
+                  <span className="text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                    Remember me
+                  </span>
+                </label>
+
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={isSubmitting}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  tabIndex="-1"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
-                  ) : (
-                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
-                  )}
-                </button>
-              </div>
-              {errors.password && (
-                <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                  <AlertCircle className="w-4 h-4" />
-                  {errors.password}
-                </p>
-              )}
-            </div>
-
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="rememberMe"
-                  name="rememberMe"
-                  type="checkbox"
-                  checked={formData.rememberMe}
-                  onChange={handleInputChange}
-                  disabled={isSubmitting}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
-                />
-                <label htmlFor="rememberMe" className="ml-2 block text-sm text-gray-700 cursor-pointer">
-                  Remember me
-                </label>
-              </div>
-
-              <div className="text-sm">
-                <a 
-                  href="#" 
-                  className="font-medium text-blue-600 hover:text-blue-500 transition-colors"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    alert('Please contact your administrator for password reset.');
-                  }}
+                  onClick={() => setModalContent({ 
+                    isOpen: true, 
+                    title: 'Password Reset', 
+                    message: 'For security reasons, please contact your system administrator to reset your password.' })}
+                  className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline transition-colors"
                 >
                   Forgot password?
-                </a>
+                </button>
               </div>
-            </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-md text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
-            >
-              {isSubmitting ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Signing in...
-                </>
-              ) : (
-                <>
-                  <Power className="w-5 h-5 mr-2" />
-                  Sign In
-                </>
-              )}
-            </button>
-          </form>
-        </div>
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="
+                  w-full flex items-center justify-center gap-2
+                  py-3 px-4 rounded-lg
+                  text-base font-semibold text-white
+                  bg-gradient-to-r from-blue-600 to-indigo-600
+                  hover:from-blue-700 hover:to-indigo-700
+                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                  disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed
+                  shadow-lg hover:shadow-xl
+                  transition-all duration-200
+                  transform hover:scale-[1.02] active:scale-[0.98]
+                "
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Signing in...</span>
+                  </>
+                ) : (
+                  <>
+                    <Power className="w-5 h-5" />
+                    <span>Sign In</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
 
-        {/* Footer */}
-        <div className="text-center">
-          <p className="text-sm text-gray-600">
-            Don't have an account?{' '}
-            <a 
-              href="#" 
-              className="font-semibold text-blue-600 hover:text-blue-500 transition-colors"
-              onClick={(e) => {
-                e.preventDefault();
-                alert('Please contact your administrator to create an account.');
-              }}
-            >
-              Contact Administrator
-            </a>
-          </p>
-          <p className="text-xs text-gray-500 mt-4">
-            © 2025 JED Meter Management. All rights reserved.
-          </p>
+          {/* Footer */}
+          <div className="text-center space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Don't have an account?{' '}
+              <button
+                type="button"
+                onClick={() => setModalContent({ 
+                  isOpen: true, 
+                  title: 'Account Creation', 
+                  message: 'New user accounts must be created by a system administrator. Please contact support for assistance.' })}
+                className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline transition-colors"
+              >
+                Contact Administrator
+              </button>
+            </p>
+            
+            <p className="text-xs text-gray-500 dark:text-gray-500">
+              © {new Date().getFullYear()} JEDC Meter Management. All rights reserved.
+            </p>
+          </div>
         </div>
       </div>
+
+      {/* Informational Modal */}
+      <InfoModal
+        isOpen={modalContent.isOpen}
+        onClose={() => setModalContent({ isOpen: false, title: '', message: '' })}
+        title={modalContent.title}
+      >
+        <p>{modalContent.message}</p>
+      </InfoModal>
     </div>
   );
 }

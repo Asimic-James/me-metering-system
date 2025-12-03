@@ -393,7 +393,7 @@ function InstallationForm({ onSuccess }) {
       )}
 
       {/* Form */}
-      <div className="bg-white rounded-xl border p-6 sm:p-8">
+      <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8">
         <div className="space-y-6 sm:space-y-8">
           {/* Meter Information Section */}
           <div>

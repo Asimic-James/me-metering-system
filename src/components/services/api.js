@@ -289,11 +289,11 @@ class JEDApiService {
         console.warn(`[Auth] Login attempt ${i + 1} failed:`, err.message);
         
         const msg = String(err?.message || '').toLowerCase();
-        const isValidationError = msg.includes('password is required') || 
-                                 msg.includes('phone is required') || 
-                                 msg.includes('validation');
+        const isAuthOrValidationError = msg.includes(this.errorTypes.AUTH.toLowerCase()) ||
+                                        msg.includes(this.errorTypes.VALIDATION.toLowerCase()) ||
+                                        msg.includes('invalid credentials');
         
-        if (!isValidationError) {
+        if (!isAuthOrValidationError) {
           throw err;
         }
       }
