@@ -28,7 +28,6 @@ const EXPORT_FIELDS = [
   { key: 'tariffClass', label: 'Tariff Class', width: 120 },
   { key: 'installerName', label: 'Installer Name', width: 180 },
   { key: 'installerPhone', label: 'Installer Phone', width: 140 },
-  { key: 'installerEmployeeId', label: 'Installer Employee ID', width: 150 },
   { key: 'status', label: 'Status', width: 100 },
   { key: 'amount', label: 'Amount (₦)', width: 120 },
   { key: 'paymentReference', label: 'Payment Reference', width: 180 },
@@ -119,7 +118,6 @@ function AdminReports() {
           // Installer Information
           installerName: r.installer?.name || r.installerName || r.installer_name || '-',
           installerPhone: r.installer?.phone || r.installerPhone || r.installer_phone || '-',
-          installerEmployeeId: r.installer?.employeeId || r.installerEmployeeId || r.installer_id || '-',
           
           // Status and Financial
           status: (r.status || r.state || 'unknown').toString().toLowerCase(),
@@ -348,6 +346,7 @@ function AdminReports() {
               >
                 <option value="">All Statuses</option>
                 <option value="pending">Pending</option>
+                <option value="initiated">Initiated</option>
                 <option value="completed">Completed</option>
                 <option value="failed">Failed</option>
                 <option value="processing">Processing</option>
@@ -466,9 +465,11 @@ function AdminReports() {
                     <td className="px-3 sm:px-4 py-3 text-gray-700">{r.installerName}</td>
                     <td className="px-3 sm:px-4 py-3">
                       <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                        r.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        r.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        r.status === 'failed' ? 'bg-red-100 text-red-800' :
+                        r.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        r.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                        r.status === 'failed' ? 'bg-red-100 text-red-700' :
+                        r.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                        r.status === 'initiated' ? 'bg-cyan-100 text-cyan-700' :
                         'bg-gray-100 text-gray-800'
                       }`}>
                         {r.status}
@@ -509,9 +510,11 @@ function AdminReports() {
                     <p className="text-xs text-gray-500 mt-0.5">Account: {r.accountNumber}</p>
                   </div>
                   <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ml-2 ${
-                    r.status === 'completed' ? 'bg-green-100 text-green-800' :
-                    r.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                    r.status === 'failed' ? 'bg-red-100 text-red-800' :
+                    r.status === 'completed' ? 'bg-green-100 text-green-700' :
+                    r.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                    r.status === 'failed' ? 'bg-red-100 text-red-700' :
+                    r.status === 'processing' ? 'bg-blue-100 text-blue-700' :
+                    r.status === 'initiated' ? 'bg-cyan-100 text-cyan-700' :
                     'bg-gray-100 text-gray-800'
                   }`}>
                     {r.status}
