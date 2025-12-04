@@ -197,12 +197,9 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-gray-900 truncate">{user.name}</p>
-          <p className="text-xs text-gray-600 truncate">{user.email}</p>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium capitalize">
-              {user.role}
-            </span>
-            <span className="text-xs text-gray-500">ID: {user.employeeId}</span>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-gray-600 truncate capitalize">{user.role}</p>
+            <p className="text-xs text-gray-600 truncate">• {user.email}</p>
           </div>
         </div>
       </div>

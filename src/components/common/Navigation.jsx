@@ -1,6 +1,7 @@
 import { Home, Power, FileText, Calendar, X, Users, Upload, MessageSquare, Settings, MoreHorizontal } from 'lucide-react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import InfoModal from './InfoModal';
 
 // Navigation-specific constants
 const NAVIGATION_CONFIG = {
@@ -95,7 +96,17 @@ const useBodyScroll = (isOpen) => {
 
 function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
   const location = useLocation();
-  useBodyScroll(isOpen);
+  const [isSupportModalOpen, setSupportModalOpen] = useState(false);
+
+  useBodyScroll(isOpen || isSupportModalOpen);
+
+  const handleOpenSupportModal = useCallback(() => {
+    setSupportModalOpen(true);
+  }, []);
+
+  const handleCloseSupportModal = useCallback(() => {
+    setSupportModalOpen(false);
+  }, []);
 
   const isItemAccessible = useCallback((item) => {
     return item.accessible(userRole);
@@ -271,14 +282,14 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
           <p className="text-xs text-blue-700 mb-2">Contact support team</p>
           <button 
             className="w-full px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            onClick={() => alert('Support contact: support@jedc.com')}
+            onClick={handleOpenSupportModal}
           >
             Get Support
           </button>
         </div>
       </div>
     </aside>
-  ), [isOpen, onClose, filteredNavItems, NavItem]);
+  ), [isOpen, onClose, filteredNavItems, NavItem, handleOpenSupportModal]);
 
   const MobileBottomNavigation = useCallback(() => (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-30 pb-safe">
@@ -303,6 +314,23 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
       <DesktopNavigation />
       <MobileSidebar />
       <MobileBottomNavigation />
+      
+      <InfoModal
+        isOpen={isSupportModalOpen}
+        onClose={handleCloseSupportModal}
+        title="Contact Support"
+      >
+        <div className="text-center text-sm text-gray-600">
+          <p className="mb-2">For any assistance or questions, please do not hesitate to reach out to our support team.</p>
+          <p>You can email us at:</p>
+          <a 
+            href="mailto:support@jedc.com" 
+            className="font-semibold text-blue-600 hover:underline"
+          >
+            support@jedc.com
+          </a>
+        </div>
+      </InfoModal>
     </>
   );
 }
