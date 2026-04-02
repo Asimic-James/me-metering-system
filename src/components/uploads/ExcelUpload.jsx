@@ -191,18 +191,33 @@ function ExcelUpload() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upload mode</label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {Object.values(UPLOAD_MODES).map(mode => (
-                <label key={mode.value} className={`flex items-start p-3 border rounded-lg cursor-pointer transition-all ${uploadMode === mode.value ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-900/50'}`}>
-                  <input 
-                    type="radio" 
-                    name="upload-mode" 
-                    value={mode.value} 
-                    checked={uploadMode === mode.value} 
-                    onChange={() => setUploadMode(mode.value)} 
-                    className="mt-1 text-blue-600 focus:ring-blue-500"
+                <label
+                  key={mode.value}
+                  className={`flex items-start p-3 border rounded-lg cursor-pointer transition-all ${
+                    uploadMode === mode.value
+                      ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-400 dark:border-indigo-600 ring-2 ring-indigo-200 dark:ring-indigo-800'
+                      : 'bg-white dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="upload-mode"
+                    value={mode.value}
+                    checked={uploadMode === mode.value}
+                    onChange={() => setUploadMode(mode.value)}
+                    className="mt-1 text-indigo-600 focus:ring-indigo-500"
                   />
                   <div className="ml-3">
-                    <span className="font-medium text-gray-800 dark:text-gray-200">{mode.label}</span>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{mode.description}</p>
+                    <span className={`font-medium ${
+                      uploadMode === mode.value
+                        ? 'text-indigo-900 dark:text-indigo-200'
+                        : 'text-gray-800 dark:text-gray-200'
+                    }`}>{mode.label}</span>
+                    <p className={`text-sm mt-0.5 ${
+                      uploadMode === mode.value
+                        ? 'text-indigo-700 dark:text-indigo-300'
+                        : 'text-gray-500 dark:text-gray-400'
+                    }`}>{mode.description}</p>
                   </div>
                 </label>
               ))}
@@ -221,7 +236,7 @@ function ExcelUpload() {
 
             <button 
               onClick={handleClear} 
-              className="px-3 py-2 border rounded-lg hover:bg-gray-50 dark:bg-gray-900/50 transition-colors"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               Clear
             </button>
