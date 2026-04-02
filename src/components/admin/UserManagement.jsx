@@ -239,7 +239,6 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
 
 // Main Component
 function UserManagement() {
-  const { user: currentUser } = useAuth();
   const permissions = usePermissions();
   
   const [users, setUsers] = useState([]);
@@ -252,12 +251,6 @@ function UserManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState('all');
 
-  // Fetch users on mount
-  useEffect(() => {
-    if (permissions.isAdmin) {
-      fetchUsers();
-    }
-  }, [permissions.isAdmin]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -370,6 +363,13 @@ function UserManagement() {
       setActionLoading(null);
     }
   }, [userToDelete, fetchUsers]);
+
+  // Fetch users on mount
+  useEffect(() => {
+    if (permissions.isAdmin) {
+      fetchUsers();
+    }
+  }, [permissions.isAdmin, fetchUsers]);
 
   // Filter users based on search and role
   const filteredUsers = users.filter(user => {

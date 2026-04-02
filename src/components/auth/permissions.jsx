@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 // src/components/auth/permissions.js
 // Optimized permissions system aligned with latest app version
 

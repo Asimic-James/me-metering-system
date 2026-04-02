@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 // src/components/contexts/AuthContext.jsx
 // Updated with better error handling and performance optimizations
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';

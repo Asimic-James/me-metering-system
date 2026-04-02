@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 
 // Stat Card Component - Mobile First
+ 
 const StatCard = ({ title, value, icon: Icon, change, changeType = 'neutral' }) => (
   <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 flex flex-col">
     <div className="flex items-center justify-between mb-3">
@@ -400,7 +401,7 @@ function AdminDashboard({ isInstallerView = false }) {
     if (user) {
       fetchDashboardData();
     }
-  }, [user, showInstallerData, isAdmin]);
+  }, [user, showInstallerData, isAdmin, recentInstallations]);
 
   const handleExportData = async (exportType, format) => {
     try {

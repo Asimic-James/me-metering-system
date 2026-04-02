@@ -63,7 +63,6 @@ const useMeterData = (initialFilters = {}) => {
     status: 'ALL',
     phaseType: 'ALL',
     searchTerm: '',
-    searchField: 'meterNumber',
     ...initialFilters
   });
 
@@ -85,8 +84,8 @@ const useMeterData = (initialFilters = {}) => {
         params.phaseType = currentFilters.phaseType;
       }
 
-      if (currentFilters.searchTerm && currentFilters.searchField) {
-        params[currentFilters.searchField] = currentFilters.searchTerm;
+      if (currentFilters.searchTerm) {
+        params.search = currentFilters.searchTerm;
       }
 
       console.log('[MeterData] Fetching meters with params:', JSON.stringify(params)); // Added for debugging
@@ -151,8 +150,8 @@ const useMeterData = (initialFilters = {}) => {
       if (filters.phaseType !== 'ALL') {
         params.phaseType = filters.phaseType;
       }
-      if (filters.searchTerm && filters.searchField) {
-        params[filters.searchField] = filters.searchTerm;
+      if (filters.searchTerm) {
+        params.search = filters.searchTerm;
       }
 
       const blob = await JEDApiService.exportMeters(params);
@@ -174,7 +173,7 @@ const useMeterData = (initialFilters = {}) => {
 
   useEffect(() => {
     fetchMeters(1, filters);
-  }, [fetchMeters]);
+  }, [fetchMeters, filters]);
 
   return {
     meters,
@@ -261,6 +260,7 @@ const useMeterStatistics = () => {
 };
 
 // Stats Cards Component
+ 
 const StatsCard = ({ title, value, icon: Icon, bgColor, iconColor, loading = false, error = false }) => (
   <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 hover:shadow-lg transition-shadow duration-200">
     <div className="flex items-center justify-between">
@@ -515,6 +515,20 @@ const EmptyState = ({ hasFilters, searchTerm, type = 'meters' }) => (
 
 // Filter Controls Component for Meter Inventory
 const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onExport }) => {
+  const [localSearchTerm, setLocalSearchTerm] = useState(filters.searchTerm);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localSearchTerm !== filters.searchTerm) {
+        onFilterChange({ ...filters, searchTerm: localSearchTerm });
+      }
+    }, 500); // 500ms debounce delay
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [localSearchTerm, filters, onFilterChange]);
+
   const handleStatusChange = useCallback((status) => {
     onFilterChange({ ...filters, status });
   }, [filters, onFilterChange]);
@@ -525,58 +539,74 @@ const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
 
   return (
     <div className="bg-white rounded-lg shadow-md p-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex flex-col sm:flex-row gap-3 flex-1">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select
-              value={filters.status}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+      <div className="space-y-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={localSearchTerm}
+              onChange={(e) => setLocalSearchTerm(e.target.value)}
+              placeholder="Search by Meter Number, SIM, SGC..."
+              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               disabled={loading}
-            >
-              {METER_STATUS_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phase Type</label>
-            <select
-              value={filters.phaseType}
-              onChange={(e) => handlePhaseChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-              disabled={loading}
-            >
-              {PHASE_TYPE_OPTIONS.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 flex-1">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={filters.status}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                disabled={loading}
+              >
+                {METER_STATUS_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div className="flex items-center gap-2 sm:self-end">
-          <button
-            onClick={onExport}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed text-sm"
-          >
-            <Download className="w-4 h-4" />
-            Export
-          </button>
-          <button
-            onClick={onRefresh}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed text-sm"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phase Type</label>
+              <select
+                value={filters.phaseType}
+                onChange={(e) => handlePhaseChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                disabled={loading}
+              >
+                {PHASE_TYPE_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:self-end">
+            <button
+              onClick={onExport}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed text-sm"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+            <button
+              onClick={onRefresh}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed text-sm"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -607,36 +637,19 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
     onFilterChange({ ...filters, phaseType });
   }, [filters, onFilterChange]);
 
-  const handleSearchFieldChange = useCallback((searchField) => {
-    onFilterChange({ ...filters, searchField });
-  }, [filters, onFilterChange]);
-
   return (
     <div className="bg-white rounded-lg shadow-md p-4">
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search Field</label>
-            <select
-              value={filters.searchField}
-              onChange={(e) => handleSearchFieldChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-              disabled={loading}
-            >
-              <option value="meterNumber">Meter Number</option>
-              <option value="simNumber">SIM Number</option>
-              <option value="sgcNumber">SGC Number</option>
-            </select>
-          </div>
-
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search Term</label>
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               value={localSearchTerm}
               onChange={(e) => setLocalSearchTerm(e.target.value)}
-              placeholder="Enter search term..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              placeholder="Search by Meter Number, SIM, SGC..."
+              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               disabled={loading}
             />
           </div>
@@ -955,8 +968,8 @@ const MeterQuery = ({ meterQuery }) => {
 // Main Component
 function MeterSchedule() {
   const { meterStats, loading: statsLoading, error: statsError, refetch: refetchStats } = useMeterStatistics();
-  const meterInventory = useMeterData({ searchTerm: '', searchField: 'meterNumber' });
-  const meterQuery = useMeterData({ searchTerm: '', searchField: 'meterNumber' });
+  const meterInventory = useMeterData({ searchTerm: '' });
+  const meterQuery = useMeterData({ searchTerm: '' });
   
   const [activeTab, setActiveTab] = useState('inventory');
 
@@ -972,8 +985,6 @@ function MeterSchedule() {
         value: meterStats.totalMeters, 
         icon: Battery, 
         bgColor: 'bg-blue-100', 
-        icon: Battery,
-        bgColor: 'bg-blue-100',
         iconColor: 'text-blue-600',
         loading: statsLoading,
         error: !!statsError

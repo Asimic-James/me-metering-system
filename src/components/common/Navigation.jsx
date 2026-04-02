@@ -1,6 +1,6 @@
 import { Home, Power, FileText, Calendar, X, Users, Upload, MessageSquare, Settings, MoreHorizontal } from 'lucide-react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import InfoModal from './InfoModal';
 
 // Navigation-specific constants
@@ -11,7 +11,7 @@ const NAVIGATION_CONFIG = {
       label: 'Dashboard',
       path: '/dashboard',
       icon: Home,
-      mobileBottomNav: (role) => true, // Always show
+      mobileBottomNav: () => true, // Always show
       description: 'Overview and statistics',
       accessible: () => true,
     },
@@ -29,7 +29,7 @@ const NAVIGATION_CONFIG = {
       label: 'Install Meter',
       path: '/submit',
       icon: FileText,
-      mobileBottomNav: (role) => true, // Always show
+      mobileBottomNav: () => true, // Always show
       description: 'Submit new installations',
       accessible: () => true,
     },
@@ -94,8 +94,8 @@ const useBodyScroll = (isOpen) => {
   }, [isOpen]);
 };
 
-function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
-  const location = useLocation();
+function Navigation({ userRole, isOpen, onMenuToggle: _onMenuToggle, onClose }) {
+  // const location = useLocation(); // removed unused
   const [isSupportModalOpen, setSupportModalOpen] = useState(false);
 
   useBodyScroll(isOpen || isSupportModalOpen);
@@ -234,7 +234,7 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
         </div>
       </div>
     </nav>
-  ), [filteredNavItems, NavItem]);
+  ), [filteredNavItems]);
 
   const MobileSidebar = useCallback(() => (
     <aside
@@ -289,7 +289,7 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
         </div>
       </div>
     </aside>
-  ), [isOpen, onClose, filteredNavItems, NavItem, handleOpenSupportModal]);
+  ), [isOpen, onClose, filteredNavItems, handleOpenSupportModal]);
 
   const MobileBottomNavigation = useCallback(() => (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-30 pb-safe">
@@ -306,7 +306,7 @@ function Navigation({ userRole, isOpen, onMenuToggle, onClose }) {
         ))}
       </div>
     </nav>
-  ), [filteredNavItems, NavItem, onMenuToggle, userRole]);
+  ), [filteredNavItems, userRole]);
 
   return (
     <>

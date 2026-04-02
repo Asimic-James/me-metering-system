@@ -1,8 +1,9 @@
-import { Power, User, LogOut, ChevronDown, Menu, X, Bell, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Power, User, LogOut, ChevronDown, Menu, X, Bell, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2, Sun, Moon } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import JEDApiService from '../services/api';
 import VerificationModal from '../auth/VerificationModal';
+import { useTheme } from '../contexts/ThemeContext';
 
 // Header-specific constants
 const HEADER_STYLES = {
@@ -56,6 +57,7 @@ const getUserInitials = (user) => {
 const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVerification }) => {
   if (!isOpen) return null;
 
+   
   const DetailItem = ({ icon: Icon, label, value, isVerified, verificationType, contact }) => (
     <div className="flex items-start gap-3">
       <Icon className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" />
@@ -250,6 +252,18 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
     </div>
   ), []);
 
+  const { isDark, toggleTheme } = useTheme();
+
+  const ThemeToggleButton = useCallback(() => (
+    <button
+      onClick={toggleTheme}
+      className="p-1.5 sm:p-2 hover:bg-blue-700 dark:hover:bg-gray-800 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
+      aria-label="Toggle Theme"
+    >
+      {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-200" />}
+    </button>
+  ), [isDark, toggleTheme]);
+
   const UserAvatar = useCallback(() => (
     <button
       onClick={handleDropdownToggle} // Simplified for mobile
@@ -275,10 +289,10 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
 
   const NotificationsButton = useCallback(() => (
     <button
-      className="relative p-2 hover:bg-blue-700 rounded-lg transition-colors hidden sm:block"
+      className="relative p-1.5 sm:p-2 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
       aria-label="Notifications"
     >
-      <Bell className="w-5 h-5" />
+      <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
       <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-blue-600" />
     </button>
   ), []);
@@ -301,7 +315,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
         </div>
       </div>
     ) : null
-  , [showDropdown, UserInfo, DropdownMenuItems, handleLogout]);
+  , [showDropdown, handleLogout]);
 
   return (
     <header className={`${HEADER_STYLES.gradient} text-white shadow-lg sticky top-0 z-40`}>
@@ -320,6 +334,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
 
           {user && (
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              <ThemeToggleButton />
               <NotificationsButton />
               
               <div className="relative" ref={dropdownRef}>
