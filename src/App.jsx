@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './components/contexts/AuthContext';
-import { ThemeProvider } from './components/contexts/ThemeContext';
+import { ThemeProvider, useTheme } from './components/contexts/ThemeContext';
 import Login from './components/auth/Login';
 import Header from './components/common/Header';
 import Footer from './components/common/Footer';
@@ -75,8 +75,10 @@ function AppContent() {
     return <Login onLogin={handleLogin} />;
   }
 
+  const { isDark } = useTheme();
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col transition-colors">
+    <div className={`min-h-screen flex flex-col transition-colors duration-300 ${isDark ? 'app-bg-dark' : 'app-bg-light'}`}>
       <Header 
         user={user} 
         onLogout={logout}

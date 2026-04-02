@@ -7,10 +7,10 @@ import { useTheme } from '../contexts/ThemeContext';
 
 // Header-specific constants
 const HEADER_STYLES = {
-  gradient: 'bg-gradient-to-r from-blue-600 to-blue-700',
+  gradient: 'bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500',
   mobile: {
-    menuButton: 'lg:hidden p-2 -ml-2 hover:bg-blue-700 rounded-lg transition-colors',
-    avatar: 'w-9 h-9 bg-gradient-to-br from-blue-400 to-blue-500',
+    menuButton: 'lg:hidden p-2 -ml-2 hover:bg-white/10 rounded-lg transition-colors',
+    avatar: 'w-9 h-9 bg-gradient-to-br from-cyan-400 to-indigo-500',
     title: 'text-base font-bold truncate',
     subtitle: 'text-blue-100 text-xs'
   },
@@ -257,17 +257,17 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   const ThemeToggleButton = useCallback(() => (
     <button
       onClick={toggleTheme}
-      className="p-1.5 sm:p-2 hover:bg-blue-700 dark:hover:bg-gray-800 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
+      className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
       aria-label="Toggle Theme"
     >
-      {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-200" />}
+      {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-100" />}
     </button>
   ), [isDark, toggleTheme]);
 
   const UserAvatar = useCallback(() => (
     <button
-      onClick={handleDropdownToggle} // Simplified for mobile
-      className="flex items-center gap-2 sm:gap-3 bg-blue-700/50 hover:bg-blue-700 rounded-lg sm:px-4 sm:py-2 p-1.5 transition-all duration-200 hover:shadow-lg"
+      onClick={handleDropdownToggle}
+      className="flex items-center gap-2 sm:gap-3 bg-white/10 hover:bg-white/20 rounded-lg sm:px-4 sm:py-2 p-1.5 transition-all duration-200 hover:shadow-lg"
       aria-expanded={showDropdown}
       aria-haspopup="true"
     >
@@ -289,11 +289,11 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
 
   const NotificationsButton = useCallback(() => (
     <button
-      className="relative p-1.5 sm:p-2 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
+      className="relative p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
       aria-label="Notifications"
     >
       <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-      <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-blue-600" />
+      <span className="absolute top-1 right-1 w-2 h-2 bg-red-400 rounded-full border-2 border-transparent" />
     </button>
   ), []);
 
@@ -318,7 +318,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   , [showDropdown, handleLogout]);
 
   return (
-    <header className={`${HEADER_STYLES.gradient} text-white shadow-lg sticky top-0 z-40`}>
+    <header className={`${HEADER_STYLES.gradient} text-white shadow-xl sticky top-0 z-40 border-b border-white/10`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
           <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0 mr-2 sm:mr-4">

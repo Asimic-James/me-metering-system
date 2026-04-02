@@ -47,7 +47,7 @@ function ExcelUpload() {
       <div className="p-8 text-center">
         <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
         <h2 className="text-2xl font-bold">Access Denied</h2>
-        <p className="text-gray-600">You don't have permission to upload installations.</p>
+        <p className="text-gray-600 dark:text-gray-400">You don't have permission to upload installations.</p>
       </div>
     );
   }
@@ -149,14 +149,19 @@ function ExcelUpload() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Upload Meters (Excel)</h1>
-          <p className="text-gray-600">Upload meters in bulk using an Excel file.</p>
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
+            <Upload className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Upload Meters (Excel)</h1>
+            <p className="text-gray-600 dark:text-gray-400">Upload meters in bulk using an Excel file.</p>
+          </div>
         </div>
         <div className="flex-shrink-0">
           <button 
             onClick={handleDownloadTemplate} 
-            className="inline-flex items-center gap-2 bg-white border px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center gap-2 bg-white dark:bg-gray-800 border px-3 py-2 rounded-lg hover:bg-gray-50 dark:bg-gray-900/50 transition-colors"
           >
             <Download className="w-4 h-4" />
             Download Template
@@ -164,29 +169,29 @@ function ExcelUpload() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border p-6">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Excel file</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Excel file</label>
             <input 
               type="file" 
               accept=".xlsx,.xls,.csv" 
               onChange={handleFileChange} 
               disabled={uploading}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
             />
             {file && (
-              <p className="text-sm text-gray-600 mt-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
                 Selected: <span className="font-mono">{file.name}</span> ({Math.round(file.size/1024)} KB)
               </p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Upload mode</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upload mode</label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {Object.values(UPLOAD_MODES).map(mode => (
-                <label key={mode.value} className={`flex items-start p-3 border rounded-lg cursor-pointer transition-all ${uploadMode === mode.value ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 'bg-white hover:bg-gray-50'}`}>
+                <label key={mode.value} className={`flex items-start p-3 border rounded-lg cursor-pointer transition-all ${uploadMode === mode.value ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:bg-gray-900/50'}`}>
                   <input 
                     type="radio" 
                     name="upload-mode" 
@@ -196,8 +201,8 @@ function ExcelUpload() {
                     className="mt-1 text-blue-600 focus:ring-blue-500"
                   />
                   <div className="ml-3">
-                    <span className="font-medium text-gray-800">{mode.label}</span>
-                    <p className="text-sm text-gray-500">{mode.description}</p>
+                    <span className="font-medium text-gray-800 dark:text-gray-200">{mode.label}</span>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{mode.description}</p>
                   </div>
                 </label>
               ))}
@@ -216,7 +221,7 @@ function ExcelUpload() {
 
             <button 
               onClick={handleClear} 
-              className="px-3 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-3 py-2 border rounded-lg hover:bg-gray-50 dark:bg-gray-900/50 transition-colors"
             >
               Clear
             </button>
@@ -224,8 +229,8 @@ function ExcelUpload() {
 
           {/* Upload Results */}
           {uploadResult && (
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Upload Results</h3>
+            <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Upload Results</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard icon={List} label="Total Rows" value={uploadResult.totalRows} />
                 <StatCard icon={FileCheck2} label="Created" value={uploadResult.created} color="green" />
@@ -237,29 +242,29 @@ function ExcelUpload() {
               {uploadResult.errors && uploadResult.errors.length > 0 && (
                 <div className="mt-4">
                   <div className="flex justify-between items-center mb-2">
-                    <h4 className="font-medium text-gray-900">Error Details ({uploadResult.errors.length})</h4>
+                    <h4 className="font-medium text-gray-900 dark:text-white">Error Details ({uploadResult.errors.length})</h4>
                     <button
                       onClick={() => exportErrorsToCSV(uploadResult.errors)}
-                      className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                      className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white"
                     >
                       <FileDown className="w-4 h-4" />
                       Export Errors
                     </button>
                   </div>
                   <div className="max-h-60 overflow-y-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-100">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-100 dark:bg-gray-800/80">
                         <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Row</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Meter Number</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Error</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Row</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Meter Number</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Error</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {uploadResult.errors.map((error, index) => (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 text-sm text-gray-900">{error.row + 1}</td>
-                            <td className="px-3 py-2 text-sm text-gray-900 font-mono">{error.meterNumber}</td>
+                          <tr key={index} className="hover:bg-gray-50 dark:bg-gray-900/50">
+                            <td className="px-3 py-2 text-sm text-gray-900 dark:text-white">{error.row + 1}</td>
+                            <td className="px-3 py-2 text-sm text-gray-900 dark:text-white font-mono">{error.meterNumber}</td>
                             <td className="px-3 py-2 text-sm text-red-600">{error.error}</td>
                           </tr>
                         ))}
@@ -291,13 +296,13 @@ function ExcelUpload() {
  
 const StatCard = ({ icon: Icon, label, value, color = 'gray' }) => {
   const colors = {
-    gray: 'text-gray-600 bg-gray-50 border-gray-200',
+    gray: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700',
     green: 'text-green-700 bg-green-50 border-green-200',
     red: 'text-red-700 bg-red-50 border-red-200',
     blue: 'text-blue-700 bg-blue-50 border-blue-200',
   };
   const textColors = {
-    gray: 'text-gray-900',
+    gray: 'text-gray-900 dark:text-white',
     green: 'text-green-700',
     red: 'text-red-700',
     blue: 'text-blue-700',

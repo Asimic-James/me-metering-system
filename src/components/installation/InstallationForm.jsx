@@ -9,7 +9,8 @@ import {
   RefreshCw,
   FileText,
   User,
-  Hash
+  Hash,
+  Zap
 } from 'lucide-react';// Constants for better maintainability
 const VALIDATION_RULES = {
   sealNo: { required: true, message: 'Seal Number is required' },
@@ -179,7 +180,7 @@ const FormField = ({
 
   return (
     <div>
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-2">
+      <label htmlFor={name} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
         {label}
       </label>
       <input
@@ -190,8 +191,8 @@ const FormField = ({
         onChange={handleChange}
         maxLength={maxLength}
         disabled={disabled}
-        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors ${
-          error ? 'border-red-500' : 'border-gray-300'
+        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 dark:bg-gray-800/80 disabled:cursor-not-allowed transition-colors ${
+          error ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
         } ${monospace ? 'font-mono' : ''}`}
         placeholder={placeholder}
       />
@@ -200,7 +201,7 @@ const FormField = ({
           <p className="text-sm text-red-600 flex-1">{error}</p>
         )}
         {showCharacterCount && maxLength && (
-          <p className="text-sm text-gray-500 text-right flex-shrink-0 ml-2">
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-right flex-shrink-0 ml-2">
             {value.length}/{maxLength}
           </p>
         )}
@@ -366,11 +367,16 @@ function InstallationForm({ onSuccess }) {
   return (
     <div>
       {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Complete Meter Installation</h1>
-        <p className="text-gray-600 mt-1">
-          Finalize the meter installation process by recording the details below.
-        </p>
+      <div className="mb-8 flex items-center gap-3">
+        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
+          <Zap className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Complete Meter Installation</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Finalize the meter installation process by recording the details below.
+          </p>
+        </div>
       </div>
 
       {/* User Information */}
@@ -393,11 +399,11 @@ function InstallationForm({ onSuccess }) {
       )}
 
       {/* Form */}
-      <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 sm:p-8">
         <div className="space-y-6 sm:space-y-8">
           {/* Meter Information Section */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b flex items-center">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b flex items-center">
               <Hash className="w-5 h-5 mr-2" />
               Meter Information
             </h3>
@@ -423,11 +429,11 @@ function InstallationForm({ onSuccess }) {
 
           {/* Installation Notes Section */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 pb-2 border-b">
               Additional Information
             </h3>
             <div>
-              <label htmlFor="installationNotes" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="installationNotes" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Installation Notes (Optional)
               </label>
               <textarea
@@ -437,7 +443,7 @@ function InstallationForm({ onSuccess }) {
                 onChange={(e) => updateField('installationNotes', e.target.value)}
                 disabled={isSubmitting}
                 rows="4"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors resize-none"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 dark:bg-gray-800/80 disabled:cursor-not-allowed transition-colors resize-none"
                 placeholder="Add any additional notes about this installation..."
               />
             </div>
@@ -464,7 +470,7 @@ function InstallationForm({ onSuccess }) {
               type="button"
               onClick={handleClear}
               disabled={isSubmitting}
-              className="px-6 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+              className="px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:bg-gray-900/50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
             >
               Clear Form
             </button>

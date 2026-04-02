@@ -15,13 +15,15 @@ import {
   FileText,
   Settings,
   Menu,
-  X
+  X,
+  LayoutDashboard,
+  Wrench
 } from 'lucide-react';
 
 // Stat Card Component - Mobile First
  
 const StatCard = ({ title, value, icon: Icon, change, changeType = 'neutral' }) => (
-  <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 flex flex-col">
+  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6 flex flex-col">
     <div className="flex items-center justify-between mb-3">
       <div className={`p-2 rounded-lg ${
         changeType === 'positive' ? 'bg-green-100 text-green-600' :
@@ -42,16 +44,16 @@ const StatCard = ({ title, value, icon: Icon, change, changeType = 'neutral' }) 
         </div>
       )}
     </div>
-    <h3 className="text-gray-500 text-xs sm:text-sm font-medium">{title}</h3>
-    <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{value}</p>
+    <h3 className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm font-medium">{title}</h3>
+    <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mt-1">{value}</p>
   </div>
 );
 
 // Recent Installations Table - Mobile Optimized
 const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
-  <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
     <div className="flex items-center justify-between p-4 sm:p-6 border-b">
-      <h3 className="text-base sm:text-lg font-semibold text-gray-900">Recent Installations</h3>
+      <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Recent Installations</h3>
       <button 
         onClick={onViewAll} 
         className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -61,18 +63,18 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
     </div>
     
     {/* Mobile Card View */}
-    <div className="sm:hidden divide-y divide-gray-200">
+    <div className="sm:hidden divide-y divide-gray-200 dark:divide-gray-700">
       {installations.length === 0 ? (
-        <div className="p-6 text-center text-gray-500 text-sm">
+        <div className="p-6 text-center text-gray-500 dark:text-gray-400 text-sm">
           No installations found
         </div>
       ) : (
         installations.map((install) => (
-          <div key={install.id} className="p-4 hover:bg-gray-50">
+          <div key={install.id} className="p-4 hover:bg-gray-50 dark:bg-gray-900/50">
             <div className="flex justify-between items-start mb-2">
               <div>
-                <p className="font-medium text-gray-900 text-sm">{install.accountNumber}</p>
-                <p className="text-xs text-gray-600 mt-0.5">
+                <p className="font-medium text-gray-900 dark:text-white text-sm">{install.accountNumber}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                   {install.custNames || install.applicantName || install.installer?.name || '-'}
                 </p>
               </div>
@@ -85,10 +87,10 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
               </span>
             </div>
             <div className="flex justify-between items-center mt-2">
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-gray-500 dark:text-gray-400">
                 {install.submittedAt ? new Date(install.submittedAt).toLocaleDateString() : '-'}
               </span>
-              <span className="font-semibold text-gray-900 text-sm">
+              <span className="font-semibold text-gray-900 dark:text-white text-sm">
                 {formatCurrencyNGN(install.amount)}
               </span>
             </div>
@@ -101,7 +103,7 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
     <div className="hidden sm:block overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="text-left text-gray-600 bg-gray-50 border-b text-xs sm:text-sm">
+          <tr className="text-left text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border-b text-xs sm:text-sm">
             <th className="px-4 py-3 font-semibold">Account</th>
             <th className="px-4 py-3 font-semibold">Customer</th>
             <th className="px-4 py-3 font-semibold">Status</th>
@@ -109,18 +111,18 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
             <th className="px-4 py-3 font-semibold">Date</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200">
+        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {installations.length === 0 ? (
             <tr>
-              <td colSpan="5" className="px-4 py-8 text-center text-gray-500 text-sm">
+              <td colSpan="5" className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 text-sm">
                 No installations found
               </td>
             </tr>
           ) : (
             installations.map((install) => (
-              <tr key={install.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3 text-gray-700 font-medium text-sm">{install.accountNumber}</td>
-                <td className="px-4 py-3 text-gray-700 text-sm">
+              <tr key={install.id} className="hover:bg-gray-50 dark:bg-gray-900/50 transition-colors">
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium text-sm">{install.accountNumber}</td>
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-sm">
                   {install.custNames || install.applicantName || install.installer?.name || '-'}
                 </td>
                 <td className="px-4 py-3">
@@ -132,10 +134,10 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
                     {install.status}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right font-semibold text-gray-900 text-sm">
+                <td className="px-4 py-3 text-right font-semibold text-gray-900 dark:text-white text-sm">
                   {formatCurrencyNGN(install.amount)}
                 </td>
-                <td className="px-4 py-3 text-gray-600 text-sm">
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-sm">
                   {install.submittedAt ? new Date(install.submittedAt).toLocaleDateString() : '-'}
                 </td>
               </tr>
@@ -170,23 +172,23 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-auto">
-        <div className="sticky top-0 bg-white border-b px-4 sm:px-6 py-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">Export Data</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+      <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-auto">
+        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b px-4 sm:px-6 py-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Export Data</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:text-gray-400">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="p-4 sm:p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Data Type
             </label>
             <select
               value={exportType}
               onChange={(e) => setExportType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">All Data</option>
               <option value="pending">Pending Requests</option>
@@ -197,13 +199,13 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Format
             </label>
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="excel">Excel (.xlsx)</option>
               <option value="csv">CSV (.csv)</option>
@@ -214,7 +216,7 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
             <button
               onClick={onClose}
               disabled={isExporting}
-              className="w-full sm:w-auto px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800/80 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
@@ -244,8 +246,8 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
 
 // Quick Actions Component - Mobile First
 const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) => (
-  <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
-    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6">
+    <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h3>
     <div className="grid grid-cols-2 gap-3">
       {isAdmin && (
         <button 
@@ -253,7 +255,7 @@ const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) 
           className="p-3 sm:p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg hover:shadow-md transition-all border border-blue-200"
         >
           <Users className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 mb-2 mx-auto" />
-          <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
+          <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white block text-center">
             Manage Users
           </span>
         </button>
@@ -263,7 +265,7 @@ const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) 
         className="p-3 sm:p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg hover:shadow-md transition-all border border-green-200"
       >
         <Download className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 mb-2 mx-auto" />
-        <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
+        <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white block text-center">
           Export Data
         </span>
       </button>
@@ -273,7 +275,7 @@ const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) 
           className="p-3 sm:p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg hover:shadow-md transition-all border border-purple-200 col-span-2"
         >
           <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 mb-2 mx-auto" />
-          <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
+          <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white block text-center">
             System Settings
           </span>
         </button>
@@ -459,7 +461,7 @@ function AdminDashboard({ isInstallerView = false }) {
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 text-sm">Loading dashboard...</p>
+          <p className="mt-4 text-gray-600 dark:text-gray-400 text-sm">Loading dashboard...</p>
         </div>
       </div>
     );
@@ -470,7 +472,7 @@ function AdminDashboard({ isInstallerView = false }) {
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center max-w-md">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-900 mb-4">{error}</p>
+          <p className="text-gray-900 dark:text-white mb-4">{error}</p>
           <button 
             onClick={() => window.location.reload()}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -486,15 +488,22 @@ function AdminDashboard({ isInstallerView = false }) {
     <div className="space-y-4 sm:space-y-6">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+        <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              {showInstallerData && !isAdmin
+                ? <Wrench className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                : <LayoutDashboard className="w-6 h-6 text-blue-600 dark:text-blue-400" />}
+            </div>
+            <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
               {showInstallerData && !isAdmin ? 'Installer Dashboard' : 'Admin Dashboard'}
             </h1>
-            <p className="text-gray-600 mt-1 text-sm sm:text-base">
+            <p className="text-gray-600 dark:text-gray-400 mt-1 text-sm sm:text-base">
               {showInstallerData && !isAdmin 
                 ? 'Track your installation activity and performance' 
                 : 'Monitor system performance and manage users'}
             </p>
+          </div>
           </div>
           <div className="mt-4 sm:mt-0">
             {isAdmin && (
