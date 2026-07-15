@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import JEDApiService from '../services/api';
 import { 
   Calendar, MapPin, User, Phone, Clock, CheckCircle,
-  AlertCircle, Navigation, FileText, Search, Filter, // Some icons like Navigation, Search, Filter are unused but kept for potential future use
+  AlertCircle, FileText, Search, // Navigation and Filter icons removed — confirmed unused
   Zap, 
   Cpu, 
   Battery, 
@@ -50,7 +50,19 @@ const TABS = [
 ];
 
 // Shared hook for meter data fetching
-const useMeterData = (initialFilters = {}) => {
+//
+// FIXED (2 issues):
+// 1. `updateFilters` previously called `fetchMeters()` directly AND updated
+//    `filters` state, which independently re-triggered the effect below
+//    (since it watches `filters`) — every filter/search change fired two
+//    identical network requests. Now `updateFilters` only updates state;
+//    the effect is the single source of truth for "filters changed, fetch."
+// 2. Added an `enabled` param. Previously this hook fetched on mount
+//    unconditionally, so both the Inventory tab's instance AND the Query
+//    tab's instance fired a request immediately even though only one tab
+//    is ever visible at a time. Now each instance only fetches once its
+//    tab is actually active.
+const useMeterData = (initialFilters = {}, enabled = true) => {
   const [meters, setMeters] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -128,8 +140,7 @@ const useMeterData = (initialFilters = {}) => {
 
   const updateFilters = useCallback((newFilters) => {
     setFilters(newFilters);
-    fetchMeters(1, newFilters);
-  }, [fetchMeters]);
+  }, []);
 
   const changePage = useCallback((page, newLimit = null) => {
     if (newLimit && newLimit !== pagination.limit) {
@@ -173,8 +184,10 @@ const useMeterData = (initialFilters = {}) => {
   }, [filters]);
 
   useEffect(() => {
+    if (!enabled) return;
     fetchMeters(1, filters);
-  }, [fetchMeters, filters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, fetchMeters, filters]);
 
   return {
     meters,
@@ -969,10 +982,13 @@ const MeterQuery = ({ meterQuery }) => {
 // Main Component
 function MeterSchedule() {
   const { meterStats, loading: statsLoading, error: statsError, refetch: refetchStats } = useMeterStatistics();
-  const meterInventory = useMeterData({ searchTerm: '' });
-  const meterQuery = useMeterData({ searchTerm: '' });
-  
+
+  // activeTab now declared before the two useMeterData() instances so each
+  // can be told whether it's the currently-visible tab (see fix note above
+  // the useMeterData hook definition).
   const [activeTab, setActiveTab] = useState('inventory');
+  const meterInventory = useMeterData({ searchTerm: '' }, activeTab === 'inventory');
+  const meterQuery = useMeterData({ searchTerm: '' }, activeTab === 'query');
 
   useEffect(() => {
     console.log('[MeterSchedule] Component mounted');

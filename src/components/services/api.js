@@ -133,7 +133,7 @@ class JEDApiService {
     this.requestCache.clear();
   }
 
-  // FIXED: Handle API response with consistent error formatting
+  // Handle API response with consistent error formatting
   async handleResponse(response) {
     console.log(`[API] Response: ${response.status} ${response.statusText}`);
 
@@ -316,6 +316,21 @@ class JEDApiService {
       phone: userData.phone, 
       role: userData.role 
     });
+
+    // Diagnostic: installer-scoped features (My Jobs, Meter Schedule,
+    // complete-installation payloads) expect an installer identifier.
+    // Surface it loudly here rather than let it fail silently downstream —
+    // this is exactly the gap that caused InstallerDashboard to hang
+    // indefinitely on load until traced back to this field being absent.
+    const normalizedRole = (userData.role || '').toLowerCase();
+    if (normalizedRole === 'installer' && !userData.employeeId && !userData.staffId) {
+      console.warn(
+        '[Auth] Installer login response has no "employeeId" or "staffId" field. ' +
+        'Installer-scoped API calls will fall back to user.id. If that is not the ' +
+        'correct identifier, check the real field name on the login response and ' +
+        'update AuthContext/normalizeUserData accordingly.'
+      );
+    }
     
     this.storeTokens({ token });
     this.storeUser(userData);
@@ -456,6 +471,15 @@ class JEDApiService {
   }
 
   // ==================== JED INTEGRATION METHODS ====================
+  // Phase 1 lifecycle:
+  // 1. Customer requests meter via JEED
+  // 2. We generate RRR (generatePaymentReference) and send to JEED
+  // 3. Customer pays via Remita using the RRR
+  // 4. Remita webhook notifies us of successful payment
+  // 5. We confirmPayment with Remita -> Remita returns installation details
+  // 6. Installer logs in, pulls jobs whose installation details are ready (getMyInstallations)
+  // 7. Installer completes the physical install, calls completeInstallation
+
   async completeInstallation(installationData) {
     const url = this.buildUrl(this.endpoints.JED.COMPLETE_INSTALLATION);
     return await this.makeRequest(url, {
@@ -480,6 +504,17 @@ class JEDApiService {
     });
   }
 
+  /**
+   * NEW: Admin fallback — manually confirm a payment by RRR when the
+   * Remita webhook was missed. POST /external/jed/confirm-payment/manual/{rrr}
+   * @param {string} rrr - Remita Retrieval Reference
+   */
+  async confirmPaymentManually(rrr) {
+    if (!rrr) throw new Error('confirmPaymentManually requires an rrr');
+    const url = this.buildUrl(this.endpoints.JED.CONFIRM_PAYMENT_MANUAL(rrr));
+    return await this.makeRequest(url, { method: 'POST' });
+  }
+
   async getCustomerRequest(accountNumber) {
     const url = this.buildUrl(this.endpoints.JED.GET_REQUEST_BY_ACCOUNT(accountNumber));
     return await this.makeRequest(url, { 
@@ -500,6 +535,157 @@ class JEDApiService {
       useCache: true,
       cacheKey: `all-requests-${JSON.stringify(params)}`
     });
+  }
+
+  /**
+   * NEW: Export customer requests to Excel.
+   * GET /external/jed/requests/export (admin-locked per API docs).
+   * Distinct from exportCustomerRequests() below, which hits the METERS
+   * group's /meters/customer-requests/export instead — kept separate
+   * rather than merged, since they're genuinely different endpoints.
+   * @param {Object} params - filter/date-range params
+   * @returns {Promise<Blob>}
+   */
+  async exportJedRequests(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.JED.EXPORT_REQUESTS,
+      params,
+      'JED'
+    );
+    const headers = this.utils.buildHeaders();
+    delete headers['Content-Type'];
+
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Failed to export requests: ${response.status}`);
+    }
+    return await response.blob();
+  }
+
+  /**
+   * NEW: Get payments (paid or completed), with optional date range/presets.
+   * GET /external/jed/payments (admin-locked per API docs).
+   * @param {Object} params - { startDate, endDate, preset, page, limit }
+   */
+  async getPayments(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.JED.GET_PAYMENTS,
+      params,
+      'JED'
+    );
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: true,
+      cacheKey: `payments-${JSON.stringify(params)}`
+    });
+  }
+
+  /**
+   * NEW: Check a Remita transaction's status directly by RRR.
+   * GET /external/jed/status/rrr/{rrr} (admin-locked per API docs).
+   */
+  async checkRemitaStatusByRRR(rrr) {
+    if (!rrr) throw new Error('checkRemitaStatusByRRR requires an rrr');
+    const url = this.buildUrl(this.endpoints.JED.CHECK_STATUS_BY_RRR(rrr));
+    return await this.makeRequest(url, { method: 'GET' });
+  }
+
+  /**
+   * NEW: Check a Remita transaction's status by orderId.
+   * GET /external/jed/status/order/{orderId} (admin-locked per API docs).
+   */
+  async checkRemitaStatusByOrderId(orderId) {
+    if (!orderId) throw new Error('checkRemitaStatusByOrderId requires an orderId');
+    const url = this.buildUrl(this.endpoints.JED.CHECK_STATUS_BY_ORDER_ID(orderId));
+    return await this.makeRequest(url, { method: 'GET' });
+  }
+
+  /**
+   * NEW: Verify payment status by RRR via the public webhooks group.
+   * GET /webhooks/verify-payment/{rrr} — no auth required per API docs.
+   * Useful as a lighter-weight check than checkRemitaStatusByRRR when the
+   * caller isn't necessarily an admin (e.g. an installer double-checking
+   * before starting a job).
+   */
+  async verifyPaymentByRRR(rrr) {
+    if (!rrr) throw new Error('verifyPaymentByRRR requires an rrr');
+    const url = this.utils.buildUrl(this.endpoints.WEBHOOKS.VERIFY_PAYMENT(rrr), 'WEBHOOKS');
+    return await this.makeRequest(url, { method: 'GET' });
+  }
+
+  async getCustomerRequestsByStatus(status) {
+    const url = this.buildUrl(this.endpoints.JED.GET_REQUESTS_BY_STATUS(status));
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: true,
+      cacheKey: `requests-status-${status}`
+    });
+  }
+
+  /**
+   * Get installations assigned to the CURRENTLY AUTHENTICATED installer
+   * (Phase 1, step 6/7: the installer pulls jobs where JEED has already
+   * handed over installation details, i.e. payment has been confirmed via
+   * Remita).
+   *
+   * CORRECTED: the real endpoint is GET /external/jed/requests/installer
+   * with NO employeeId in the path — it's scoped by the Bearer token, not
+   * a URL param. An earlier version of this method assumed a path param;
+   * that was wrong against the confirmed API docs and has been fixed.
+   *
+   * `params.employeeId`, if passed, is used ONLY by the client-side
+   * fallback filter below (never sent to the real endpoint as a query
+   * param) — useful if an admin wants a specific installer's history via
+   * the general /requests list as a last resort.
+   *
+   * @param {Object} params - { page, limit, status, employeeId? }
+   */
+  async getMyInstallations(params = {}) {
+    const { employeeId, ...queryParams } = params;
+
+    try {
+      const url = this.utils.buildUrlWithParams(
+        this.endpoints.JED.GET_REQUESTS_FOR_INSTALLERS,
+        queryParams,
+        'JED'
+      );
+      return await this.makeRequest(url, {
+        method: 'GET',
+        useCache: true,
+        cacheKey: `my-installations-${JSON.stringify(queryParams)}`
+      });
+    } catch (error) {
+      const errMsg = String(error?.message || '').toLowerCase();
+      if (!errMsg.includes('not_found') && !errMsg.includes('404')) {
+        throw error;
+      }
+      console.warn('[API] /requests/installer not found on server, falling back to client-side filter');
+    }
+
+    if (!employeeId) {
+      console.warn('[API] getMyInstallations fallback needs employeeId to filter — returning empty set');
+      return { data: [], pagination: { totalCount: 0 } };
+    }
+
+    // Fallback: fetch a wide page of requests, filter to this installer,
+    // then apply the caller's requested page/limit on the filtered set.
+    const fetchLimit = Math.max(queryParams.limit || 5, 200);
+    const response = await this.getAllCustomerRequests({ ...queryParams, page: 1, limit: fetchLimit });
+    const list = Array.isArray(response) ? response : (response?.data || []);
+
+    const mine = list.filter(
+      (item) =>
+        item.installer?.employeeId === employeeId ||
+        item.installerEmployeeId === employeeId ||
+        item.installer?.id === employeeId
+    );
+
+    const requestedLimit = queryParams.limit || mine.length;
+    return {
+      data: mine.slice(0, requestedLimit),
+      pagination: { totalCount: mine.length }
+    };
   }
 
   // ==================== ADMIN & DASHBOARD METHODS ====================
@@ -881,12 +1067,16 @@ class JEDApiService {
       baseUrl: !!this.config.BASE_URL,
       authEndpoint: !!this.config.ENDPOINT_GROUPS.AUTH,
       jedEndpoint: !!this.config.ENDPOINT_GROUPS.JED,
+      webhooksEndpoint: !!this.config.ENDPOINT_GROUPS.WEBHOOKS,
       hasTokenStorage: !!localStorage,
       methods: {
         login: typeof this.login === 'function',
         getMeterTypes: typeof this.getMeterTypes === 'function',
         getUsers: typeof this.getUsers === 'function',
         getDashboardStats: typeof this.getDashboardStats === 'function',
+        getMyInstallations: typeof this.getMyInstallations === 'function',
+        getPayments: typeof this.getPayments === 'function',
+        verifyPaymentByRRR: typeof this.verifyPaymentByRRR === 'function',
       }
     };
     

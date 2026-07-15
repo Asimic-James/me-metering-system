@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import UserInfoPanel from './UserInfoPanel'; // Assuming UserInfoPanel is in the same directory
+import RequestInfoPanel from './RequestInfoPanel';
 import JEDApiService from '../services/api';
 import { 
   CheckCircle, 
@@ -10,7 +11,9 @@ import {
   FileText,
   User,
   Hash,
-  Zap
+  Zap,
+  Search,
+  Loader2
 } from 'lucide-react';// Constants for better maintainability
 const VALIDATION_RULES = {
   sealNo: { required: true, message: 'Seal Number is required' },
@@ -256,6 +259,64 @@ function InstallationForm({ onSuccess }) {
     setStatus
   } = useInstallationForm();
 
+  // ---- NEW: inline lookup state (kept local to this component, does not
+  // touch useInstallationForm's contract so nothing else consuming that
+  // hook is affected). This is entirely additive. ----
+  const [lookupData, setLookupData] = useState(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState(null);
+  const [lastLookedUpAccount, setLastLookedUpAccount] = useState(null);
+
+  // Looks up the request for the currently typed Account Number and shows
+  // it inline via RequestInfoPanel — WITHOUT navigating away and WITHOUT
+  // resetting any of the form's own input. sealNo/meterNo are prefilled
+  // from the fetched record only if the installer hasn't already typed
+  // something into them.
+  const handleLookup = useCallback(async () => {
+    const accountNumber = formData.accountNumber?.trim();
+    if (!accountNumber) {
+      setLookupError('Enter an Account Number first');
+      return;
+    }
+
+    setLookupLoading(true);
+    setLookupError(null);
+
+    try {
+      const response = await JEDApiService.getCustomerRequest(accountNumber);
+      const data = response?.data || response;
+      setLookupData(data);
+      setLastLookedUpAccount(accountNumber);
+
+      // Prefill ONLY empty fields — never overwrite what the installer
+      // has already typed, per requirement.
+      if (!formData.sealNo && data?.sealNo) {
+        updateField('sealNo', data.sealNo);
+      }
+      if (!formData.meterNo && (data?.meterNo || data?.meterNumber)) {
+        updateField('meterNo', String(data.meterNo || data.meterNumber));
+      }
+    } catch (err) {
+      console.error('[InstallationForm] Lookup failed:', err);
+      setLookupData(null);
+      setLookupError(err.message || 'Could not find a request for this account number');
+    } finally {
+      setLookupLoading(false);
+    }
+  }, [formData.accountNumber, formData.sealNo, formData.meterNo, updateField]);
+
+  // Account Number field's own change handler — wraps updateField but also
+  // invalidates a stale lookup panel if the number changes after a lookup
+  // was already performed, so a mismatched customer is never shown.
+  // Does NOT touch sealNo/meterNo/installationNotes.
+  const handleAccountNumberChange = useCallback((name, value) => {
+    updateField(name, value);
+    if (lastLookedUpAccount && value !== lastLookedUpAccount) {
+      setLookupData(null);
+      setLookupError(null);
+    }
+  }, [updateField, lastLookedUpAccount]);
+
   // Handle form submission
   const handleSubmit = useCallback(async () => {
     if (!validateForm()) {
@@ -282,7 +343,7 @@ function InstallationForm({ onSuccess }) {
       accountNumber: formData.accountNumber,
       installationDate: new Date().toISOString(),
       installerName: user.name,
-      installerEmployeeId: user.employeeId,
+      installerEmployeeId: user.employeeId || user.staffId || user.id,
       installerPhone: user.phone,
       installerEmail: user.email,
       notes: formData.installationNotes || 'Installation completed via web portal'
@@ -306,6 +367,9 @@ function InstallationForm({ onSuccess }) {
 
       // Clear form after successful submission
       clearForm();
+      setLookupData(null);
+      setLookupError(null);
+      setLastLookedUpAccount(null);
 
       // Call the onSuccess callback and then redirect after 3 seconds
       setTimeout(() => {
@@ -332,6 +396,9 @@ function InstallationForm({ onSuccess }) {
   // Handle clear form
   const handleClear = useCallback(() => {
     clearForm();
+    setLookupData(null);
+    setLookupError(null);
+    setLastLookedUpAccount(null);
   }, [clearForm]);
 
   // Handle dismiss message
@@ -339,7 +406,9 @@ function InstallationForm({ onSuccess }) {
     setStatus({ show: false, type: '', message: '', installationId: null });
   }, [setStatus]);
 
-  // Form fields configuration
+  // Form fields configuration — meterNo/sealNo unchanged; accountNumber is
+  // rendered separately below (bespoke layout with the lookup button) so
+  // the shared FormField component stays untouched for every other use.
   const formFields = useMemo(() => [
     {
       name: 'sealNo',
@@ -355,12 +424,6 @@ function InstallationForm({ onSuccess }) {
       maxLength: 13,
       showCharacterCount: true,
       monospace: true
-    },
-    {
-      name: 'accountNumber',
-      label: 'Account Number',
-      placeholder: 'e.g., 477014',
-      type: 'text'
     }
   ], []);
 
@@ -408,6 +471,57 @@ function InstallationForm({ onSuccess }) {
               Meter Information
             </h3>
             <div className="space-y-4 sm:space-y-6">
+              {/* Account Number — bespoke layout with inline lookup action.
+                  Kept separate from FormField so the trailing button never
+                  affects sealNo/meterNo rendering. */}
+              <div>
+                <label htmlFor="accountNumber" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Account Number
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    id="accountNumber"
+                    name="accountNumber"
+                    value={formData.accountNumber}
+                    onChange={(e) => handleAccountNumberChange('accountNumber', e.target.value)}
+                    disabled={isSubmitting}
+                    className={`flex-1 min-w-0 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 dark:bg-gray-800/80 disabled:cursor-not-allowed transition-colors ${
+                      errors.accountNumber ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    placeholder="e.g., 477014"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleLookup}
+                    disabled={isSubmitting || lookupLoading || !formData.accountNumber.trim()}
+                    className="shrink-0 flex items-center gap-2 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    aria-label="Look up request details"
+                  >
+                    {lookupLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Search className="w-4 h-4" />
+                    )}
+                    <span className="hidden sm:inline">Look up</span>
+                  </button>
+                </div>
+                {errors.accountNumber && (
+                  <p className="mt-1 text-sm text-red-600">{errors.accountNumber}</p>
+                )}
+                {lookupError && (
+                  <p className="mt-1 text-sm text-amber-600">{lookupError}</p>
+                )}
+              </div>
+
+              {/* Inline request details — same component used on the full
+                  InstallationDetail page, so both surfaces stay consistent.
+                  Purely additive: appears only after a successful lookup,
+                  never clears sealNo/meterNo/notes. */}
+              {lookupData && (
+                <RequestInfoPanel data={lookupData} title="Found Request" compact />
+              )}
+
               {formFields.map((field) => (
                 <FormField
                   key={field.name}

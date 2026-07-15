@@ -46,7 +46,12 @@ export const API_CONFIG = {
     USERS: '', // User endpoints are at the root level
     SETTINGS: '',  // Empty prefix for root-level settings endpoints
     COMPLAINTS: '/complaints',
-    UPLOADS: '/uploads'
+    UPLOADS: '/uploads',
+    // Root-level webhook group. Distinct from /external/jed/remita/webhook —
+    // this is the live Remita webhook receiver per the API docs (no auth
+    // required). The frontend never POSTs here directly (Remita calls it
+    // server-to-server); only the GET verify-payment endpoint is FE-usable.
+    WEBHOOKS: '/webhooks',
   },
   
   // Default Headers
@@ -109,20 +114,45 @@ export const ENDPOINTS = {
     CONFIRM_PAYMENT: '/confirm-payment',
     COMPLETE_INSTALLATION: '/complete-installation',
     REMITA_WEBHOOK: '/remita/webhook',
+    // Admin fallback — manually confirm a payment by RRR if the Remita
+    // webhook was missed.
+    CONFIRM_PAYMENT_MANUAL: (rrr) => `/confirm-payment/manual/${rrr}`,
     
     // Request Management
     GET_REQUEST_BY_ACCOUNT: (accountNumber) => `/requests/${accountNumber}`,
     GET_ALL_REQUESTS: '/requests',
     GET_REQUESTS_BY_STATUS: (status) => `/requests/status/${status}`,
+    // Unconfirmed against real API docs — kept for backward compatibility,
+    // superseded by GET_REQUESTS_FOR_INSTALLERS below which is what the
+    // docs actually show (no employeeId in the path; auth-scoped via JWT).
     GET_REQUESTS_BY_INSTALLER: (employeeId) => `/requests/installer/${employeeId}`,
+    // CONFIRMED against real API docs: "Get customer requests for
+    // installers (non-sensitive fields only)" — self-scoped to the
+    // authenticated installer via the Bearer token, no employeeId param.
+    // This is the one JEDApiService.getMyInstallations() actually calls.
+    GET_REQUESTS_FOR_INSTALLERS: '/requests/installer',
+    // Export customer requests to Excel (admin-locked per docs). Distinct
+    // from METERS.CUSTOMER_REQUESTS_EXPORT (/meters/customer-requests/export).
+    EXPORT_REQUESTS: '/requests/export',
     GET_REQUESTS_BY_DATE_RANGE: (startDate, endDate) => 
       `/requests?startDate=${startDate}&endDate=${endDate}`,
+    
+    // Payments & Remita status checks (admin-locked per docs)
+    GET_PAYMENTS: '/payments',
+    CHECK_STATUS_BY_RRR: (rrr) => `/status/rrr/${rrr}`,
+    CHECK_STATUS_BY_ORDER_ID: (orderId) => `/status/order/${orderId}`,
     
     // Installer Management
     GET_INSTALLER_STATS: (employeeId) => `/installers/${employeeId}/dashboard-stats`,
     GET_INSTALLER_PERFORMANCE: '/installer/performance',
     UPDATE_INSTALLER_PROFILE: (employeeId) => `/installers/${employeeId}/profile`,
     GET_INSTALLER_DASHBOARD: '/installer/dashboard',
+  },
+
+  // ==================== WEBHOOKS ENDPOINTS (root-level, no auth) ====================
+  WEBHOOKS: {
+    REMITA_PAYMENT: '/remita/payment', // server-to-server only, not called from FE
+    VERIFY_PAYMENT: (rrr) => `/verify-payment/${rrr}`, // FE-usable: check payment status by RRR
   },
   
   // ==================== METERS ENDPOINTS ====================
@@ -210,10 +240,14 @@ export const STATUS = {
   },
   
   // Payment Status
+  // CONFIRMED against production dashboard: the real API returns these
+  // UPPERCASE ("INITIATED", "PAID", "COMPLETED"). See src/utils/statusBadge.js
+  // for the case-insensitive UI mapping consumed by every status badge.
   PAYMENT: {
     INITIATED: 'initiated',
     PENDING: 'pending',
     SUCCESS: 'success',
+    PAID: 'paid',
     FAILED: 'failed',
     REFUNDED: 'refunded',
     CANCELLED: 'cancelled',
@@ -305,8 +339,26 @@ export const API_UTILS = {
   /**
    * Build full URL for an endpoint with group support
    * FIXED: Better handling of empty group prefixes
+   * HARDENED: Guards against an undefined/missing endpoint constant
+   * (e.g. a typo, or api.js referencing a key that doesn't exist in
+   * ENDPOINTS) instead of throwing a cryptic
+   * "Cannot read properties of undefined (reading 'startsWith')".
    */
   buildUrl: (endpoint, group = 'JED') => {
+    if (endpoint === undefined || endpoint === null) {
+      throw new Error(
+        `[API Config] buildUrl received an undefined endpoint for group "${group}". ` +
+        `This usually means api.js references an ENDPOINTS.${group}.<KEY> that doesn't ` +
+        `exist (or wasn't saved) in api.config.js. Check the endpoint constant name.`
+      );
+    }
+    if (typeof endpoint !== 'string') {
+      throw new Error(
+        `[API Config] buildUrl expected a string endpoint, got ${typeof endpoint}. ` +
+        `If this endpoint is a function (e.g. GET_REQUEST_BY_ACCOUNT), make sure it was ` +
+        `called with its argument, e.g. GET_REQUEST_BY_ACCOUNT(accountNumber).`
+      );
+    }
     if (endpoint.startsWith('http')) {
       return endpoint;
     }
@@ -329,6 +381,9 @@ export const API_UTILS = {
    * Build API URL without group prefix (for root endpoints)
    */
   buildApiUrl: (endpoint) => {
+    if (endpoint === undefined || endpoint === null) {
+      throw new Error('[API Config] buildApiUrl received an undefined endpoint.');
+    }
     if (endpoint.startsWith('http')) {
       return endpoint;
     }
@@ -401,7 +456,8 @@ export const API_UTILS = {
       '/reports/export',
       '/admin/analytics',
       '/meters/export',
-      '/uploads/'
+      '/uploads/',
+      '/requests/export'
     ];
     
     return longRunningEndpoints.some(e => endpoint.includes(e)) 

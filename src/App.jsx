@@ -15,6 +15,10 @@ import { usePermissions } from './components/auth/usePermissions';
 import jedApi from './components/services/api';
 
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
+// Installer-facing tabbed dashboard (Pending/Completed) — added this project.
+const InstallerDashboard = lazy(() => import('./components/dashboard/InstallerDashboard'));
+// Click-through detail view reached from either dashboard's rows — added this project.
+const InstallationDetail = lazy(() => import('./components/installation/InstallationDetail'));
 const AdminReports = lazy(() => import('./components/admin/AdminReports'));
 const InstallationForm = lazy(() => import('./components/installation/InstallationForm'));
 const MeterSchedule = lazy(() => import('./components/schedule/MeterSchedule'));
@@ -103,7 +107,25 @@ function AppContent() {
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<AdminDashboard />} />
+              {/* Dashboard routes by role: admin gets the full-pipeline
+                  AdminDashboard (all requests, all installers, payment
+                  stages); installer gets the tabbed Pending/Completed
+                  InstallerDashboard scoped to their own jobs. */}
+              <Route
+                path="/dashboard"
+                element={user?.role === 'admin' ? <AdminDashboard /> : <InstallerDashboard />}
+              />
+              {/* Click-through detail view from either dashboard's rows.
+                  Pending jobs show the complete-installation form here;
+                  completed jobs show a read-only "Paid & Completed" summary. */}
+              <Route
+                path="/installations/:accountNumber"
+                element={
+                  permissions.isAdmin || permissions.canViewInstallations
+                    ? <InstallationDetail />
+                    : <AccessDenied />
+                }
+              />
               <Route path="/submit" element={permissions.isAdmin || permissions.canCreateInstallation ? <InstallationForm /> : <AccessDenied />} />
               <Route path="/schedule" element={permissions.isAdmin || permissions.canViewSchedule ? <MeterSchedule /> : <AccessDenied />} />
               <Route path="/users" element={permissions.isAdmin ? <UserManagement /> : <AccessDenied />} />

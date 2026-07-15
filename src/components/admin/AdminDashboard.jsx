@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import JEDApiService from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrencyNGN } from '../../utils/currency';
+import { getStatusBadgeClass } from '../../utils/statusBadge';
 import { 
   BarChart,
   Users,
@@ -49,6 +50,33 @@ const StatCard = ({ title, value, icon: Icon, change, changeType = 'neutral' }) 
   </div>
 );
 
+/**
+ * Resolve a display-ready installation date from a request object.
+ *
+ * NOTE: the real API response's date field name is unconfirmed — the
+ * dashboard was previously reading only `submittedAt`, which showed as a
+ * dash ("-") for every row because the real field is (most likely) named
+ * something else. This checks the most probable candidates in priority
+ * order rather than assuming a single field name. Once the real response
+ * shape is confirmed, this fallback chain can be trimmed to just the
+ * correct field.
+ */
+const getInstallDate = (install) => {
+  const raw =
+    install?.submittedAt ||
+    install?.createdAt ||
+    install?.dateCreated ||
+    install?.requestDate ||
+    install?.transactiondate ||
+    install?.date ||
+    null;
+
+  if (!raw) return '-';
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleDateString();
+};
+
 // Recent Installations Table - Mobile Optimized
 const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
@@ -78,17 +106,13 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
                   {install.custNames || install.applicantName || install.installer?.name || '-'}
                 </p>
               </div>
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                install.status === 'completed' ? 'bg-green-100 text-green-800' :
-                install.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-red-100 text-red-800'
-              }`}>
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(install.status)}`}>
                 {install.status}
               </span>
             </div>
             <div className="flex justify-between items-center mt-2">
               <span className="text-xs text-gray-500 dark:text-gray-400">
-                {install.submittedAt ? new Date(install.submittedAt).toLocaleDateString() : '-'}
+                {getInstallDate(install)}
               </span>
               <span className="font-semibold text-gray-900 dark:text-white text-sm">
                 {formatCurrencyNGN(install.amount)}
@@ -126,11 +150,7 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
                   {install.custNames || install.applicantName || install.installer?.name || '-'}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                    install.status === 'completed' ? 'bg-green-100 text-green-800' :
-                    install.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(install.status)}`}>
                     {install.status}
                   </span>
                 </td>
@@ -138,7 +158,7 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
                   {formatCurrencyNGN(install.amount)}
                 </td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-sm">
-                  {install.submittedAt ? new Date(install.submittedAt).toLocaleDateString() : '-'}
+                  {getInstallDate(install)}
                 </td>
               </tr>
             ))
@@ -245,6 +265,13 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
 };
 
 // Quick Actions Component - Mobile First
+// FIX: labels previously used `text-gray-900 dark:text-white`, but the
+// gradient button backgrounds (from-blue-50/green-50/purple-50) are NOT
+// dark-mode aware — they stay light even in dark mode. That meant in dark
+// mode the text flipped to white while sitting on a light pastel
+// background, producing low-contrast, hard-to-read buttons (confirmed in
+// the reported screenshot). Text is now always dark (`text-gray-900`),
+// matching the backgrounds' actual (always-light) appearance.
 const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) => (
   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6">
     <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h3>
@@ -255,7 +282,7 @@ const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) 
           className="p-3 sm:p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg hover:shadow-md transition-all border border-blue-200"
         >
           <Users className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 mb-2 mx-auto" />
-          <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white block text-center">
+          <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
             Manage Users
           </span>
         </button>
@@ -265,7 +292,7 @@ const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) 
         className="p-3 sm:p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg hover:shadow-md transition-all border border-green-200"
       >
         <Download className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 mb-2 mx-auto" />
-        <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white block text-center">
+        <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
           Export Data
         </span>
       </button>
@@ -275,7 +302,7 @@ const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) 
           className="p-3 sm:p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg hover:shadow-md transition-all border border-purple-200 col-span-2"
         >
           <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 mb-2 mx-auto" />
-          <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white block text-center">
+          <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
             System Settings
           </span>
         </button>
@@ -303,76 +330,94 @@ function AdminDashboard({ isInstallerView = false }) {
   const showInstallerData = isInstallerView || !isAdmin;
 
   useEffect(() => {
+    // Helper: calculate stats client-side from a given installations array.
+    // Takes the array explicitly rather than reading from state, so it's
+    // never stale and never needs to be a dependency of the outer effect.
+    const calculateStatsFromInstallations = (installations, forInstallerView) => {
+      const normalized = {
+        pendingRequests: installations.filter(inst =>
+          inst.status === 'pending' || inst.status === 'processing'
+        ).length,
+        completedRequests: installations.filter(inst =>
+          inst.status === 'completed'
+        ).length,
+        activeInstallers: forInstallerView ? 1 : 0, // installer view: just themselves
+        totalRevenue: installations
+          .filter(inst => inst.status === 'completed')
+          .reduce((sum, inst) => sum + (parseFloat(inst.amount) || 0), 0)
+      };
+      setStats(normalized);
+      console.log('[Dashboard] Stats calculated from installations:', normalized);
+    };
+
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Fetch installations first (works for both admin and installer)
-        const installationsResponse = await JEDApiService.getAllCustomerRequests({
-          page: 1,
-          limit: 5
-        });
-        
-        let installations = Array.isArray(installationsResponse) 
-          ? installationsResponse 
-          : (installationsResponse?.data || []);
-        const paginationData = installationsResponse?.pagination || {};
-        
-        // Filter for installer-specific data
-        if (showInstallerData && !isAdmin) {
-          installations = installations.filter(inst => 
-            inst.installer?.id === user?.id || inst.installerPhone === user?.phone
-          );
-        }
-        
-        setRecentInstallations(installations);
-        setRequestsTotalCount(paginationData.totalCount || installations.length);
+        if (isAdmin && !showInstallerData) {
+          // ---- Admin: full pipeline visibility across all installers ----
+          const installationsResponse = await JEDApiService.getAllCustomerRequests({
+            page: 1,
+            limit: 5
+          });
+          const installations = Array.isArray(installationsResponse)
+            ? installationsResponse
+            : (installationsResponse?.data || []);
+          const paginationData = installationsResponse?.pagination || {};
 
-        // Fetch stats based on role
-        if (isAdmin) {
-          // Admin: Fetch from dashboard stats endpoint
+          setRecentInstallations(installations);
+          setRequestsTotalCount(paginationData.totalCount || installations.length);
+
           try {
             const statsResponse = await JEDApiService.getDashboardStats();
             const payload = statsResponse?.data ?? statsResponse ?? {};
-
-            const normalized = {
+            setStats({
               pendingRequests: payload.pendingRequests ?? payload.pendingCount ?? payload.pending ?? 0,
               completedRequests: payload.completedRequests ?? payload.completedCount ?? payload.completed ?? 0,
               activeInstallers: payload.activeInstallers ?? payload.active_installers ?? payload.installersActive ?? 0,
               totalRevenue: payload.totalRevenue ?? payload.total_revenue ?? payload.revenue ?? 0
-            };
-
-            setStats(normalized);
+            });
           } catch (statsError) {
             console.warn('[Dashboard] Failed to fetch admin stats, calculating from installations:', statsError.message);
-            // Fallback: Calculate stats from installations
-            calculateStatsFromInstallations(installations);
+            calculateStatsFromInstallations(installations, false);
           }
         } else {
-          // Installer: Try installer-specific endpoint first, then fallback to calculation
+          // ---- Installer: jobs assigned to THIS installer only ----
+          // CORRECTED: getMyInstallations() no longer takes employeeId as
+          // a positional argument — the real endpoint (/requests/installer)
+          // is scoped by the auth token, not a URL param. employeeId is
+          // now passed inside params, used only by the client-side
+          // fallback filter if the dedicated endpoint isn't available.
+          const myResponse = await JEDApiService.getMyInstallations({
+            page: 1,
+            limit: 5,
+            employeeId: user?.employeeId || user?.staffId || user?.id
+          });
+          const installations = Array.isArray(myResponse) ? myResponse : (myResponse?.data || []);
+          const paginationData = myResponse?.pagination || {};
+
+          setRecentInstallations(installations);
+          setRequestsTotalCount(paginationData.totalCount || installations.length);
+
           try {
             const installerStatsResponse = await JEDApiService.getInstallerDashboard();
             if (installerStatsResponse) {
               const payload = installerStatsResponse?.data ?? installerStatsResponse ?? {};
-              const normalized = {
+              setStats({
                 pendingRequests: payload.pendingRequests ?? payload.pendingCount ?? payload.pending ?? 0,
                 completedRequests: payload.completedRequests ?? payload.completedCount ?? payload.completed ?? 0,
-                activeInstallers: 1, // Always 1 for installers (themselves)
+                activeInstallers: 1,
                 totalRevenue: payload.totalRevenue ?? payload.total_revenue ?? payload.revenue ?? 0
-              };
-              setStats(normalized);
+              });
             } else {
-              // Endpoint returned null, calculate from installations
-              calculateStatsFromInstallations(installations);
+              calculateStatsFromInstallations(installations, true);
             }
           } catch (installerStatsError) {
             console.warn('[Dashboard] Failed to fetch installer stats, calculating from installations:', installerStatsError.message);
-            // Fallback: Calculate stats from installations
-            calculateStatsFromInstallations(installations);
+            calculateStatsFromInstallations(installations, true);
           }
         }
-
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         setError('Failed to load dashboard data. Please try again later.');
@@ -381,29 +426,12 @@ function AdminDashboard({ isInstallerView = false }) {
       }
     };
 
-    // Helper function to calculate stats from installations data
-    const calculateStatsFromInstallations = (installations) => {
-      const allInstallations = installations || recentInstallations;
-      const normalized = {
-        pendingRequests: allInstallations.filter(inst => 
-          inst.status === 'pending' || inst.status === 'processing'
-        ).length,
-        completedRequests: allInstallations.filter(inst => 
-          inst.status === 'completed'
-        ).length,
-        activeInstallers: isAdmin ? 0 : 1, // For installers, show 1 (themselves)
-        totalRevenue: allInstallations
-          .filter(inst => inst.status === 'completed')
-          .reduce((sum, inst) => sum + (parseFloat(inst.amount) || 0), 0)
-      };
-      setStats(normalized);
-      console.log('[Dashboard] Stats calculated from installations:', normalized);
-    };
-
     if (user) {
       fetchDashboardData();
     }
-  }, [user, showInstallerData, isAdmin, recentInstallations]);
+    // NOTE: `recentInstallations` intentionally excluded — it's set inside
+    // this effect, so including it as a dependency caused a refetch loop.
+  }, [user, showInstallerData, isAdmin]);
 
   const handleExportData = async (exportType, format) => {
     try {
