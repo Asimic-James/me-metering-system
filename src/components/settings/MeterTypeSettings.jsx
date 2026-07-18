@@ -1,7 +1,7 @@
 // src/components/settings/MeterTypeSettings.jsx
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Settings, Plus, Edit2, Trash2, Check, X,
+  Plus, Edit2, Trash2, Check, X,
   AlertCircle, Loader2, Search
 } from 'lucide-react';
 import jedApi from '../services/api';
@@ -271,18 +271,14 @@ const MeterTypeSettings = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Section header — page-level "Settings" title is now owned by
+          SettingsPage.jsx, which mounts this component under the
+          "Meter Types" tab. This keeps just a section sub-heading so
+          there's no duplicate title stacked above it. */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Settings className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Settings
-            </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Manage meter types and configurations
-            </p>
-          </div>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Meter Types</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Manage installation pricing by meter type</p>
         </div>
         <button
           onClick={() => {

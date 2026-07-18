@@ -472,8 +472,8 @@ class JEDApiService {
 
   // ==================== JED INTEGRATION METHODS ====================
   // Phase 1 lifecycle:
-  // 1. Customer requests meter via JEED
-  // 2. We generate RRR (generatePaymentReference) and send to JEED
+  // 1. Customer requests meter via JED
+  // 2. We generate RRR (generatePaymentReference) and send to JED
   // 3. Customer pays via Remita using the RRR
   // 4. Remita webhook notifies us of successful payment
   // 5. We confirmPayment with Remita -> Remita returns installation details
@@ -948,6 +948,75 @@ class JEDApiService {
     const response = await this.makeRequest(url, { method: 'DELETE' });
     this.clearCache();
     return response;
+  }
+
+  // ==================== API KEYS MANAGEMENT METHODS ====================
+  // All endpoints below require auth (Bearer token attached automatically
+  // by buildHeaders()). Admin-only in practice since /settings is fully
+  // admin-gated at the route level in App.jsx.
+
+  /**
+   * Create a new API key. IMPORTANT: the full secret key value is only
+   * ever returned in THIS response — it cannot be re-fetched afterward.
+   * The caller (ApiKeySettings.jsx) is responsible for surfacing it
+   * prominently so the admin can copy it before navigating away.
+   */
+  async createApiKey(data) {
+    console.log('[API] Creating API key:', data.name);
+    const url = this.utils.buildUrl(this.endpoints.APIKEYS.BASE, 'APIKEYS');
+    const response = await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    this.clearCache();
+    return response;
+  }
+
+  async getApiKeys(params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.APIKEYS.BASE, params, 'APIKEYS');
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: true,
+      cacheKey: `apikeys-${JSON.stringify(params)}`
+    });
+  }
+
+  async getApiKeyById(id) {
+    const safeId = typeof id === 'string' || typeof id === 'number' || typeof id === 'boolean'
+      ? String(id)
+      : (id?.$oid ? String(id.$oid) : JSON.stringify(id));
+    const url = this.utils.buildUrl(this.endpoints.APIKEYS.BY_ID(id), 'APIKEYS');
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: true,
+      cacheKey: `apikey-${safeId}`
+    });
+  }
+
+  async deleteApiKey(id) {
+    console.log('[API] Deleting API key:', id);
+    const url = this.utils.buildUrl(this.endpoints.APIKEYS.BY_ID(id), 'APIKEYS');
+    const response = await this.makeRequest(url, { method: 'DELETE' });
+    this.clearCache();
+    return response;
+  }
+
+  async deactivateApiKey(id) {
+    console.log('[API] Deactivating API key:', id);
+    const url = this.utils.buildUrl(this.endpoints.APIKEYS.DEACTIVATE(id), 'APIKEYS');
+    const response = await this.makeRequest(url, { method: 'POST' });
+    this.clearCache();
+    return response;
+  }
+
+  /**
+   * Usage statistics for an API key over the last N days.
+   * @param {string} id
+   * @param {Object} params - e.g. { days: 30 }
+   */
+  async getApiKeyUsage(id, params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.APIKEYS.USAGE(id), params, 'APIKEYS');
+    return await this.makeRequest(url, { method: 'GET' });
   }
 
   // ==================== USER MANAGEMENT METHODS ====================

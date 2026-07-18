@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { PERMISSIONS, hasPermission } from '../auth/permissions.jsx';
+import { PERMISSIONS, hasPermission } from '../auth/permissions';
 import jedApi from '../services/api';
 import { ENDPOINTS } from '../services/api.config.js';
 import { AlertCircle, Upload, Download, FileCheck2, FileX2, Percent, List, FileDown } from 'lucide-react';

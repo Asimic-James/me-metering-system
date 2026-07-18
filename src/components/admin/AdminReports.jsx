@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { PERMISSIONS, hasPermission } from '../auth/permissions.jsx';
+import { PERMISSIONS, hasPermission } from '../auth/permissions';
 import JEDApiService from '../services/api';
 import { 
   AlertCircle, 

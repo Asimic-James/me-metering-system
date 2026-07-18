@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Database, Zap, Users, BarChart3,
-  Upload, Settings, MessageSquare, X, Layers2
+  Upload, Settings, MessageSquare, X, Layers2, CreditCard
 } from 'lucide-react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
@@ -52,6 +52,15 @@ const NAVIGATION_CONFIG = {
       icon: BarChart3,
       mobileBottomNav: (role) => role === 'admin',
       description: 'Analytics & exports',
+      accessible: (userRole) => userRole === 'admin'
+    },
+    {
+      id: 'payments',
+      label: 'Payments',
+      path: '/payments',
+      icon: CreditCard,
+      mobileBottomNav: false,
+      description: 'Payment reconciliation & Remita status',
       accessible: (userRole) => userRole === 'admin'
     },
     {

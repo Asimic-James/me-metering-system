@@ -52,6 +52,10 @@ export const API_CONFIG = {
     // required). The frontend never POSTs here directly (Remita calls it
     // server-to-server); only the GET verify-payment endpoint is FE-usable.
     WEBHOOKS: '/webhooks',
+    // Root-level API key management group. All endpoints require auth
+    // (locked in the API docs) — Bearer token is already attached
+    // automatically by buildHeaders(), no special handling needed.
+    APIKEYS: '',
   },
   
   // Default Headers
@@ -85,6 +89,24 @@ export const ERROR_TYPES = {
   VERIFICATION: 'VERIFICATION_ERROR'
 };
 
+const toPathSegment = (value) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'object') {
+    if (value.$oid) return String(value.$oid);
+    if (typeof value.toHexString === 'function') return value.toHexString();
+    if (typeof value.toString === 'function' && value.toString !== Object.prototype.toString) {
+      try {
+        return String(value.toString());
+      } catch {
+        // fall through
+      }
+    }
+    return encodeURIComponent(JSON.stringify(value));
+  }
+  return String(value);
+};
+
 // API Endpoints - Organized by functionality with better consistency
 export const ENDPOINTS = {
   // ==================== AUTHENTICATION ENDPOINTS ====================
@@ -116,16 +138,16 @@ export const ENDPOINTS = {
     REMITA_WEBHOOK: '/remita/webhook',
     // Admin fallback — manually confirm a payment by RRR if the Remita
     // webhook was missed.
-    CONFIRM_PAYMENT_MANUAL: (rrr) => `/confirm-payment/manual/${rrr}`,
+    CONFIRM_PAYMENT_MANUAL: (rrr) => `/confirm-payment/manual/${toPathSegment(rrr)}`,
     
     // Request Management
-    GET_REQUEST_BY_ACCOUNT: (accountNumber) => `/requests/${accountNumber}`,
+    GET_REQUEST_BY_ACCOUNT: (accountNumber) => `/requests/${toPathSegment(accountNumber)}`,
     GET_ALL_REQUESTS: '/requests',
-    GET_REQUESTS_BY_STATUS: (status) => `/requests/status/${status}`,
+    GET_REQUESTS_BY_STATUS: (status) => `/requests/status/${toPathSegment(status)}`,
     // Unconfirmed against real API docs — kept for backward compatibility,
     // superseded by GET_REQUESTS_FOR_INSTALLERS below which is what the
     // docs actually show (no employeeId in the path; auth-scoped via JWT).
-    GET_REQUESTS_BY_INSTALLER: (employeeId) => `/requests/installer/${employeeId}`,
+    GET_REQUESTS_BY_INSTALLER: (employeeId) => `/requests/installer/${toPathSegment(employeeId)}`,
     // CONFIRMED against real API docs: "Get customer requests for
     // installers (non-sensitive fields only)" — self-scoped to the
     // authenticated installer via the Bearer token, no employeeId param.
@@ -135,24 +157,32 @@ export const ENDPOINTS = {
     // from METERS.CUSTOMER_REQUESTS_EXPORT (/meters/customer-requests/export).
     EXPORT_REQUESTS: '/requests/export',
     GET_REQUESTS_BY_DATE_RANGE: (startDate, endDate) => 
-      `/requests?startDate=${startDate}&endDate=${endDate}`,
+      `/requests?startDate=${toPathSegment(startDate)}&endDate=${toPathSegment(endDate)}`,
     
     // Payments & Remita status checks (admin-locked per docs)
     GET_PAYMENTS: '/payments',
-    CHECK_STATUS_BY_RRR: (rrr) => `/status/rrr/${rrr}`,
-    CHECK_STATUS_BY_ORDER_ID: (orderId) => `/status/order/${orderId}`,
+    CHECK_STATUS_BY_RRR: (rrr) => `/status/rrr/${toPathSegment(rrr)}`,
+    CHECK_STATUS_BY_ORDER_ID: (orderId) => `/status/order/${toPathSegment(orderId)}`,
     
     // Installer Management
-    GET_INSTALLER_STATS: (employeeId) => `/installers/${employeeId}/dashboard-stats`,
+    GET_INSTALLER_STATS: (employeeId) => `/installers/${toPathSegment(employeeId)}/dashboard-stats`,
     GET_INSTALLER_PERFORMANCE: '/installer/performance',
-    UPDATE_INSTALLER_PROFILE: (employeeId) => `/installers/${employeeId}/profile`,
+    UPDATE_INSTALLER_PROFILE: (employeeId) => `/installers/${toPathSegment(employeeId)}/profile`,
     GET_INSTALLER_DASHBOARD: '/installer/dashboard',
   },
 
   // ==================== WEBHOOKS ENDPOINTS (root-level, no auth) ====================
   WEBHOOKS: {
     REMITA_PAYMENT: '/remita/payment', // server-to-server only, not called from FE
-    VERIFY_PAYMENT: (rrr) => `/verify-payment/${rrr}`, // FE-usable: check payment status by RRR
+    VERIFY_PAYMENT: (rrr) => `/verify-payment/${toPathSegment(rrr)}`, // FE-usable: check payment status by RRR
+  },
+
+  // ==================== API KEYS ENDPOINTS (root-level, auth required) ====================
+  APIKEYS: {
+    BASE: '/apikeys',
+    BY_ID: (id) => `/apikeys/${toPathSegment(id)}`,
+    DEACTIVATE: (id) => `/apikeys/${toPathSegment(id)}/deactivate`,
+    USAGE: (id) => `/apikeys/${toPathSegment(id)}/usage`,
   },
   
   // ==================== METERS ENDPOINTS ====================
@@ -162,16 +192,16 @@ export const ENDPOINTS = {
     TEMPLATE: '/meters/template',
     EXPORT: '/meters/export',
     STATISTICS: '/meters/statistics',
-    BY_NUMBER: (meterNumber) => `/meters/meter-number/${meterNumber}`,
-    BY_ID: (id) => `/meters/${id}`,
+    BY_NUMBER: (meterNumber) => `/meters/meter-number/${toPathSegment(meterNumber)}`,
+    BY_ID: (id) => `/meters/${toPathSegment(id)}`,
     CUSTOMER_REQUESTS_EXPORT: '/meters/customer-requests/export',
   },
   
   // ==================== USER MANAGEMENT ENDPOINTS ====================
   USERS: {
     BASE: '/users',
-    BY_ID: (userId) => `/users/${userId}`,
-    STATUS: (userId) => `/users/${userId}/status`,
+    BY_ID: (userId) => `/users/${toPathSegment(userId)}`,
+    STATUS: (userId) => `/users/${toPathSegment(userId)}/status`,
   },
 
   // ==================== ADMIN ENDPOINTS ====================
@@ -179,8 +209,8 @@ export const ENDPOINTS = {
     // User Management
     USERS: {
       BASE: '/auth/users',  // FIXED: Auth users endpoint
-      BY_ID: (userId) => `/auth/users/${userId}`,
-      STATUS: (userId) => `/auth/users/${userId}/status`,
+      BY_ID: (userId) => `/auth/users/${toPathSegment(userId)}`,
+      STATUS: (userId) => `/auth/users/${toPathSegment(userId)}/status`,
     },
     
     // Dashboard & Analytics
@@ -199,14 +229,14 @@ export const ENDPOINTS = {
   SETTINGS: {
     METER_TYPES: {
       BASE: '/settings/meter-type',
-      BY_ID: (id) => `/settings/meter-type/${id}`,
+      BY_ID: (id) => `/settings/meter-type/${toPathSegment(id)}`,
     }
   },
   
   // ==================== COMPLAINTS ENDPOINTS ====================
   COMPLAINTS: {
     BASE: '/complaints',
-    BY_ID: (complaintId) => `/complaints/${complaintId}`,
+    BY_ID: (complaintId) => `/complaints/${toPathSegment(complaintId)}`,
   },
   
   // ==================== UPLOADS ENDPOINTS ====================
@@ -403,9 +433,9 @@ export const API_UTILS = {
     Object.entries(params).forEach(([key, value]) => {
       if (value !== null && value !== undefined && value !== '') {
         if (Array.isArray(value)) {
-          value.forEach(item => searchParams.append(key, item.toString()));
+          value.forEach(item => searchParams.append(key, toPathSegment(item)));
         } else {
-          searchParams.append(key, value.toString());
+          searchParams.append(key, toPathSegment(value));
         }
       }
     });

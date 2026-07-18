@@ -213,6 +213,7 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
               <option value="all">All Data</option>
               <option value="pending">Pending Requests</option>
               <option value="completed">Completed Requests</option>
+              <option value="jed">All Requests — Detailed (JED)</option>
               <option value="meters">Meters</option>
               <option value="installers">Installer Performance</option>
             </select>
@@ -450,6 +451,13 @@ function AdminDashboard({ isInstallerView = false }) {
         case 'completed':
           blob = await JEDApiService.exportCustomerRequests({ status: 'completed', format });
           filename = `completed_requests_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
+          break;
+        case 'jed':
+          // Activates the previously dormant JED-group export endpoint
+          // (/external/jed/requests/export), distinct from the
+          // METERS-group exportCustomerRequests used above.
+          blob = await JEDApiService.exportJedRequests({ format });
+          filename = `jed_requests_detailed_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
           break;
         default:
           blob = await JEDApiService.exportCustomerRequests({ format });

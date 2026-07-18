@@ -20,12 +20,18 @@ const InstallerDashboard = lazy(() => import('./components/dashboard/InstallerDa
 // Click-through detail view reached from either dashboard's rows — added this project.
 const InstallationDetail = lazy(() => import('./components/installation/InstallationDetail'));
 const AdminReports = lazy(() => import('./components/admin/AdminReports'));
+// Payments & Remita reconciliation — activates 5 previously dormant
+// api.js methods (getPayments, checkRemitaStatusByRRR/OrderId,
+// confirmPaymentManually, verifyPaymentByRRR) plus getCustomerRequestsByStatus.
+const PaymentsPage = lazy(() => import('./components/admin/PaymentsPage'));
 const InstallationForm = lazy(() => import('./components/installation/InstallationForm'));
 const MeterSchedule = lazy(() => import('./components/schedule/MeterSchedule'));
 const UserManagement = lazy(() => import('./components/admin/UserManagement'));
 const ExcelUpload = lazy(() => import('./components/uploads/ExcelUpload'));
 const ComplaintForm = lazy(() => import('./components/complaint/ComplaintForm'));
-const MeterTypeSettings = lazy(() => import('./components/settings/MeterTypeSettings'));
+// Tabbed Settings page (Meter Types + API Keys) — replaces direct
+// MeterTypeSettings mount so both settings resources live under one route.
+const SettingsPage = lazy(() => import('./components/settings/SettingsPage'));
 
 const PageLoader = () => (
   <div className="flex flex-col items-center justify-center min-h-[50vh]">
@@ -131,7 +137,8 @@ function AppContent() {
               <Route path="/users" element={permissions.isAdmin ? <UserManagement /> : <AccessDenied />} />
               <Route path="/uploads" element={permissions.isAdmin || permissions.canUploadExcel ? <ExcelUpload /> : <AccessDenied />} />
               <Route path="/reports" element={permissions.isAdmin ? <AdminReports /> : <AccessDenied />} />
-              <Route path="/settings" element={permissions.isAdmin ? <MeterTypeSettings /> : <AccessDenied />} />
+              <Route path="/payments" element={permissions.isAdmin ? <PaymentsPage /> : <AccessDenied />} />
+              <Route path="/settings" element={permissions.isAdmin ? <SettingsPage /> : <AccessDenied />} />
               <Route path="/complaint" element={permissions.isAdmin || permissions.canCreateComplaint ? <ComplaintForm /> : <AccessDenied />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
