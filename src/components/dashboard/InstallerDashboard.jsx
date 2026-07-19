@@ -141,7 +141,7 @@ function InstallerDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchJobs = useCallback(async () => {
+  const fetchJobs = useCallback(async (forceRefresh = false) => {
     if (!user) return;
 
     try {
@@ -153,7 +153,8 @@ function InstallerDashboard() {
       // the request to the logged-in installer. employeeId is only used for
       // the fallback client-side filter when the endpoint is unavailable.
       const response = await JEDApiService.getMyInstallations({
-        limit: 200,
+        limit: 100,
+        useCache: !forceRefresh,
         ...(user.employeeId ? { employeeId: user.employeeId } : {})
       });
       const list = Array.isArray(response) ? response : (response?.data || []);
@@ -167,7 +168,7 @@ function InstallerDashboard() {
   }, [user]);
 
   useEffect(() => {
-    fetchJobs();
+    fetchJobs(refreshKey !== 0);
   }, [fetchJobs, refreshKey]);
 
   const pendingJobs = useMemo(
@@ -225,10 +226,11 @@ function InstallerDashboard() {
           </div>
         </div>
         <button
+          type="button"
           onClick={() => setRefreshKey((k) => k + 1)}
           disabled={loading}
           aria-label="Refresh"
-          className="p-2.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 shrink-0 flex items-center gap-2"
+          className="p-2.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 shrink-0 flex items-center gap-2 transition-all duration-150 active:scale-[0.98]"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           <span className="hidden sm:inline text-sm font-medium">Refresh</span>
@@ -246,11 +248,12 @@ function InstallerDashboard() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
         <div className="flex border-b border-gray-200 dark:border-gray-700">
           <button
+            type="button"
             onClick={() => setActiveTab('pending')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 sm:py-4 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 sm:py-4 text-sm font-medium border-b-2 transition-all duration-150 ${
               activeTab === 'pending'
                 ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 active:scale-[0.98]'
             }`}
           >
             <Clock className="w-4 h-4" />
@@ -260,11 +263,12 @@ function InstallerDashboard() {
             </span>
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('completed')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 sm:py-4 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 sm:py-4 text-sm font-medium border-b-2 transition-all duration-150 ${
               activeTab === 'completed'
                 ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 active:scale-[0.98]'
             }`}
           >
             <CheckCircle className="w-4 h-4" />

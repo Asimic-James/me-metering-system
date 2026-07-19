@@ -42,7 +42,7 @@ function ExcelUpload() {
   const [error, setError] = useState(null);
   const [uploadResult, setUploadResult] = useState(null);
 
-  if (!hasPermission(user?.role, PERMISSIONS.INSTALLATIONS.CREATE)) {
+  if (!hasPermission(user?.role, PERMISSIONS.UPLOADS.EXCEL)) {
     return (
       <div className="p-8 text-center">
         <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />

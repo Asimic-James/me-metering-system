@@ -4,8 +4,16 @@
  */
 
 export const formatCurrencyNGN = (value) => {
-  if (typeof value !== 'number') return value ?? '-';
-  return value.toLocaleString(undefined, {
+  let amount = value;
+  if (typeof amount === 'string') {
+    const numericValue = Number(amount.replace(/,/g, ''));
+    if (!Number.isNaN(numericValue)) {
+      amount = numericValue;
+    }
+  }
+
+  if (typeof amount !== 'number') return value ?? '-';
+  return amount.toLocaleString(undefined, {
     style: 'currency',
     currency: 'NGN',
     minimumFractionDigits: 0,

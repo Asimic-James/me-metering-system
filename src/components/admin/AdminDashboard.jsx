@@ -339,6 +339,15 @@ const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) 
   </div>
 );
 
+const normalizePercentage = (value) => {
+  if (typeof value === 'number') return Math.round(value);
+  if (typeof value === 'string') {
+    const numericValue = Number(String(value).replace(/[^0-9.-]+/g, ''));
+    return Number.isFinite(numericValue) ? Math.round(numericValue) : undefined;
+  }
+  return undefined;
+};
+
 function AdminDashboard({ isInstallerView = false }) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -346,7 +355,11 @@ function AdminDashboard({ isInstallerView = false }) {
     pendingRequests: 0,
     completedRequests: 0,
     activeInstallers: 0,
-    totalRevenue: 0
+    totalRevenue: 0,
+    pendingChange: undefined,
+    completedChange: undefined,
+    activeInstallersChange: undefined,
+    revenueChange: undefined
   });
   const [recentInstallations, setRecentInstallations] = useState([]);
   const [requestsTotalCount, setRequestsTotalCount] = useState(0);
@@ -404,7 +417,19 @@ function AdminDashboard({ isInstallerView = false }) {
               pendingRequests: payload.pendingRequests ?? payload.pendingCount ?? payload.pending ?? 0,
               completedRequests: payload.completedRequests ?? payload.completedCount ?? payload.completed ?? 0,
               activeInstallers: payload.activeInstallers ?? payload.active_installers ?? payload.installersActive ?? 0,
-              totalRevenue: payload.totalRevenue ?? payload.total_revenue ?? payload.revenue ?? 0
+              totalRevenue: payload.totalRevenue ?? payload.total_revenue ?? payload.revenue ?? 0,
+              pendingChange: normalizePercentage(
+                payload.pendingChange ?? payload.pending_change ?? payload.pendingPercent ?? payload.pendingPercentChange ?? payload.pendingRequestsChange
+              ),
+              completedChange: normalizePercentage(
+                payload.completedChange ?? payload.completed_change ?? payload.completedPercent ?? payload.completedPercentChange ?? payload.completedRequestsChange
+              ),
+              activeInstallersChange: normalizePercentage(
+                payload.activeInstallersChange ?? payload.active_installers_change ?? payload.installersChange ?? payload.installersChangePercent
+              ),
+              revenueChange: normalizePercentage(
+                payload.revenueChange ?? payload.totalRevenueChange ?? payload.revenue_change ?? payload.revenuePercent ?? payload.revenueGrowth
+              )
             });
           } catch (statsError) {
             console.warn('[Dashboard] Failed to fetch admin stats, calculating from installations:', statsError.message);
@@ -436,7 +461,19 @@ function AdminDashboard({ isInstallerView = false }) {
                 pendingRequests: payload.pendingRequests ?? payload.pendingCount ?? payload.pending ?? 0,
                 completedRequests: payload.completedRequests ?? payload.completedCount ?? payload.completed ?? 0,
                 activeInstallers: 1,
-                totalRevenue: payload.totalRevenue ?? payload.total_revenue ?? payload.revenue ?? 0
+                totalRevenue: payload.totalRevenue ?? payload.total_revenue ?? payload.revenue ?? 0,
+                pendingChange: normalizePercentage(
+                  payload.pendingChange ?? payload.pending_change ?? payload.pendingPercent ?? payload.pendingPercentChange ?? payload.pendingRequestsChange
+                ),
+                completedChange: normalizePercentage(
+                  payload.completedChange ?? payload.completed_change ?? payload.completedPercent ?? payload.completedPercentChange ?? payload.completedRequestsChange
+                ),
+                activeInstallersChange: normalizePercentage(
+                  payload.activeInstallersChange ?? payload.active_installers_change ?? payload.installersChange ?? payload.installersChangePercent
+                ),
+                revenueChange: normalizePercentage(
+                  payload.revenueChange ?? payload.totalRevenueChange ?? payload.revenue_change ?? payload.revenuePercent ?? payload.revenueGrowth
+                )
               });
             } else {
               calculateStatsFromInstallations(installations, true);
@@ -591,22 +628,26 @@ function AdminDashboard({ isInstallerView = false }) {
             title="Pending"
             value={stats.pendingRequests}
             icon={Clock}
-            change={5}
-            changeType="neutral"
+            change={stats.pendingChange ?? (stats.pendingRequests + stats.completedRequests > 0
+              ? Math.round((stats.pendingRequests / (stats.pendingRequests + stats.completedRequests)) * 100)
+              : undefined)}
+            changeType={stats.pendingChange != null || stats.pendingRequests + stats.completedRequests > 0 ? 'negative' : 'neutral'}
           />
           <StatCard
             title="Completed"
             value={stats.completedRequests}
             icon={CheckCircle}
-            change={8}
-            changeType="positive"
+            change={stats.completedChange ?? (stats.pendingRequests + stats.completedRequests > 0
+              ? Math.round((stats.completedRequests / (stats.pendingRequests + stats.completedRequests)) * 100)
+              : undefined)}
+            changeType={stats.completedChange != null || stats.pendingRequests + stats.completedRequests > 0 ? 'positive' : 'neutral'}
           />
           <StatCard
             title="Installers"
             value={stats.activeInstallers}
             icon={Users}
-            change={-2}
-            changeType="negative"
+            change={stats.activeInstallersChange}
+            changeType={stats.activeInstallersChange > 0 ? 'positive' : stats.activeInstallersChange < 0 ? 'negative' : 'neutral'}
           />
           <StatCard
             title="Revenue"
@@ -616,7 +657,8 @@ function AdminDashboard({ isInstallerView = false }) {
                 : stats.totalRevenue
             }
             icon={BarChart}
-            changeType="neutral"
+            change={stats.revenueChange}
+            changeType={stats.revenueChange > 0 ? 'positive' : stats.revenueChange < 0 ? 'negative' : 'neutral'}
           />
         </div>
 

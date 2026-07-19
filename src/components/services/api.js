@@ -653,17 +653,19 @@ class JEDApiService {
    */
   async getMyInstallations(params = {}) {
     const { employeeId, ...queryParams } = params;
+    const safeLimit = Math.min(queryParams.limit || 100, 100);
+    const requestParams = { ...queryParams, limit: safeLimit };
 
     try {
       const url = this.utils.buildUrlWithParams(
         this.endpoints.JED.GET_REQUESTS_FOR_INSTALLERS,
-        queryParams,
+        requestParams,
         'JED'
       );
       return await this.makeRequest(url, {
         method: 'GET',
         useCache: true,
-        cacheKey: `my-installations-${JSON.stringify(queryParams)}`
+        cacheKey: `my-installations-${JSON.stringify(requestParams)}`
       });
     } catch (error) {
       const errMsg = String(error?.message || '').toLowerCase();
@@ -748,6 +750,112 @@ class JEDApiService {
       }
       throw error;
     }
+  }
+
+  async getSystemAnalytics(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.ADMIN.SYSTEM_ANALYTICS,
+      params,
+      'ADMIN'
+    );
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: true,
+      cacheKey: `system-analytics-${JSON.stringify(params)}`
+    });
+  }
+
+  async getPerformanceReports(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.ADMIN.PERFORMANCE_REPORTS,
+      params,
+      'ADMIN'
+    );
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: true,
+      cacheKey: `performance-reports-${JSON.stringify(params)}`
+    });
+  }
+
+  async getSystemLogs(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.ADMIN.SYSTEM_LOGS,
+      params,
+      'ADMIN'
+    );
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: false,
+      cacheKey: `system-logs-${JSON.stringify(params)}`
+    });
+  }
+
+  async getAuditTrail(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.ADMIN.AUDIT_TRAIL,
+      params,
+      'ADMIN'
+    );
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: false,
+      cacheKey: `audit-trail-${JSON.stringify(params)}`
+    });
+  }
+
+  async getSystemSettings() {
+    const url = this.buildApiUrl(this.endpoints.ADMIN.SYSTEM_SETTINGS);
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: true,
+      cacheKey: 'system-settings'
+    });
+  }
+
+  async getReportTypes() {
+    const url = this.buildUrl(this.endpoints.REPORTS.GET_REPORT_TYPES, 'REPORTS');
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: true,
+      cacheKey: 'report-types'
+    });
+  }
+
+  async getReportHistory(params = {}) {
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.REPORTS.GET_REPORT_HISTORY,
+      params,
+      'REPORTS'
+    );
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: true,
+      cacheKey: `report-history-${JSON.stringify(params)}`
+    });
+  }
+
+  async getRequestsByInstaller(employeeId, params = {}) {
+    if (!employeeId) throw new Error('getRequestsByInstaller requires an employeeId');
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.JED.GET_REQUESTS_BY_INSTALLER(employeeId),
+      params,
+      'JED'
+    );
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: false,
+      cacheKey: `requests-installer-${employeeId}-${JSON.stringify(params)}`
+    });
+  }
+
+  async getRequestsByDateRange(startDate, endDate) {
+    if (!startDate || !endDate) throw new Error('getRequestsByDateRange requires startDate and endDate');
+    const url = this.buildUrl(this.endpoints.JED.GET_REQUESTS_BY_DATE_RANGE(startDate, endDate), 'JED');
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: false
+    });
   }
 
   // ==================== METERS MANAGEMENT METHODS ====================
@@ -1156,6 +1264,15 @@ class JEDApiService {
         getMyInstallations: typeof this.getMyInstallations === 'function',
         getPayments: typeof this.getPayments === 'function',
         verifyPaymentByRRR: typeof this.verifyPaymentByRRR === 'function',
+        getSystemAnalytics: typeof this.getSystemAnalytics === 'function',
+        getPerformanceReports: typeof this.getPerformanceReports === 'function',
+        getSystemLogs: typeof this.getSystemLogs === 'function',
+        getAuditTrail: typeof this.getAuditTrail === 'function',
+        getSystemSettings: typeof this.getSystemSettings === 'function',
+        getReportTypes: typeof this.getReportTypes === 'function',
+        getReportHistory: typeof this.getReportHistory === 'function',
+        getRequestsByInstaller: typeof this.getRequestsByInstaller === 'function',
+        getRequestsByDateRange: typeof this.getRequestsByDateRange === 'function',
       }
     };
     

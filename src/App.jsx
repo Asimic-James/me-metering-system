@@ -20,6 +20,7 @@ const InstallerDashboard = lazy(() => import('./components/dashboard/InstallerDa
 // Click-through detail view reached from either dashboard's rows — added this project.
 const InstallationDetail = lazy(() => import('./components/installation/InstallationDetail'));
 const AdminReports = lazy(() => import('./components/admin/AdminReports'));
+const ApiDiagnostics = lazy(() => import('./components/debug/ApiDiagnostics'));
 // Payments & Remita reconciliation — activates 5 previously dormant
 // api.js methods (getPayments, checkRemitaStatusByRRR/OrderId,
 // confirmPaymentManually, verifyPaymentByRRR) plus getCustomerRequestsByStatus.
@@ -58,6 +59,7 @@ const AccessDenied = () => (
 function AppContent() {
   const { user, login, logout, isAuthenticated } = useAuth();
   const permissions = usePermissions();
+  const { isDark } = useTheme();
   const [globalError, setGlobalError] = useState(null);
   
   // Validate API integration on mount
@@ -84,8 +86,6 @@ function AppContent() {
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
-
-  const { isDark } = useTheme();
 
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-300 ${isDark ? 'app-bg-dark' : 'app-bg-light'}`}>
@@ -146,6 +146,7 @@ function AppContent() {
               <Route path="/reports" element={permissions.isAdmin ? <AdminReports /> : <AccessDenied />} />
               <Route path="/payments" element={permissions.isAdmin ? <PaymentsPage /> : <AccessDenied />} />
               <Route path="/settings" element={permissions.isAdmin ? <SettingsPage /> : <AccessDenied />} />
+              <Route path="/debug" element={permissions.isAdmin ? <ApiDiagnostics /> : <AccessDenied />} />
               <Route path="/complaint" element={<Navigate to="/submit" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
