@@ -85,7 +85,7 @@ class JEDApiService {
 
         clearTimeout(timeoutId);
 
-        const result = await this.handleResponse(response);
+        const result = await this.handleResponse(response, { url, ...requestOptions });
         
         // Cache successful responses
         if (useCache && cacheKey && this.utils.isSuccessResponse(response)) {
@@ -134,7 +134,7 @@ class JEDApiService {
   }
 
   // Handle API response with consistent error formatting
-  async handleResponse(response) {
+  async handleResponse(response, requestOptions = {}) {
     console.log(`[API] Response: ${response.status} ${response.statusText}`);
 
     const contentType = response.headers.get('content-type') || '';
@@ -162,7 +162,7 @@ class JEDApiService {
     }
 
     if (!response.ok) {
-      this.handleErrorResponse(response, data);
+      this.handleErrorResponse(response, data, requestOptions);
     }
 
     console.log('[API] Success Response:', data);
@@ -170,13 +170,20 @@ class JEDApiService {
   }
 
   // FIXED: Enhanced error handling with specific error types
-  handleErrorResponse(response, data) {
+  handleErrorResponse(response, data, requestOptions = {}) {
     const { status } = response;
+    const requestUrl = String(requestOptions.url || '').toLowerCase();
+    const isAuthEndpoint = requestUrl.includes('/auth') || requestUrl.includes('/login') || requestUrl.includes('/logout') || requestUrl.includes('/refresh-token') || requestUrl.includes('/profile');
 
-    // Handle 401 errors first
+    // Only clear auth state for actual auth requests. Other endpoints should
+    // surface the error without force-logging the user out.
     if (status === 401) {
-      this.clearTokens();
-      throw new Error(`${this.errorTypes.AUTH}:${data?.message || 'Invalid credentials'}`);
+      if (isAuthEndpoint) {
+        this.clearTokens();
+        throw new Error(`${this.errorTypes.AUTH}:${data?.message || 'Invalid credentials'}`);
+      }
+
+      throw new Error(data?.message || 'Authentication failed for this request');
     }
 
     // FIXED: Safely check error message with proper null/undefined handling
@@ -210,8 +217,11 @@ class JEDApiService {
     // Safely check error message
     const errorMsg = error?.message || '';
     const errorMsgStr = String(errorMsg).toLowerCase();
+    const isAuthError = errorMsgStr.includes(this.errorTypes.AUTH.toLowerCase()) ||
+      errorMsgStr.includes('authentication required') ||
+      errorMsgStr.includes('invalid credentials');
     
-    if (errorMsgStr.includes('401')) {
+    if (isAuthError) {
       this.clearTokens();
       return new Error('Authentication required. Please login again.');
     }

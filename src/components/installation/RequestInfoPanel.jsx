@@ -12,6 +12,7 @@ import {
   MapPin,
   Phone,
 } from 'lucide-react';
+import { formatDateTime } from '../../utils/date';
 
 function InfoRow({ icon: Icon, label, value }) {
   if (!value) return null;
@@ -59,15 +60,16 @@ function RequestInfoPanel({ data, title = 'Request Details', compact = false }) 
       <InfoRow icon={Hash} label="Account Number" value={data.accountNumber} />
       <InfoRow icon={Zap} label="Meter Number" value={data.meterNo || data.meterNumber} />
       <InfoRow icon={ShieldCheck} label="Seal Number" value={data.sealNo} />
+      <InfoRow icon={Phone} label="Email" value={data.email || data.emailAddress} />
       <InfoRow
         icon={CheckCircle}
-        label="Payment Reference"
-        value={data.paymentReference || data.paymentRef}
+        label="Payment Reference / RRR"
+        value={data.rrr || data.paymentReference || data.paymentRef || data.remitaRef}
       />
       <InfoRow
         icon={User}
         label="Submitted"
-        value={data.submittedAt ? new Date(data.submittedAt).toLocaleString() : null}
+        value={formatDateTime(data.submittedAt)}
       />
     </div>
   );

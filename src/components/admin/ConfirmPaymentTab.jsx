@@ -1,0 +1,117 @@
+import { useState } from 'react';
+import jedApi from '../services/api';
+import ConfirmationModal from '../common/ConfirmationModal';
+import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { formatDateTime } from '../../utils/date';
+
+function ConfirmPaymentTab() {
+  const [accountNumber, setAccountNumber] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
+
+  const handleConfirm = async () => {
+    if (!accountNumber.trim()) return;
+
+    setConfirming(true);
+    setError(null);
+    setResult(null);
+    setSuccessMessage(null);
+
+    try {
+      const response = await jedApi.confirmPayment({ accountNumber: accountNumber.trim() });
+      const payload = response?.data || response;
+      setResult(payload);
+      setSuccessMessage('Payment confirmed successfully.');
+      setConfirmOpen(false);
+    } catch (err) {
+      console.error('[ConfirmPayment] Failed to confirm payment:', err);
+      setError(String(err?.message || 'Failed to confirm payment'));
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Confirm Payment</h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Use this endpoint after a customer has completed payment via Remita to confirm the payment with JED.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Account Number</label>
+            <input
+              type="text"
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              placeholder="Enter account number"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex items-end gap-3">
+            <button
+              type="button"
+              disabled={!accountNumber.trim()}
+              onClick={() => setConfirmOpen(true)}
+              className="w-full sm:w-auto px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:bg-amber-400 disabled:cursor-not-allowed text-sm font-medium"
+            >
+              Confirm Payment
+            </button>
+          </div>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-800 dark:text-red-300">
+            <AlertCircle className="w-4 h-4 inline-block mr-2 align-text-top" />
+            {error}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-sm text-green-800 dark:text-green-300 flex items-center gap-2">
+            <CheckCircle className="w-4 h-4" />
+            {successMessage}
+          </div>
+        )}
+
+        {result && (
+          <div className="bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-sm">
+            <p className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">JED Confirm Payment Response</p>
+            <pre className="whitespace-pre-wrap break-words text-gray-700 dark:text-gray-300 max-h-72 overflow-auto">
+              {JSON.stringify(result, null, 2)}
+            </pre>
+            {result?.data?.pendingInstallation && (
+              <div className="mt-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                <p className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">Installation details</p>
+                <p className="text-sm text-gray-900 dark:text-gray-100">Applicant Name: {result.data.pendingInstallation?.applicantName || 'N/A'}</p>
+                <p className="text-sm text-gray-900 dark:text-gray-100">Address: {result.data.pendingInstallation?.address || result.data.pendingInstallation?.address || 'N/A'}</p>
+                <p className="text-sm text-gray-900 dark:text-gray-100">Status: {result.data.status || 'N/A'}</p>
+                <p className="text-sm text-gray-900 dark:text-gray-100">Confirmed At: {formatDateTime(result.data?.confirmedAt || result.data?.data?.updatedAt || new Date())}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <ConfirmationModal
+        isOpen={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={handleConfirm}
+        loading={confirming}
+        confirmText="Confirm"
+        title="Confirm Payment with JED"
+        message={`Confirm payment for account number "${accountNumber.trim()}"? This will notify JED that the customer has paid via Remita.`}
+      />
+    </div>
+  );
+}
+
+export default ConfirmPaymentTab;

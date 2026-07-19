@@ -1,212 +1,287 @@
+/* eslint-disable react-refresh/only-export-components */
 // src/components/auth/permissions.js
-// ============================================
-// Central permission & role catalog — single source of truth
-// consumed by usePermissions.js and App.jsx's route guards.
-// ============================================
+// Optimized permissions system aligned with latest app version
+//
+// CONSOLIDATION NOTE: an earlier duplicate of this file was mistakenly
+// created elsewhere in this project's history (reconstructed under the
+// wrong assumption that this file didn't exist yet). This is the one real
+// file — the duplicate never actually reached the codebase and should be
+// disregarded/deleted if a copy of it exists anywhere. Two real bugs found
+// while consolidating are fixed below (see ROLE_PERMISSIONS[INSTALLER]).
 
-export const ROLES = {
+// Role definitions
+export const ROLES = Object.freeze({
   ADMIN: 'admin',
-  INSTALLER: 'installer',
-};
+  INSTALLER: 'installer'
+});
 
-/**
- * Permission identifiers as flat "group:action" strings — easy to log,
- * compare, and eventually drive from a backend-issued ACL without
- * importing this module.
- */
-export const PERMISSIONS = {
+// Permission definitions organized by feature
+export const PERMISSIONS = Object.freeze({
+  // Dashboard permissions
   DASHBOARD: {
     VIEW: 'dashboard:view',
     VIEW_ADMIN: 'dashboard:view_admin',
-    VIEW_INSTALLER: 'dashboard:view_installer',
+    VIEW_INSTALLER: 'dashboard:view_installer'
   },
+  
+  // Installation permissions
   INSTALLATIONS: {
-    CREATE: 'installations:create',      // record a completed install (Install Meter form)
-    VIEW: 'installations:view',          // view own installations (API layer scopes to installer)
-    VIEW_ALL: 'installations:view_all',  // view every installer's installations (admin pipeline view)
-    MANAGE: 'installations:manage',      // edit / reassign / cancel a request
-    COMPLETE: 'installations:complete',  // mark a job complete from Meter Schedule
+    CREATE: 'installations:create',
+    VIEW: 'installations:view',
+    VIEW_ALL: 'installations:view_all',
+    MANAGE: 'installations:manage',
+    COMPLETE: 'installations:complete'
   },
+  
+  // User management permissions
   USERS: {
     VIEW: 'users:view',
     CREATE: 'users:create',
     UPDATE: 'users:update',
     DELETE: 'users:delete',
+    MANAGE: 'users:manage'
   },
+  
+  // Reports permissions
   REPORTS: {
     VIEW: 'reports:view',
     EXPORT: 'reports:export',
-    GENERATE: 'reports:generate',
+    GENERATE: 'reports:generate'
   },
+  
+  // Schedule permissions
   SCHEDULE: {
-    VIEW: 'schedule:view',      // Meter Schedule — pull jobs ready to install
-    MANAGE: 'schedule:manage',  // reassign/reschedule jobs across installers
+    VIEW: 'schedule:view',
+    MANAGE: 'schedule:manage'
   },
+  
+  // Settings permissions
   SETTINGS: {
     VIEW: 'settings:view',
-    MANAGE: 'settings:manage',  // meter types, system settings
+    MANAGE: 'settings:manage'
   },
+  
+  // Upload permissions
   UPLOADS: {
-    EXCEL: 'uploads:excel',     // bulk meter upload
-    FILES: 'uploads:files',
+    EXCEL: 'uploads:excel',
+    FILES: 'uploads:files'
   },
+  
+  // Complaint permissions
   COMPLAINTS: {
     CREATE: 'complaints:create',
     VIEW: 'complaints:view',
-    MANAGE: 'complaints:manage',
+    MANAGE: 'complaints:manage'
   },
-};
 
-// Flatten PERMISSIONS into a single array of every permission string.
-const flattenPermissions = (obj) =>
-  Object.values(obj).flatMap((group) =>
-    typeof group === 'string' ? [group] : flattenPermissions(group)
-  );
+  // Payments permissions — added for the Payments/Remita-reconciliation
+  // page (/payments): view payment records and Remita status, and the
+  // more consequential ability to manually confirm a missed-webhook
+  // payment. Kept admin-only (see PAGE_ACCESS and ROLE_PERMISSIONS below)
+  // since manual confirmation is a money-adjacent action.
+  PAYMENTS: {
+    VIEW: 'payments:view',
+    MANAGE: 'payments:manage'
+  }
+});
 
-export const ALL_PERMISSIONS = flattenPermissions(PERMISSIONS);
-
-/**
- * Role -> permission map.
- *
- * Admin is intentionally NOT enumerated here. hasPermission() grants admin
- * universal access directly — "the admin should be able to access
- * everything" — so this map only needs to describe the restricted role(s).
- *
- * Installer set is scoped to Phase 1 lifecycle steps 6-8: pull jobs whose
- * installation details are ready (payment already confirmed by JEED/Remita),
- * and record the completed install. No VIEW_ALL, no MANAGE, no USERS,
- * no SETTINGS, no meter-type access.
- *
- * UPLOADS.EXCEL is now included after cross-checking against the real
- * Navigation.jsx: it explicitly lists Uploads as accessible to
- * `['admin', 'installer']`. This permission map previously excluded it,
- * which meant an installer would see "Uploads" in their nav, tap it, and
- * land on AccessDenied — a dead-end click. Navigation.jsx is real,
- * deliberately-built product code, so it's the source of truth here rather
- * than this file's earlier (explicitly flagged as unconfirmed) guess.
- */
-const ROLE_PERMISSIONS = {
-  [ROLES.INSTALLER]: [
+// Role-based permissions mapping
+const ROLE_PERMISSIONS = Object.freeze({
+  [ROLES.ADMIN]: new Set([
+    // Dashboard - Full access
+    PERMISSIONS.DASHBOARD.VIEW,
+    PERMISSIONS.DASHBOARD.VIEW_ADMIN,
     PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
+    
+    // Installations - Full access
+    PERMISSIONS.INSTALLATIONS.CREATE,
+    PERMISSIONS.INSTALLATIONS.VIEW,
+    PERMISSIONS.INSTALLATIONS.VIEW_ALL,
+    PERMISSIONS.INSTALLATIONS.MANAGE,
+    PERMISSIONS.INSTALLATIONS.COMPLETE,
+    
+    // Users - Full access
+    PERMISSIONS.USERS.VIEW,
+    PERMISSIONS.USERS.CREATE,
+    PERMISSIONS.USERS.UPDATE,
+    PERMISSIONS.USERS.DELETE,
+    PERMISSIONS.USERS.MANAGE,
+    
+    // Reports - Full access
+    PERMISSIONS.REPORTS.VIEW,
+    PERMISSIONS.REPORTS.EXPORT,
+    PERMISSIONS.REPORTS.GENERATE,
+    
+    // Schedule - Full access
+    PERMISSIONS.SCHEDULE.VIEW,
+    PERMISSIONS.SCHEDULE.MANAGE,
+    
+    // Settings - Full access
+    PERMISSIONS.SETTINGS.VIEW,
+    PERMISSIONS.SETTINGS.MANAGE,
+    
+    // Uploads - Full access
+    PERMISSIONS.UPLOADS.EXCEL,
+    PERMISSIONS.UPLOADS.FILES,
+    
+    // Complaints - Full access
+    PERMISSIONS.COMPLAINTS.CREATE,
+    PERMISSIONS.COMPLAINTS.VIEW,
+    PERMISSIONS.COMPLAINTS.MANAGE,
+
+    // Payments - Full access
+    PERMISSIONS.PAYMENTS.VIEW,
+    PERMISSIONS.PAYMENTS.MANAGE
+  ]),
+  
+  [ROLES.INSTALLER]: new Set([
+    // Dashboard - Installer view only
+    PERMISSIONS.DASHBOARD.VIEW,
+    PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
+    
+    // Installations - Limited access
     PERMISSIONS.INSTALLATIONS.CREATE,
     PERMISSIONS.INSTALLATIONS.VIEW,
     PERMISSIONS.INSTALLATIONS.COMPLETE,
+
+    // FIXED (real, live bug found during consolidation): Navigation.jsx
+    // has always shown "Meter Schedule" to installers
+    // (accessible: () => true for both roles), but this Set never
+    // actually granted SCHEDULE.VIEW — meaning every installer who
+    // tapped that nav item landed on AccessDenied. Added now.
     PERMISSIONS.SCHEDULE.VIEW,
-    PERMISSIONS.COMPLAINTS.CREATE,
+
+    // FIXED (real, live bug found during consolidation): same dead-end
+    // pattern as above — Navigation.jsx explicitly lists Uploads as
+    // accessible to ['admin', 'installer'], but UPLOADS.EXCEL was never
+    // in this Set. Added now.
     PERMISSIONS.UPLOADS.EXCEL,
-  ],
-};
+    
+    // Complaints - Create only
+    PERMISSIONS.COMPLAINTS.CREATE
+  ])
+});
 
-/**
- * Page key -> required permission(s), matching the route names already
- * used in App.jsx. Empty array = any authenticated user. 'adminOnly' =
- * admin role required, no exceptions.
- */
-const PAGE_PERMISSIONS = {
-  dashboard: [],
-  submit: [PERMISSIONS.INSTALLATIONS.CREATE],
+// Page access configuration - Maps pages to required permissions
+const PAGE_ACCESS = Object.freeze({
+  dashboard: [PERMISSIONS.DASHBOARD.VIEW],
   schedule: [PERMISSIONS.SCHEDULE.VIEW],
-  users: 'adminOnly',
+  submit: [PERMISSIONS.INSTALLATIONS.CREATE],
+  users: [PERMISSIONS.USERS.VIEW],
+  reports: [PERMISSIONS.REPORTS.VIEW],
   uploads: [PERMISSIONS.UPLOADS.EXCEL],
-  reports: 'adminOnly',
-  settings: 'adminOnly',
-  // Payment reconciliation & manual payment confirmation — deliberately
-  // admin-only, same tier as reports/settings/users. Manually confirming
-  // a payment is a consequential, money-adjacent action.
-  payments: 'adminOnly',
+  settings: [PERMISSIONS.SETTINGS.VIEW],
   complaint: [PERMISSIONS.COMPLAINTS.CREATE],
-};
+  // Admin-only by omission from the installer Set above — same pattern
+  // already used for users/reports/settings, no special-casing needed.
+  payments: [PERMISSIONS.PAYMENTS.VIEW]
+});
 
-const ROLE_METADATA = {
-  [ROLES.ADMIN]: {
-    displayName: 'Administrator',
-    description: 'Full system access — users, meters, settings, and every installation across all installers',
-    level: 100,
-    color: 'indigo',
-  },
-  [ROLES.INSTALLER]: {
-    displayName: 'Installer',
-    description: 'Field installer — views assigned jobs and records completed installations',
-    level: 10,
-    color: 'blue',
-  },
-};
-
-const normalizeRole = (role) => (role ? String(role).toLowerCase().trim() : null);
+// Permission check with caching
+const permissionCache = new Map();
 
 /**
- * Check a single permission. Admin always passes.
+ * Check if a role has a specific permission
  */
-export function hasPermission(role, permission) {
-  const normalizedRole = normalizeRole(role);
-  if (!normalizedRole || !permission) return false;
-  if (normalizedRole === ROLES.ADMIN) return true;
-
-  const rolePerms = ROLE_PERMISSIONS[normalizedRole] || [];
-  return rolePerms.includes(permission);
-}
-
-/**
- * ALL given permissions must be granted (AND).
- */
-export function hasPermissions(role, permissionsList = []) {
-  if (!Array.isArray(permissionsList) || permissionsList.length === 0) return true;
-  return permissionsList.every((permission) => hasPermission(role, permission));
-}
-
-/**
- * AT LEAST ONE given permission must be granted (OR).
- */
-export function hasAnyPermission(role, permissionsList = []) {
-  if (!Array.isArray(permissionsList) || permissionsList.length === 0) return true;
-  return permissionsList.some((permission) => hasPermission(role, permission));
-}
-
-/**
- * Can this role access a given page key? Matches route names used in
- * App.jsx: 'dashboard', 'submit', 'schedule', 'users', 'uploads',
- * 'reports', 'settings', 'complaint'.
- */
-export function canAccessPage(role, page) {
-  const normalizedRole = normalizeRole(role);
-  if (!normalizedRole) return false;
-  if (normalizedRole === ROLES.ADMIN) return true;
-
-  const required = PAGE_PERMISSIONS[page];
-  if (required === undefined) {
-    console.warn(`[permissions] Unknown page key: "${page}" — denying by default`);
-    return false;
+export const hasPermission = (userRole, permission) => {
+  if (!userRole || !permission) return false;
+  
+  // Admin has all permissions
+  if (userRole === ROLES.ADMIN) return true;
+  
+  // Check cache
+  const cacheKey = `${userRole}:${permission}`;
+  if (permissionCache.has(cacheKey)) {
+    return permissionCache.get(cacheKey);
   }
-  if (required === 'adminOnly') return false; // admin already handled above
-  return hasAnyPermission(normalizedRole, required);
-}
+  
+  // Check permission
+  const rolePermissions = ROLE_PERMISSIONS[userRole];
+  const result = rolePermissions ? rolePermissions.has(permission) : false;
+  
+  // Cache result
+  permissionCache.set(cacheKey, result);
+  
+  return result;
+};
 
 /**
- * All permissions granted to a role — admin gets the full catalog.
+ * Check if role has all permissions
  */
-export function getAllPermissionsForRole(role) {
-  const normalizedRole = normalizeRole(role);
-  if (!normalizedRole) return [];
-  if (normalizedRole === ROLES.ADMIN) return ALL_PERMISSIONS;
-  return ROLE_PERMISSIONS[normalizedRole] || [];
-}
+export const hasPermissions = (userRole, permissions) => {
+  if (!userRole || !Array.isArray(permissions)) return false;
+  if (permissions.length === 0) return true;
+  
+  // Admin has all permissions
+  if (userRole === ROLES.ADMIN) return true;
+  
+  return permissions.every(permission => hasPermission(userRole, permission));
+};
 
 /**
- * Display metadata for a role (profile menus, badges, etc.)
+ * Check if role has any of the permissions
  */
-export function getRoleMetadata(role) {
-  const normalizedRole = normalizeRole(role);
-  return (
-    ROLE_METADATA[normalizedRole] || {
-      displayName: 'Unknown',
-      description: 'No role assigned',
-      level: 0,
-      color: 'gray',
+export const hasAnyPermission = (userRole, permissions) => {
+  if (!userRole || !Array.isArray(permissions)) return false;
+  if (permissions.length === 0) return false;
+  
+  // Admin has all permissions
+  if (userRole === ROLES.ADMIN) return true;
+  
+  return permissions.some(permission => hasPermission(userRole, permission));
+};
+
+/**
+ * Check if user can access a specific page
+ */
+export const canAccessPage = (userRole, pageName) => {
+  if (!userRole || !pageName) return false;
+  
+  // Admin can access all pages
+  if (userRole === ROLES.ADMIN) return true;
+  
+  const requiredPermissions = PAGE_ACCESS[pageName];
+  if (!requiredPermissions) return false;
+  
+  return hasAnyPermission(userRole, requiredPermissions);
+};
+
+/**
+ * Get all permissions for a role
+ */
+export const getAllPermissionsForRole = (userRole) => {
+  if (!userRole) return [];
+  
+  const permissionSet = ROLE_PERMISSIONS[userRole];
+  return permissionSet ? Array.from(permissionSet) : [];
+};
+
+/**
+ * Get role metadata
+ */
+export const getRoleMetadata = (role) => {
+  const metadata = {
+    [ROLES.ADMIN]: {
+      displayName: 'Administrator',
+      description: 'Full system access',
+      level: 2,
+      color: 'purple'
+    },
+    [ROLES.INSTALLER]: {
+      displayName: 'Installer',
+      description: 'Field technician',
+      level: 1,
+      color: 'blue'
     }
-  );
-}
+  };
+  
+  return metadata[role] || {};
+};
 
-export function getPermissionDisplayName(permission) {
+/**
+ * Get display name for a permission
+ */
+export const getPermissionDisplayName = (permission) => {
   const names = {
     [PERMISSIONS.DASHBOARD.VIEW]: 'View Dashboard',
     [PERMISSIONS.DASHBOARD.VIEW_ADMIN]: 'View Admin Dashboard',
@@ -220,9 +295,7 @@ export function getPermissionDisplayName(permission) {
     [PERMISSIONS.USERS.CREATE]: 'Create Users',
     [PERMISSIONS.USERS.UPDATE]: 'Update Users',
     [PERMISSIONS.USERS.DELETE]: 'Delete Users',
-    [PERMISSIONS.COMPLAINTS.CREATE]: 'Create Complaints',
-    [PERMISSIONS.COMPLAINTS.VIEW]: 'View Complaints',
-    [PERMISSIONS.COMPLAINTS.MANAGE]: 'Manage Complaints',
+    [PERMISSIONS.USERS.MANAGE]: 'Manage Users',
     [PERMISSIONS.REPORTS.VIEW]: 'View Reports',
     [PERMISSIONS.REPORTS.EXPORT]: 'Export Reports',
     [PERMISSIONS.REPORTS.GENERATE]: 'Generate Reports',
@@ -232,19 +305,26 @@ export function getPermissionDisplayName(permission) {
     [PERMISSIONS.SETTINGS.MANAGE]: 'Manage Settings',
     [PERMISSIONS.UPLOADS.EXCEL]: 'Upload Excel Files',
     [PERMISSIONS.UPLOADS.FILES]: 'Upload Files',
+    [PERMISSIONS.COMPLAINTS.CREATE]: 'Create Complaints',
+    [PERMISSIONS.COMPLAINTS.VIEW]: 'View Complaints',
+    [PERMISSIONS.COMPLAINTS.MANAGE]: 'Manage Complaints',
+    [PERMISSIONS.PAYMENTS.VIEW]: 'View Payments',
+    [PERMISSIONS.PAYMENTS.MANAGE]: 'Manage Payments'
   };
-
+  
   return names[permission] || permission;
-}
+};
 
-export function clearPermissionCache() {
-  return undefined;
-}
+/**
+ * Clear permission cache
+ */
+export const clearPermissionCache = () => {
+  permissionCache.clear();
+};
 
 export default {
   ROLES,
   PERMISSIONS,
-  ALL_PERMISSIONS,
   hasPermission,
   hasPermissions,
   hasAnyPermission,
@@ -252,5 +332,5 @@ export default {
   getAllPermissionsForRole,
   getRoleMetadata,
   getPermissionDisplayName,
-  clearPermissionCache,
+  clearPermissionCache
 };

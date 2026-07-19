@@ -95,21 +95,21 @@ function ComplaintForm() {
   const inputClass = "w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm sm:text-base bg-white dark:bg-gray-800/80 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all disabled:bg-gray-50 dark:disabled:bg-gray-800 disabled:cursor-not-allowed";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl mx-auto">
       {/* Page Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col items-center text-center gap-3">
         <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
           <MessageSquare className="w-6 h-6 text-blue-600 dark:text-blue-400" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Submit a Complaint</h1>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-            Report any issues or concerns about installations you've carried out
+            Report any issues or concerns about installations you have carried out.
           </p>
         </div>
       </div>
 
-      <div className="max-w-2xl">
+      <div className="max-w-2xl mx-auto">
         {/* Success Message */}
         {successMessage && (
           <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex gap-3 animate-fade-in">

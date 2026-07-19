@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import JEDApiService from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrencyNGN } from '../../utils/currency';
+import { formatDateTime } from '../../utils/date';
 import { getStatusBadgeClass } from '../../utils/statusBadge';
 import { 
   BarChart,
@@ -72,13 +73,11 @@ const getInstallDate = (install) => {
     null;
 
   if (!raw) return '-';
-
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleDateString();
+  return formatDateTime(raw);
 };
 
 // Recent Installations Table - Mobile Optimized
-const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
+const RecentInstallations = ({ installations, totalCount, onViewAll, onItemClick }) => (
   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
     <div className="flex items-center justify-between p-4 sm:p-6 border-b">
       <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Recent Installations</h3>
@@ -98,7 +97,12 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
         </div>
       ) : (
         installations.map((install) => (
-          <div key={install.id} className="p-4 hover:bg-gray-50 dark:bg-gray-900/50">
+          <button
+            key={install.id}
+            type="button"
+            onClick={() => onItemClick(install)}
+            className="w-full text-left p-4 hover:bg-gray-50 dark:bg-gray-900/50 transition-colors"
+          >
             <div className="flex justify-between items-start mb-2">
               <div>
                 <p className="font-medium text-gray-900 dark:text-white text-sm">{install.accountNumber}</p>
@@ -110,15 +114,27 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
                 {install.status}
               </span>
             </div>
-            <div className="flex justify-between items-center mt-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                {getInstallDate(install)}
-              </span>
-              <span className="font-semibold text-gray-900 dark:text-white text-sm">
-                {formatCurrencyNGN(install.amount)}
-              </span>
+            <div className="flex flex-col gap-2 mt-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {getInstallDate(install)}
+                </span>
+                <span className="font-semibold text-gray-900 dark:text-white text-sm">
+                  {formatCurrencyNGN(install.amount)}
+                </span>
+              </div>
+              {install.email && (
+                <div className="text-xs text-gray-600 dark:text-gray-400">
+                  Email: {install.email}
+                </div>
+              )}
+              {(install.rrr || install.paymentReference || install.paymentRef || install.remitaRef) && (
+                <div className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                  RRR: {install.rrr || install.paymentReference || install.paymentRef || install.remitaRef}
+                </div>
+              )}
             </div>
-          </div>
+          </button>
         ))
       )}
     </div>
@@ -144,7 +160,18 @@ const RecentInstallations = ({ installations, totalCount, onViewAll }) => (
             </tr>
           ) : (
             installations.map((install) => (
-              <tr key={install.id} className="hover:bg-gray-50 dark:bg-gray-900/50 transition-colors">
+              <tr
+                key={install.id}
+                onClick={() => onItemClick(install)}
+                tabIndex={0}
+                role="button"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    onItemClick(install);
+                  }
+                }}
+                className="hover:bg-gray-50 dark:bg-gray-900/50 transition-colors cursor-pointer"
+              >
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium text-sm">{install.accountNumber}</td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-sm">
                   {install.custNames || install.applicantName || install.installer?.name || '-'}
@@ -484,6 +511,10 @@ function AdminDashboard({ isInstallerView = false }) {
     setShowExportModal(true);
   };
 
+  const handleRowClick = (install) => {
+    navigate(`/installations/${install.accountNumber}`);
+  };
+
   const handleManageUsers = () => {
     navigate('/users');
   };
@@ -597,6 +628,7 @@ function AdminDashboard({ isInstallerView = false }) {
               installations={recentInstallations}
               totalCount={requestsTotalCount}
               onViewAll={() => navigate('/reports')}
+              onItemClick={handleRowClick}
             />
           </div>
 

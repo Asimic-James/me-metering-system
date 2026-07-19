@@ -34,6 +34,9 @@ function InstallationDetail() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  const [genLoading, setGenLoading] = useState(false);
+  const [genError, setGenError] = useState(null);
+  const [genResult, setGenResult] = useState(null);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -58,6 +61,43 @@ function InstallationDetail() {
   useEffect(() => {
     fetchDetail();
   }, [fetchDetail]);
+
+  const handleGenerateReference = async () => {
+    if (!job || !job.accountNumber) return;
+    setGenLoading(true);
+    setGenError(null);
+    setGenResult(null);
+
+    // Build payload based on API example and defensive field names
+    const payload = {
+      accountNumber: job.accountNumber,
+      custNames: job.custNames || job.customerName || job.applicantName || '',
+      gsm: job.phone || job.phoneNumber || job.msisdn || '',
+      email: job.email || job.emailAddress || '',
+      address: job.address || job.customerAddress || '',
+      meterRecommended: job.meterRecommended || job.meterType || job.meterModel || '',
+      discoCode: job.discoCode || job.disco || '',
+      requestRef: job.requestRef || job.requestRefNo || job.requestId || job.id || '',
+      region: job.region || job.area || job.location || ''
+    };
+
+    try {
+      const response = await JEDApiService.generatePaymentReference(payload);
+      const data = response?.data || response;
+      setGenResult(data);
+
+      // Try to extract RRR/payment reference from common fields
+      const rrr = data?.RRR || data?.rrr || data?.reference || data?.paymentReference || data?.payment_ref || null;
+      if (rrr) {
+        setJob((prev) => (prev ? { ...prev, rrr, paymentReference: rrr } : prev));
+      }
+    } catch (err) {
+      console.error('[InstallationDetail] generate payment reference failed:', err);
+      setGenError(err.message || 'Failed to generate payment reference');
+    } finally {
+      setGenLoading(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -162,6 +202,36 @@ function InstallationDetail() {
       {/* Customer / request info — shared panel, also used inline in InstallationForm */}
       <RequestInfoPanel data={job} />
 
+          {/* Generate payment reference (RRR) action for pending requests */}
+          {!completed && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Payment Reference</h3>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Reference</p>
+                  <p className="font-mono text-sm text-gray-900 dark:text-white">{job.rrr || job.paymentReference || job.paymentRef || 'No reference generated'}</p>
+                  {genResult && (
+                    <pre className="mt-2 text-xs text-gray-700 dark:text-gray-300 overflow-auto max-h-40">{JSON.stringify(genResult, null, 2)}</pre>
+                  )}
+                  {genError && (
+                    <p className="mt-2 text-sm text-red-600">{genError}</p>
+                  )}
+                </div>
+
+                <div className="flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleGenerateReference}
+                    disabled={genLoading}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {genLoading ? 'Generating...' : (job.rrr || job.paymentReference ? 'Regenerate Reference' : 'Generate Reference')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
       {completed ? (
         // ---- Completed: read-only summary, no form ----
         <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-6 text-center">
@@ -253,6 +323,7 @@ function InstallationDetail() {
                 without scrolling back up on small screens */}
             <div className="sticky bottom-0 -mx-4 sm:mx-0 sm:static bg-white dark:bg-gray-800 sm:bg-transparent px-4 sm:px-0 pt-3 pb-1 border-t sm:border-0 border-gray-200 dark:border-gray-700 flex gap-3">
               <button
+                type="button"
                 onClick={handleComplete}
                 disabled={submitting}
                 className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-3 rounded-lg font-medium hover:bg-green-700 disabled:bg-green-400 transition-colors"
@@ -267,6 +338,7 @@ function InstallationDetail() {
                 )}
               </button>
               <button
+                type="button"
                 onClick={() => navigate(-1)}
                 disabled={submitting}
                 className="px-5 py-3 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"

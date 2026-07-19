@@ -15,6 +15,7 @@ import {
   AlertCircle,
   ChevronRight,
 } from 'lucide-react';
+import { formatDateOnly } from '../../utils/date';
 
 // STATUS_STYLES and isCompletedStatus previously lived here as local
 // copies that only matched lowercase status strings ('completed',
@@ -47,7 +48,7 @@ function JobRow({ job, onClick }) {
           Acct: {job.accountNumber} &middot; Meter: {job.meterNo || job.meterNumber || 'N/A'}
         </p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-          {job.submittedAt ? new Date(job.submittedAt).toLocaleDateString() : '-'}
+          {formatDateOnly(job.submittedAt)}
         </p>
       </div>
       <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
@@ -77,7 +78,7 @@ function JobTableRow({ job, onClick }) {
         </span>
       </td>
       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-        {job.submittedAt ? new Date(job.submittedAt).toLocaleDateString() : '-'}
+        {formatDateOnly(job.submittedAt)}
       </td>
       <td className="px-4 py-3 text-right">
         <ChevronRight className="w-4 h-4 text-gray-400 inline-block" />
@@ -141,18 +142,19 @@ function InstallerDashboard() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const fetchJobs = useCallback(async () => {
-    if (!user?.employeeId) return;
+    if (!user) return;
+
     try {
       setLoading(true);
       setError(null);
 
-      // CORRECTED: getMyInstallations() no longer takes employeeId as a
-      // positional argument — the real endpoint (/requests/installer) is
-      // scoped by the auth token, not a URL param. employeeId is passed
-      // inside params, used only by the client-side fallback filter.
+      // CORRECTED: getMyInstallations() no longer requires employeeId in
+      // order to query /requests/installer. The auth token already scopes
+      // the request to the logged-in installer. employeeId is only used for
+      // the fallback client-side filter when the endpoint is unavailable.
       const response = await JEDApiService.getMyInstallations({
         limit: 200,
-        employeeId: user.employeeId
+        ...(user.employeeId ? { employeeId: user.employeeId } : {})
       });
       const list = Array.isArray(response) ? response : (response?.data || []);
       setAllJobs(list);
@@ -162,7 +164,7 @@ function InstallerDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [user?.employeeId]);
+  }, [user]);
 
   useEffect(() => {
     fetchJobs();

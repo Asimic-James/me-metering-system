@@ -29,11 +29,11 @@ const NAVIGATION_CONFIG = {
     },
     {
       id: 'submit',
-      label: 'Install Meter',
+      label: 'Installations',
       path: '/submit',
       icon: Zap,
       mobileBottomNav: () => true,
-      description: 'Submit new installations',
+      description: 'Manage meter installs and complaints from one page',
       accessible: () => true,
     },
     {
@@ -78,15 +78,6 @@ const NAVIGATION_CONFIG = {
       icon: Settings,
       description: 'Application settings',
       accessible: (userRole) => userRole === 'admin'
-    },
-    {
-      id: 'complaint',
-      label: 'Submit Complaint',
-      path: '/complaint',
-      icon: MessageSquare,
-      mobileBottomNav: (role) => role === 'installer',
-      description: 'Report installation issues',
-      accessible: (userRole) => ['admin', 'installer'].includes(userRole)
     }
   ]
 };

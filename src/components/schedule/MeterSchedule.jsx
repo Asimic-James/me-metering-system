@@ -17,6 +17,7 @@ import {
   ChevronsRight,
   Database
 } from 'lucide-react';
+import { formatDateOnly } from '../../utils/date';
 
 // Constants for better maintainability
 const PRIORITY_CONFIG = {
@@ -43,6 +44,69 @@ const PHASE_TYPE_OPTIONS = [
   { value: 'SINGLE PHASE', label: 'Single Phase', icon: Zap },
   { value: 'THREE PHASE', label: 'Three Phase', icon: Cpu }
 ];
+
+const METER_STATISTICS_CONFIG = {
+  totalMeters: {
+    title: 'Total Meters',
+    icon: Database,
+    bgColor: 'bg-blue-100',
+    iconColor: 'text-blue-600'
+  },
+  available: {
+    title: 'Available',
+    icon: CheckCircle,
+    bgColor: 'bg-green-100',
+    iconColor: 'text-green-600'
+  },
+  installed: {
+    title: 'Installed',
+    icon: Wrench,
+    bgColor: 'bg-purple-100',
+    iconColor: 'text-purple-600'
+  },
+  faulty: {
+    title: 'Faulty',
+    icon: AlertTriangle,
+    bgColor: 'bg-red-100',
+    iconColor: 'text-red-600'
+  },
+  retired: {
+    title: 'Retired',
+    icon: Battery,
+    bgColor: 'bg-gray-100 dark:bg-gray-800/80',
+    iconColor: 'text-gray-800 dark:text-gray-200'
+  },
+  singlePhase: {
+    title: 'Single Phase',
+    icon: Zap,
+    bgColor: 'bg-yellow-100',
+    iconColor: 'text-yellow-600'
+  },
+  threePhase: {
+    title: 'Three Phase',
+    icon: Cpu,
+    bgColor: 'bg-indigo-100',
+    iconColor: 'text-indigo-600'
+  },
+  completed: {
+    title: 'Completed',
+    icon: CheckCircle,
+    bgColor: 'bg-green-100',
+    iconColor: 'text-green-600'
+  },
+  paid: {
+    title: 'Paid',
+    icon: CheckCircle,
+    bgColor: 'bg-teal-100',
+    iconColor: 'text-teal-600'
+  },
+  pending: {
+    title: 'Pending',
+    icon: Clock,
+    bgColor: 'bg-blue-100',
+    iconColor: 'text-blue-600'
+  }
+};
 
 const TABS = [
   { id: 'inventory', label: 'Meter Inventory' },
@@ -103,32 +167,52 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
 
       console.log('[MeterData] Fetching meters with params:', JSON.stringify(params)); // Added for debugging
       const response = await JEDApiService.getMeters(params);
-      
-      let metersData = [];
-      let paginationData = {};
-      
-      if (response.success) {
-        metersData = response.data || [];
-        paginationData = response.pagination || {};
-      } else if (Array.isArray(response.data)) {
-        metersData = response.data;
-        paginationData = response.pagination || {};
-      } else if (Array.isArray(response)) {
-        metersData = response;
-      } else {
-        metersData = response.data || [];
-        paginationData = response.pagination || {}; // Ensure pagination is handled
-      }
 
-      console.log('[MeterData] Meters received:', metersData.length, 'items');
+      const payload = response?.data ?? response;
+      const metersData = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response?.data?.data)
+            ? response.data.data
+            : Array.isArray(response?.data?.results)
+              ? response.data.results
+              : Array.isArray(response?.data?.items)
+                ? response.data.items
+                : Array.isArray(payload?.results)
+                  ? payload.results
+                  : Array.isArray(payload?.items)
+                    ? payload.items
+                    : Array.isArray(payload?.records)
+                      ? payload.records
+                      : Array.isArray(payload)
+                        ? payload
+                        : [];
+
+      const metadata = response?.meta ?? response?.data?.meta ?? payload?.meta ?? {};
+      const paginationData = response?.pagination
+        || response?.data?.pagination
+        || response?.data?.pageInfo
+        || payload?.pagination
+        || payload?.pageInfo
+        || metadata
+        || {};
+
+      const totalCount = paginationData.total ?? paginationData.totalCount ?? paginationData.total_items ?? paginationData.count ?? paginationData.total_documents ?? paginationData.totalRecords ?? response?.total ?? response?.count ?? response?.totalCount ?? response?.count ?? response?.data?.total ?? response?.data?.count ?? response?.data?.totalCount ?? response?.data?.count ?? metersData.length;
+      const currentPage = paginationData.page ?? paginationData.currentPage ?? paginationData.current_page ?? paginationData.currentPageNo ?? paginationData.current_page_no ?? response?.page ?? response?.currentPage ?? response?.current_page ?? response?.pageNumber ?? response?.data?.page ?? response?.data?.currentPage ?? response?.data?.current_page ?? page;
+      const limitCount = paginationData.limit ?? paginationData.perPage ?? paginationData.pageSize ?? paginationData.per_page ?? paginationData.per_page_size ?? paginationData.pageSize ?? metadata.perPage ?? metadata.pageSize ?? metadata.per_page ?? metadata.per_page_size ?? response?.limit ?? response?.perPage ?? response?.pageSize ?? pageLimit ?? pagination.limit;
+      const inferredTotal = totalCount || metersData.length;
+      const totalPages = paginationData.pages ?? paginationData.totalPages ?? paginationData.total_pages ?? paginationData.pageCount ?? Math.max(1, Math.ceil(inferredTotal / (limitCount || pagination.limit || 1)), currentPage);
+
+      console.log('[MeterData] Meters received:', metersData.length, 'items', 'total:', inferredTotal, 'page:', currentPage, 'limit:', limitCount, 'pages:', totalPages);
       
       setMeters(metersData);
       setPagination(prev => ({
         ...prev,
-        page: paginationData.page || page,
-        limit: paginationData.limit || pageLimit || prev.limit,
-        total: paginationData.total || metersData.length,
-        pages: paginationData.pages || Math.ceil((paginationData.total || metersData.length) / (paginationData.limit || pageLimit || prev.limit))
+        page: currentPage,
+        limit: limitCount,
+        total: inferredTotal,
+        pages: totalPages
       }));
     } catch (err) {
       console.error('[MeterData] Error fetching meters:', err);
@@ -186,7 +270,6 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
   useEffect(() => {
     if (!enabled) return;
     fetchMeters(1, filters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, fetchMeters, filters]);
 
   return {
@@ -211,11 +294,39 @@ const useMeterStatistics = () => {
     faulty: 0,
     retired: 0,
     singlePhase: 0,
-    threePhase: 0
+    threePhase: 0,
+    completed: 0,
+    paid: 0,
+    pending: 0
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [hasPermission, setHasPermission] = useState(true);
+
+  const normalizeStats = (data) => {
+    const stats = {
+      totalMeters: data.totalMeters ?? data.total_meters ?? data.totalMetersCount ?? data.total_meters_count ?? data.total ?? data.count ?? 0,
+      available: data.available ?? data.available_meters ?? data.availableMeters ?? data.available_count ?? data.availableCount ?? 0,
+      installed: data.installed ?? data.installed_meters ?? data.installedMeters ?? data.installed_count ?? data.installedCount ?? 0,
+      faulty: data.faulty ?? data.faulty_meters ?? data.faultyMeters ?? data.faulty_count ?? data.faultyCount ?? 0,
+      retired: data.retired ?? data.retired_meters ?? data.retiredMeters ?? data.retired_count ?? data.retiredCount ?? 0,
+      singlePhase: data.singlePhase ?? data.single_phase ?? data.singlePhaseMeters ?? data.single_phase_meters ?? 0,
+      threePhase: data.threePhase ?? data.three_phase ?? data.threePhaseMeters ?? data.three_phase_meters ?? 0,
+      completed: data.completed ?? data.completed_meters ?? data.completedMeters ?? data.completed_count ?? data.completedCount ?? 0,
+      paid: data.paid ?? data.paid_meters ?? data.paidMeters ?? data.paid_count ?? data.paidCount ?? 0,
+      pending: data.pending ?? data.pending_meters ?? data.pendingMeters ?? data.pending_count ?? data.pendingCount ?? 0
+    };
+
+    console.log('[MeterSchedule] Normalized meter stats:', stats);
+    return stats;
+  };
+
+  const unwrapStatsResponse = (response) => {
+    if (!response) return null;
+    if (response.success && response.data) return response.data;
+    if (response.data?.data) return response.data.data;
+    return response.data ?? response;
+  };
 
   const fetchMeterStatistics = useCallback(async () => {
     try {
@@ -224,32 +335,26 @@ const useMeterStatistics = () => {
       
       console.log('[MeterSchedule] Fetching meter statistics...');
       const response = await JEDApiService.getMeterStatistics();
-      
-      if (response.success && response.data) {
-        console.log('[MeterSchedule] Meter stats received:', response.data);
-        setMeterStats(response.data);
-        setHasPermission(true);
-      } else if (response.data) {
-        console.log('[MeterSchedule] Meter stats received (direct data):', response.data);
-        setMeterStats(response.data);
-        setHasPermission(true);
-      } else {
-        console.log('[MeterSchedule] Meter stats received (raw response):', response);
-        setMeterStats(response);
-        setHasPermission(true);
+      const payload = unwrapStatsResponse(response);
+
+      if (!payload) {
+        throw new Error('Empty meter statistics response');
       }
+
+      console.log('[MeterSchedule] Meter stats received:', payload);
+      setMeterStats(normalizeStats(payload));
+      setHasPermission(true);
     } catch (err) {
       console.error('[MeterSchedule] Error fetching meter statistics:', err);
       
-      const errorMessage = err.message || '';
-      if (errorMessage.includes('PERMISSION_ERROR') || 
+      const errorMessage = String(err.message || '').toLowerCase();
+      if (errorMessage.includes('permission') || 
           errorMessage.includes('403') || 
-          errorMessage.includes('Insufficient permissions') ||
-          errorMessage.includes('requires elevated permissions')) {
+          errorMessage.includes('insufficient')) {
         console.warn('[MeterSchedule] User lacks permission for meter statistics - hiding stats section');
         setHasPermission(false);
         setError(null);
-      } else if (errorMessage.includes('NOT_FOUND') || errorMessage.includes('404')) {
+      } else if (errorMessage.includes('not_found') || errorMessage.includes('404')) {
         console.warn('[MeterSchedule] Meter statistics endpoint not found');
         setError('Meter statistics service unavailable');
       } else {
@@ -305,6 +410,35 @@ const PriorityBadge = ({ priority }) => {
 };
 
 // Meter Status Badge Component
+const normalizeStatus = (status) => String(status || '').toUpperCase().trim();
+const getMeterStatus = (meter) => {
+  const installedAt = meter?.installedAt ?? meter?.installed_at ?? meter?.installedDate ?? meter?.installed_date;
+  const isInstalledFlag = meter?.isInstalled === true || meter?.is_installed === true || meter?.installed === true || normalizeStatus(meter?.installed) === 'INSTALLED';
+  const status = normalizeStatus(meter?.status);
+
+  if (installedAt || isInstalledFlag || status === 'INSTALLED') {
+    return 'INSTALLED';
+  }
+
+  if (status === 'FAULTY') {
+    return 'FAULTY';
+  }
+
+  if (status === 'RETIRED') {
+    return 'RETIRED';
+  }
+
+  if (status === 'AVAILABLE') {
+    return 'AVAILABLE';
+  }
+
+  return status || 'AVAILABLE';
+};
+
+const getInstalledAtValue = (meter) => {
+  return meter?.installedAt ?? meter?.installed_at ?? meter?.installedDate ?? meter?.installed_date ?? null;
+};
+
 const MeterStatusBadge = ({ status }) => {
   const getStatusConfig = (status) => {
     switch (status) {
@@ -317,7 +451,7 @@ const MeterStatusBadge = ({ status }) => {
       case 'RETIRED':
         return { bg: 'bg-gray-100 dark:bg-gray-800/80', text: 'text-gray-800 dark:text-gray-200', label: 'Retired' };
       default:
-        return { bg: 'bg-gray-100 dark:bg-gray-800/80', text: 'text-gray-800 dark:text-gray-200', label: status };
+        return { bg: 'bg-gray-100 dark:bg-gray-800/80', text: 'text-gray-800 dark:text-gray-200', label: status || 'Unknown' };
     }
   };
 
@@ -367,7 +501,7 @@ const MeterCard = ({ meter }) => (
         </p>
       </div>
       <div className="flex flex-col items-end gap-1">
-        <MeterStatusBadge status={meter.status} />
+        <MeterStatusBadge status={getMeterStatus(meter)} />
         <PhaseTypeBadge phaseType={meter.phaseType} />
       </div>
     </div>
@@ -397,9 +531,9 @@ const MeterCard = ({ meter }) => (
 
     <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
       <div className="flex justify-between">
-        <span>Uploaded: {new Date(meter.uploadedAt).toLocaleDateString()}</span>
-        {meter.installedAt && (
-          <span>Installed: {new Date(meter.installedAt).toLocaleDateString()}</span>
+        <span>Uploaded: {formatDateOnly(meter.uploadedAt)}</span>
+        {getInstalledAtValue(meter) && (
+          <span>Installed: {formatDateOnly(getInstalledAtValue(meter))}</span>
         )}
       </div>
     </div>
@@ -465,13 +599,13 @@ const MeterTable = ({ meters, loading }) => {
                   <PhaseTypeBadge phaseType={meter.phaseType} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <MeterStatusBadge status={meter.status} />
+                  <MeterStatusBadge status={getMeterStatus(meter)} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                   {meter.manufacturedDate}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                  {meter.installedAt ? new Date(meter.installedAt).toLocaleDateString() : 'Not installed'}
+                  {getInstalledAtValue(meter) ? new Date(getInstalledAtValue(meter)).toLocaleDateString() : 'Not Installed'}
                 </td>
               </tr>
             ))}
@@ -1000,7 +1134,7 @@ function MeterSchedule() {
       { 
         title: 'Total Meters', 
         value: meterStats.totalMeters, 
-        icon: Battery, 
+        icon: Database, 
         bgColor: 'bg-blue-100', 
         iconColor: 'text-blue-600',
         loading: statsLoading,
@@ -1030,6 +1164,33 @@ function MeterSchedule() {
         icon: AlertTriangle, 
         bgColor: 'bg-red-100', 
         iconColor: 'text-red-600',
+        loading: statsLoading,
+        error: !!statsError
+      },
+      { 
+        title: 'Retired', 
+        value: meterStats.retired, 
+        icon: Battery, 
+        bgColor: 'bg-gray-100 dark:bg-gray-800/80', 
+        iconColor: 'text-gray-800 dark:text-gray-200',
+        loading: statsLoading,
+        error: !!statsError
+      },
+      { 
+        title: 'Pending', 
+        value: meterStats.pending, 
+        icon: Clock, 
+        bgColor: 'bg-blue-100', 
+        iconColor: 'text-blue-600',
+        loading: statsLoading,
+        error: !!statsError
+      },
+      { 
+        title: 'Paid', 
+        value: meterStats.paid, 
+        icon: CheckCircle, 
+        bgColor: 'bg-teal-100', 
+        iconColor: 'text-teal-600',
         loading: statsLoading,
         error: !!statsError
       },

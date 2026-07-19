@@ -14,14 +14,21 @@ export const AuthProvider = ({ children }) => {
   // Normalize user data with consistent role formatting
   const normalizeUser = useCallback((userData) => {
     if (!userData) return null;
-    
+
+    const firstName = userData.firstName?.trim() || '';
+    const lastName = userData.lastName?.trim() || '';
+    const fullName = [firstName, lastName].filter(Boolean).join(' ');
+    const displayName = userData.name?.trim() || fullName || null;
+
     return {
       ...userData,
       role: userData.role?.toLowerCase()?.trim() || 'installer',
       // Ensure all required fields are present
       id: userData.id,
       phone: userData.phone,
-      name: userData.name || userData.phone,
+      name: displayName,
+      firstName: firstName || undefined,
+      lastName: lastName || undefined,
       email: userData.email || null
     };
   }, []);

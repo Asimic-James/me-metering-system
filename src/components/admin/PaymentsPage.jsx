@@ -11,14 +11,17 @@ import jedApi from '../services/api';
 import { getStatusBadgeClass } from '../../utils/statusBadge';
 import { formatCurrencyNGN } from '../../utils/currency';
 import ConfirmationModal from '../common/ConfirmationModal';
+import ConfirmPaymentTab from './ConfirmPaymentTab';
 import {
   CreditCard, Search, RefreshCw, CheckCircle, AlertCircle, ShieldCheck,
   Loader2, Calendar, Filter, ArrowRight, ExternalLink
 } from 'lucide-react';
+import { formatDateTime, parseTimestamp } from '../../utils/date';
 
 const TABS = [
   { id: 'payments', label: 'Payments' },
   { id: 'lookup', label: 'RRR / Order Lookup' },
+  { id: 'confirm', label: 'Confirm Payment' },
   { id: 'byStatus', label: 'Requests by Status' },
 ];
 
@@ -30,35 +33,62 @@ const DATE_PRESETS = [
 
 const STATUS_OPTIONS = ['INITIATED', 'PAID', 'COMPLETED', 'FAILED', 'CANCELLED'];
 
+const unwrapPaymentsPayload = (response) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.payments)) return response.payments;
+  if (Array.isArray(response?.transactions)) return response.transactions;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.results)) return response.results;
+  if (Array.isArray(response?.data?.payments)) return response.data.payments;
+  if (Array.isArray(response?.data?.transactions)) return response.data.transactions;
+  if (Array.isArray(response?.data?.items)) return response.data.items;
+  if (Array.isArray(response?.data?.results)) return response.data.results;
+  return [];
+};
+
 // Same defensive field-name handling pattern used throughout this
 // project's admin views — the real payment/request object shape is
 // unconfirmed, so these check the most plausible variants rather than
 // assuming one.
-const getAmount = (p) => p?.amount ?? p?.amountPaid ?? p?.amount_paid ?? 0;
-const getRRR = (p) => p?.rrr || p?.RRR || p?.paymentReference || null;
-const getAccount = (p) => p?.accountNumber || p?.account_number || 'N/A';
-const getPaymentStatus = (p) => p?.status || p?.paymentStatus || 'UNKNOWN';
-const getPaymentDate = (p) =>
-  p?.transactionDate || p?.transactiondate || p?.paymentDate || p?.createdAt || p?.date || p?.updatedAt || null;
+const getAmount = (p) => p?.amount ?? p?.amountPaid ?? p?.amount_paid ?? p?.totalAmount ?? p?.total_amount ?? 0;
+const getRRR = (p) => p?.rrr || p?.RRR || p?.paymentReference || p?.reference || p?.payment_reference || null;
+const getAccount = (p) => p?.accountNumber || p?.account_number || p?.account || p?.customerAccount || 'N/A';
+const getPaymentStatus = (p) => p?.status || p?.paymentStatus || p?.transactionStatus || p?.state || 'UNKNOWN';
+const getPaymentDate = (p) => {
+  const candidates = [
+    p?.transactionDate,
+    p?.transactiondate,
+    p?.transactionDateTime,
+    p?.paymentDate,
+    p?.payment_date,
+    p?.paymentDateTime,
+    p?.paidAt,
+    p?.paid_at,
+    p?.createdAt,
+    p?.created_at,
+    p?.date,
+    p?.dateCreated,
+    p?.updatedAt,
+    p?.timestamp,
+    p?.timeStamp,
+    p?.datetime,
+    p?.dateTime,
+    p?.payment?.transactionDate,
+    p?.payment?.createdAt,
+    p?.payment?.date,
+    p?.data?.transactionDate,
+    p?.data?.createdAt,
+    p?.data?.date,
+    p?.transaction?.date,
+    p?.transaction?.timestamp,
+    p?.transaction?.createdAt,
+  ];
 
-const formatPaymentDateTime = (value) => {
-  if (!value) return '-';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return String(value);
-  }
-
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-  });
+  return candidates.find((value) => value !== null && value !== undefined && value !== '') || null;
 };
+
+// use robust formatter from utils/date
 
 function StatusBadge({ status }) {
   return (
@@ -81,7 +111,7 @@ function PaymentsTab() {
     setError(null);
     try {
       const response = await jedApi.getPayments({ days: Number(days) });
-      const list = Array.isArray(response) ? response : (response?.data || []);
+      const list = unwrapPaymentsPayload(response);
       setPayments(list);
       setHasFetched(true);
     } catch (err) {
@@ -160,8 +190,11 @@ function PaymentsTab() {
                     </div>
                     <p className="text-xs font-mono text-gray-500 dark:text-gray-400">{getRRR(p) || 'No RRR'}</p>
                     <div className="flex justify-between items-center mt-2 gap-2">
-                      <span className="text-xs text-gray-500 dark:text-gray-400" title={paymentDate ? new Date(paymentDate).toISOString() : ''}>
-                        {formatPaymentDateTime(paymentDate)}
+                      <span
+                        className="text-xs text-gray-500 dark:text-gray-400"
+                        title={parseTimestamp(paymentDate)?.toISOString() ?? ''}
+                      >
+                        {formatDateTime(paymentDate)}
                       </span>
                       <span className="text-sm font-semibold text-gray-900 dark:text-white">{formatCurrencyNGN(getAmount(p))}</span>
                     </div>
@@ -194,8 +227,11 @@ function PaymentsTab() {
                         <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{getAccount(p)}</td>
                         <td className="px-4 py-3"><StatusBadge status={getPaymentStatus(p)} /></td>
                         <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-white">{formatCurrencyNGN(getAmount(p))}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400" title={paymentDate ? new Date(paymentDate).toISOString() : ''}>
-                          {formatPaymentDateTime(paymentDate)}
+                        <td
+                          className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
+                          title={parseTimestamp(paymentDate)?.toISOString() ?? ''}
+                        >
+                          {formatDateTime(paymentDate)}
                         </td>
                       </tr>
                     );
@@ -534,6 +570,7 @@ function PaymentsPage() {
 
       {activeTab === 'payments' && <PaymentsTab />}
       {activeTab === 'lookup' && <LookupTab />}
+      {activeTab === 'confirm' && <ConfirmPaymentTab />}
       {activeTab === 'byStatus' && <ByStatusTab />}
     </div>
   );

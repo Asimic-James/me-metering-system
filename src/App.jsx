@@ -28,7 +28,7 @@ const InstallationForm = lazy(() => import('./components/installation/Installati
 const MeterSchedule = lazy(() => import('./components/schedule/MeterSchedule'));
 const UserManagement = lazy(() => import('./components/admin/UserManagement'));
 const ExcelUpload = lazy(() => import('./components/uploads/ExcelUpload'));
-const ComplaintForm = lazy(() => import('./components/complaint/ComplaintForm'));
+const SubmissionPage = lazy(() => import('./components/SubmissionPage'));
 // Tabbed Settings page (Meter Types + API Keys) — replaces direct
 // MeterTypeSettings mount so both settings resources live under one route.
 const SettingsPage = lazy(() => import('./components/settings/SettingsPage'));
@@ -132,14 +132,21 @@ function AppContent() {
                     : <AccessDenied />
                 }
               />
-              <Route path="/submit" element={permissions.isAdmin || permissions.canCreateInstallation ? <InstallationForm /> : <AccessDenied />} />
+              <Route
+                path="/submit"
+                element={
+                  permissions.isAdmin || permissions.canCreateInstallation || permissions.canCreateComplaint
+                    ? <SubmissionPage />
+                    : <AccessDenied />
+                }
+              />
               <Route path="/schedule" element={permissions.isAdmin || permissions.canViewSchedule ? <MeterSchedule /> : <AccessDenied />} />
               <Route path="/users" element={permissions.isAdmin ? <UserManagement /> : <AccessDenied />} />
               <Route path="/uploads" element={permissions.isAdmin || permissions.canUploadExcel ? <ExcelUpload /> : <AccessDenied />} />
               <Route path="/reports" element={permissions.isAdmin ? <AdminReports /> : <AccessDenied />} />
               <Route path="/payments" element={permissions.isAdmin ? <PaymentsPage /> : <AccessDenied />} />
               <Route path="/settings" element={permissions.isAdmin ? <SettingsPage /> : <AccessDenied />} />
-              <Route path="/complaint" element={permissions.isAdmin || permissions.canCreateComplaint ? <ComplaintForm /> : <AccessDenied />} />
+              <Route path="/complaint" element={<Navigate to="/submit" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Suspense>

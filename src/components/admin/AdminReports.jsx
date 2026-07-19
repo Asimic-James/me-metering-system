@@ -10,9 +10,13 @@ import {
   Calendar,
   Search,
   RefreshCw,
-  BarChart3
+  BarChart3,
+  Eye
 } from 'lucide-react';
+import { formatDateTime } from '../../utils/date';
 import { formatCurrencyNGN } from '../../utils/currency';
+import { getStatusBadgeClass, normalizeStatus } from '../../utils/statusBadge';
+import InfoModal from '../common/InfoModal';
 
 // Comprehensive field definitions for export
 const EXPORT_FIELDS = [
@@ -39,16 +43,7 @@ const EXPORT_FIELDS = [
   { key: 'remarks', label: 'Remarks/Notes', width: 200 }
 ];
 
-const STATUS_BADGE = (status) => {
-  const map = {
-    completed: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
-    pending: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300',
-    failed: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
-    processing: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
-    initiated: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300',
-  };
-  return map[status] || 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
-};
+const formatStatusText = (status) => normalizeStatus(status).replace(/_/g, ' ');
 
 function AdminReports() {
   const { user } = useAuth();
@@ -67,6 +62,7 @@ function AdminReports() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -109,7 +105,7 @@ function AdminReports() {
           tariffClass: r.tariffClass || r.tariff || r.tariff_class || '-',
           installerName: r.installer?.name || r.installerName || r.installer_name || '-',
           installerPhone: r.installer?.phone || r.installerPhone || r.installer_phone || '-',
-          status: (r.status || r.state || 'unknown').toString().toLowerCase(),
+          status: normalizeStatus(r.status || r.state || 'unknown'),
           amount: Number(r.amount || r.fee || r.paymentAmount || 0),
           paymentReference: r.paymentReference || r.payment_ref || r.reference || '-',
           installationDate: r.installationDate || r.installation_date || r.dateInstalled || null,
@@ -134,13 +130,13 @@ function AdminReports() {
     if (hasPermission(user?.role, PERMISSIONS.REPORTS.VIEW)) load();
   }, [user, pagination.currentPage, pagination.limit]);
 
-  const filtered = useMemo(() => {
+    const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const fromTs = dateFrom ? new Date(dateFrom).setHours(0,0,0,0) : null;
     const toTs = dateTo ? new Date(dateTo).setHours(23,59,59,999) : null;
 
     return rows.filter(r => {
-      if (status && status !== r.status) return false;
+      if (status && normalizeStatus(status) !== normalizeStatus(r.status)) return false;
       if (q) {
         const searchFields = [r.accountNumber, r.meterNumber, r.sealNumber, r.customerName, r.installerName, r.area, r.customerAddress].join(' ').toLowerCase();
         if (!searchFields.includes(q)) return false;
@@ -163,7 +159,7 @@ function AdminReports() {
         const values = EXPORT_FIELDS.map(field => {
           let value = record[field.key] || '';
           if (field.key.includes('Date') && value && value !== '-') {
-            try { value = new Date(value).toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch { /* keep original */ }
+            try { value = formatDateTime(value); } catch { /* keep original */ }
           }
           return `"${String(value).replace(/"/g, '""')}"`;
         });
@@ -187,6 +183,129 @@ function AdminReports() {
   };
 
   const clearFilters = () => { setQuery(''); setStatus(''); setDateFrom(''); setDateTo(''); };
+
+  const openRecordDetails = (record) => setSelectedRecord(record);
+  const closeRecordDetails = () => setSelectedRecord(null);
+
+  const formatDetailValue = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    if (Array.isArray(value)) return value.join(', ');
+    if (typeof value === 'object') return JSON.stringify(value, null, 2);
+    return String(value);
+  };
+
+  const formatFieldLabel = (key) => {
+    const cleaned = String(key || '')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[_-]+/g, ' ')
+      .trim();
+
+    const labelMap = {
+      accountNumber: 'Account Number',
+      account_no: 'Account Number',
+      meterNumber: 'Meter Number',
+      meterNo: 'Meter Number',
+      meter_number: 'Meter Number',
+      sealNumber: 'Seal Number',
+      sealNo: 'Seal Number',
+      seal_number: 'Seal Number',
+      customerName: 'Customer Name',
+      custNames: 'Customer Name',
+      applicantName: 'Applicant Name',
+      customer_name: 'Customer Name',
+      customerAddress: 'Customer Address',
+      custAddress: 'Customer Address',
+      address: 'Customer Address',
+      installation_address: 'Installation Address',
+      area: 'Area / Location',
+      location: 'Location',
+      region: 'Region',
+      district: 'District',
+      feederName: 'Feeder Name',
+      feeder: 'Feeder',
+      feeder_name: 'Feeder Name',
+      meterType: 'Meter Type',
+      meter_type: 'Meter Type',
+      type: 'Type',
+      meterPhase: 'Meter Phase',
+      meter_phase: 'Meter Phase',
+      phase: 'Phase',
+      tariffClass: 'Tariff Class',
+      tariff: 'Tariff',
+      tariff_class: 'Tariff Class',
+      installerName: 'Installer Name',
+      installer_name: 'Installer Name',
+      installerPhone: 'Installer Phone',
+      installer_phone: 'Installer Phone',
+      phone: 'Phone',
+      status: 'Status',
+      state: 'State',
+      amount: 'Amount',
+      fee: 'Fee',
+      paymentAmount: 'Payment Amount',
+      paymentReference: 'Payment Reference',
+      payment_ref: 'Payment Reference',
+      reference: 'Reference',
+      installationDate: 'Installation Date',
+      installation_date: 'Installation Date',
+      dateInstalled: 'Installation Date',
+      submittedDate: 'Submitted Date',
+      submitted_at: 'Submitted Date',
+      dateRequested: 'Submitted Date',
+      completedDate: 'Completed Date',
+      completed_at: 'Completed Date',
+      dateCompleted: 'Completed Date',
+      gpsCoordinates: 'GPS Coordinates',
+      coordinates: 'Coordinates',
+      location_coords: 'Location Coordinates',
+      remarks: 'Remarks',
+      notes: 'Notes',
+      comments: 'Comments',
+      createdAt: 'Created At',
+      updatedAt: 'Updated At',
+      id: 'ID',
+      requestId: 'Request ID',
+      installationId: 'Installation ID',
+    };
+
+    return labelMap[cleaned.toLowerCase()] || cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const detailFields = useMemo(() => {
+    if (!selectedRecord) return [];
+
+    const baseFields = [
+      { label: 'Account Number', value: selectedRecord.accountNumber },
+      { label: 'Meter Number', value: selectedRecord.meterNumber },
+      { label: 'Seal Number', value: selectedRecord.sealNumber },
+      { label: 'Customer Name', value: selectedRecord.customerName },
+      { label: 'Customer Address', value: selectedRecord.customerAddress },
+      { label: 'Area / Location', value: selectedRecord.area },
+      { label: 'Feeder Name', value: selectedRecord.feederName },
+      { label: 'Meter Type', value: selectedRecord.meterType },
+      { label: 'Meter Phase', value: selectedRecord.meterPhase },
+      { label: 'Tariff Class', value: selectedRecord.tariffClass },
+      { label: 'Installer Name', value: selectedRecord.installerName },
+      { label: 'Installer Phone', value: selectedRecord.installerPhone },
+      { label: 'Status', value: selectedRecord.status },
+      { label: 'Amount', value: formatCurrencyNGN(selectedRecord.amount) },
+      { label: 'Payment Reference', value: selectedRecord.paymentReference },
+      { label: 'Submitted Date', value: formatDateTime(selectedRecord.submittedDate) },
+      { label: 'Installation Date', value: formatDateTime(selectedRecord.installationDate) },
+      { label: 'Completed Date', value: formatDateTime(selectedRecord.completedDate) },
+      { label: 'GPS Coordinates', value: selectedRecord.gpsCoordinates },
+      { label: 'Remarks', value: selectedRecord.remarks },
+    ];
+
+    const rawEntries = Object.entries(selectedRecord.raw || {}).filter(([, value]) => {
+      if (value === null || value === undefined) return false;
+      if (typeof value === 'function') return false;
+      return true;
+    });
+
+    return { baseFields, rawEntries };
+  }, [selectedRecord]);
 
   const inputClass = "w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all";
 
@@ -275,11 +394,11 @@ function AdminReports() {
               className={inputClass}
             >
               <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="initiated">Initiated</option>
-              <option value="completed">Completed</option>
-              <option value="failed">Failed</option>
-              <option value="processing">Processing</option>
+              <option value="PENDING">Pending</option>
+              <option value="INITIATED">Initiated</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="FAILED">Failed</option>
+              <option value="PROCESSING">Processing</option>
             </select>
 
             <div className="relative">
@@ -357,6 +476,7 @@ function AdminReports() {
               <th className="px-3 sm:px-4 py-3 font-semibold">Status</th>
               <th className="px-3 sm:px-4 py-3 font-semibold text-right">Amount</th>
               <th className="px-3 sm:px-4 py-3 font-semibold">Date</th>
+              <th className="px-3 sm:px-4 py-3 font-semibold text-center">Details</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -379,13 +499,26 @@ function AdminReports() {
                   <td className="px-3 sm:px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{r.area}</td>
                   <td className="px-3 sm:px-4 py-3 text-gray-700 dark:text-gray-300">{r.installerName}</td>
                   <td className="px-3 sm:px-4 py-3">
-                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${STATUS_BADGE(r.status)}`}>
-                      {r.status}
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium uppercase ${getStatusBadgeClass(r.status)}`}>
+                      {formatStatusText(r.status)}
                     </span>
                   </td>
                   <td className="px-3 sm:px-4 py-3 text-right font-semibold text-gray-900 dark:text-white">{formatCurrencyNGN(r.amount)}</td>
                   <td className="px-3 sm:px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
-                    {r.submittedDate ? new Date(r.submittedDate).toLocaleDateString() : '-'}
+                    {formatDateTime(r.submittedDate)}
+                  </td>
+                  <td className="px-3 sm:px-4 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openRecordDetails(r);
+                      }}
+                      className="inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      aria-label={`View details for ${r.customerName}`}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))
@@ -419,8 +552,8 @@ function AdminReports() {
                   <p className="font-medium text-gray-900 dark:text-white text-sm truncate">{r.customerName}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Account: {r.accountNumber}</p>
                 </div>
-                <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ml-2 ${STATUS_BADGE(r.status)}`}>
-                  {r.status}
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ml-2 uppercase ${getStatusBadgeClass(r.status)}`}>
+                  {formatStatusText(r.status)}
                 </span>
               </div>
 
@@ -444,12 +577,58 @@ function AdminReports() {
               </div>
 
               <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
-                <span>{r.submittedDate ? new Date(r.submittedDate).toLocaleDateString() : '-'}</span>
+                <span>{formatDateTime(r.submittedDate)}</span>
+                <button
+                  type="button"
+                  onClick={() => openRecordDetails(r)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-indigo-600 dark:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  View
+                </button>
               </div>
             </div>
           ))
         )}
       </div>
+
+      <InfoModal
+        isOpen={Boolean(selectedRecord)}
+        onClose={closeRecordDetails}
+        title={selectedRecord ? `${selectedRecord.customerName || 'Customer'} Details` : 'Customer Details'}
+      >
+        {selectedRecord && (
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Primary Details</p>
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                {detailFields.baseFields.map((field) => (
+                  <div key={field.label} className="min-w-0">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{field.label}</p>
+                    <p className="break-words text-gray-900 dark:text-gray-100 font-medium">{formatDetailValue(field.value)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {detailFields.rawEntries.length > 0 && (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">All Available Fields</p>
+                <div className="mt-2 space-y-2 text-sm">
+                  {detailFields.rawEntries.map(([key, value]) => (
+                    <div key={key} className="border-b border-gray-100 dark:border-gray-800 pb-2 last:border-b-0 last:pb-0">
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{formatFieldLabel(key)}</p>
+                      <p className="mt-1 break-words whitespace-pre-wrap text-gray-900 dark:text-gray-100">
+                        {formatDetailValue(value)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </InfoModal>
     </div>
   );
 }
