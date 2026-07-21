@@ -3,7 +3,7 @@
 // with zero UI callers: getPayments, checkRemitaStatusByRRR,
 // checkRemitaStatusByOrderId, confirmPaymentManually, verifyPaymentByRRR,
 // plus getCustomerRequestsByStatus (also dormant). Grouped into one page
-// with 3 tabs since they're all part of the same payment-reconciliation
+// with tabs since they're all part of the same payment-reconciliation
 // workflow, following the tab pattern already established in
 // MeterSchedule.jsx and SettingsPage.jsx.
 import { useState, useCallback } from 'react';
@@ -14,14 +14,18 @@ import ConfirmationModal from '../common/ConfirmationModal';
 import ConfirmPaymentTab from './ConfirmPaymentTab';
 import {
   CreditCard, Search, RefreshCw, CheckCircle, AlertCircle, ShieldCheck,
-  Loader2, Calendar, Filter, ArrowRight, ExternalLink
+  Loader2, Calendar, Filter, ArrowRight, ExternalLink, Info
 } from 'lucide-react';
 import { formatDateTime, parseTimestamp } from '../../utils/date';
 
+// Order matters here: "Confirm Payment" is the routine, everyday action
+// (an admin confirming a customer's payment), placed ahead of "RRR / Order
+// Lookup" which is more of a diagnostic/fallback tool (checking Remita
+// directly, or manually confirming a payment whose webhook was missed).
 const TABS = [
   { id: 'payments', label: 'Payments' },
-  { id: 'lookup', label: 'RRR / Order Lookup' },
   { id: 'confirm', label: 'Confirm Payment' },
+  { id: 'lookup', label: 'RRR / Order Lookup' },
   { id: 'byStatus', label: 'Requests by Status' },
 ];
 
@@ -98,7 +102,7 @@ function StatusBadge({ status }) {
   );
 }
 
-// ---- Tab 1: Payments ----
+// ---- Tab: Payments ----
 function PaymentsTab() {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -246,7 +250,7 @@ function PaymentsTab() {
   );
 }
 
-// ---- Tab 2: RRR / Order Lookup + Verify + Manual Confirm ----
+// ---- Tab: RRR / Order Lookup + Verify + Manual Confirm (fallback tool) ----
 function LookupTab() {
   const [mode, setMode] = useState('rrr'); // 'rrr' | 'orderId'
   const [query, setQuery] = useState('');
@@ -314,6 +318,16 @@ function LookupTab() {
 
   return (
     <div className="space-y-4">
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex gap-2 text-sm text-blue-800 dark:text-blue-300">
+        <Info className="w-4 h-4 shrink-0 mt-0.5" />
+        <p>
+          This tab is for diagnostics and the missed-webhook fallback. For a normal payment
+          confirmation, use the <strong>Confirm Payment</strong> tab instead — "Manually Confirm
+          Payment" below should only be used when the standard flow won't work because Remita's
+          webhook never fired.
+        </p>
+      </div>
+
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 space-y-4">
         <div className="flex gap-2">
           <button
@@ -337,7 +351,7 @@ function LookupTab() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={mode === 'rrr' ? 'e.g., 110002071256' : 'e.g., 1728648000000'}
+              placeholder={mode === 'rrr' ? 'e.g., 120799142825' : 'e.g., 1728648000000'}
               className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-sm font-mono"
             />
           </div>
@@ -417,7 +431,7 @@ function LookupTab() {
   );
 }
 
-// ---- Tab 3: Requests by Status ----
+// ---- Tab: Requests by Status ----
 function ByStatusTab() {
   const [status, setStatus] = useState('PAID');
   const [requests, setRequests] = useState([]);
@@ -569,8 +583,8 @@ function PaymentsPage() {
       </div>
 
       {activeTab === 'payments' && <PaymentsTab />}
-      {activeTab === 'lookup' && <LookupTab />}
       {activeTab === 'confirm' && <ConfirmPaymentTab />}
+      {activeTab === 'lookup' && <LookupTab />}
       {activeTab === 'byStatus' && <ByStatusTab />}
     </div>
   );

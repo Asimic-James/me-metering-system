@@ -1,8 +1,16 @@
 import { useState } from 'react';
 import jedApi from '../services/api';
 import ConfirmationModal from '../common/ConfirmationModal';
-import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Search, ArrowDownToLine } from 'lucide-react';
 import { formatDateTime } from '../../utils/date';
+
+// Same defensive field-name handling used elsewhere for unconfirmed
+// response shapes — tries the most plausible variants for an account
+// number that might come back on a Remita status lookup.
+const extractAccountNumber = (data) =>
+  data?.accountNumber || data?.account_number ||
+  data?.data?.accountNumber || data?.data?.account_number ||
+  null;
 
 function ConfirmPaymentTab() {
   const [accountNumber, setAccountNumber] = useState('');
@@ -11,6 +19,39 @@ function ConfirmPaymentTab() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
+
+  // RRR lookup — GET /external/jed/status/rrr/{rrr}, the exact endpoint
+  // confirmed working via curl. Lets an admin check a transaction's real
+  // Remita status before confirming, and reuse it across subsequent
+  // queries/RRRs without leaving this tab.
+  const [rrrQuery, setRrrQuery] = useState('');
+  const [rrrResult, setRrrResult] = useState(null);
+  const [rrrLoading, setRrrLoading] = useState(false);
+  const [rrrError, setRrrError] = useState(null);
+
+  const handleCheckRRR = async () => {
+    if (!rrrQuery.trim()) return;
+    setRrrLoading(true);
+    setRrrError(null);
+    setRrrResult(null);
+    try {
+      const response = await jedApi.checkRemitaStatusByRRR(rrrQuery.trim());
+      setRrrResult(response?.data || response);
+    } catch (err) {
+      console.error('[ConfirmPayment] RRR status check failed:', err);
+      setRrrError(String(err?.message || 'RRR status check failed'));
+    } finally {
+      setRrrLoading(false);
+    }
+  };
+
+  const handleUseAccountFromRRR = () => {
+    const found = extractAccountNumber(rrrResult);
+    if (found) {
+      setAccountNumber(String(found));
+      setError(null);
+    }
+  };
 
   const handleConfirm = async () => {
     if (!accountNumber.trim()) return;
@@ -21,9 +62,18 @@ function ConfirmPaymentTab() {
     setSuccessMessage(null);
 
     try {
-      const response = await jedApi.confirmPayment({ accountNumber: accountNumber.trim() });
-      const payload = response?.data || response;
-      setResult(payload);
+      // RRR carried into the confirm payload when the admin has looked
+      // one up in this session — omitted entirely (not sent as an empty
+      // string) when not provided, so the existing accountNumber-only
+      // flow behaves exactly as before.
+      const payload = { accountNumber: accountNumber.trim() };
+      if (rrrQuery.trim()) {
+        payload.rrr = rrrQuery.trim();
+      }
+
+      const response = await jedApi.confirmPayment(payload);
+      const payload_ = response?.data || response;
+      setResult(payload_);
       setSuccessMessage('Payment confirmed successfully.');
       setConfirmOpen(false);
     } catch (err) {
@@ -33,6 +83,8 @@ function ConfirmPaymentTab() {
       setConfirming(false);
     }
   };
+
+  const foundAccount = extractAccountNumber(rrrResult);
 
   return (
     <div className="space-y-4">
@@ -68,6 +120,12 @@ function ConfirmPaymentTab() {
           </div>
         </div>
 
+        {rrrQuery.trim() && (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            RRR <span className="font-mono">{rrrQuery.trim()}</span> will be included with this confirmation.
+          </p>
+        )}
+
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-800 dark:text-red-300">
             <AlertCircle className="w-4 h-4 inline-block mr-2 align-text-top" />
@@ -99,6 +157,68 @@ function ConfirmPaymentTab() {
             )}
           </div>
         )}
+
+        {/* RRR lookup — optional, feeds account number + rrr back into
+            the confirm flow above. Uses the exact endpoint confirmed
+            working via curl: GET /external/jed/status/rrr/{rrr}. */}
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Look up by RRR (optional)
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={rrrQuery}
+                  onChange={(e) => { setRrrQuery(e.target.value); setRrrResult(null); setRrrError(null); }}
+                  placeholder="e.g., 120799142825"
+                  className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleCheckRRR}
+                disabled={rrrLoading || !rrrQuery.trim()}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-sm font-medium shrink-0"
+              >
+                {rrrLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                <span className="hidden sm:inline">Check Status</span>
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Checks the transaction's real-time status directly with Remita before you confirm.
+            </p>
+          </div>
+
+          {rrrError && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-800 dark:text-red-300">
+              {rrrError}
+            </div>
+          )}
+
+          {rrrResult && (
+            <div className="bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">Remita Status</p>
+                {foundAccount && (
+                  <button
+                    type="button"
+                    onClick={handleUseAccountFromRRR}
+                    className="flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                  >
+                    <ArrowDownToLine className="w-3.5 h-3.5" />
+                    Use account {foundAccount}
+                  </button>
+                )}
+              </div>
+              <pre className="text-xs text-gray-700 dark:text-gray-300 overflow-auto max-h-48">
+                {JSON.stringify(rrrResult, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
       </div>
 
       <ConfirmationModal
@@ -108,7 +228,11 @@ function ConfirmPaymentTab() {
         loading={confirming}
         confirmText="Confirm"
         title="Confirm Payment with JED"
-        message={`Confirm payment for account number "${accountNumber.trim()}"? This will notify JED that the customer has paid via Remita.`}
+        message={
+          rrrQuery.trim()
+            ? `Confirm payment for account number "${accountNumber.trim()}" (RRR: ${rrrQuery.trim()})? This will notify JED that the customer has paid via Remita.`
+            : `Confirm payment for account number "${accountNumber.trim()}"? This will notify JED that the customer has paid via Remita.`
+        }
       />
     </div>
   );
