@@ -56,6 +56,13 @@ function ConfirmPaymentTab() {
   const handleConfirm = async () => {
     if (!accountNumber.trim()) return;
 
+    // Close immediately on click rather than waiting for the request to
+    // finish — the page shows loading/success/error state directly
+    // instead of it being hidden behind the modal. This also fixes a
+    // real bug: previously the modal only closed on the success path, so
+    // any failed confirmation left it stuck open with the error banner
+    // invisible underneath it.
+    setConfirmOpen(false);
     setConfirming(true);
     setError(null);
     setResult(null);
@@ -75,7 +82,6 @@ function ConfirmPaymentTab() {
       const payload_ = response?.data || response;
       setResult(payload_);
       setSuccessMessage('Payment confirmed successfully.');
-      setConfirmOpen(false);
     } catch (err) {
       console.error('[ConfirmPayment] Failed to confirm payment:', err);
       setError(String(err?.message || 'Failed to confirm payment'));

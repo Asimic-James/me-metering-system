@@ -85,7 +85,7 @@ class JEDApiService {
 
         clearTimeout(timeoutId);
 
-        const result = await this.handleResponse(response, { url, ...requestOptions });
+        const result = await this.handleResponse(response);
         
         // Cache successful responses
         if (useCache && cacheKey && this.utils.isSuccessResponse(response)) {
@@ -134,7 +134,7 @@ class JEDApiService {
   }
 
   // Handle API response with consistent error formatting
-  async handleResponse(response, requestOptions = {}) {
+  async handleResponse(response) {
     console.log(`[API] Response: ${response.status} ${response.statusText}`);
 
     const contentType = response.headers.get('content-type') || '';
@@ -162,7 +162,7 @@ class JEDApiService {
     }
 
     if (!response.ok) {
-      this.handleErrorResponse(response, data, requestOptions);
+      this.handleErrorResponse(response, data);
     }
 
     console.log('[API] Success Response:', data);
@@ -170,20 +170,13 @@ class JEDApiService {
   }
 
   // FIXED: Enhanced error handling with specific error types
-  handleErrorResponse(response, data, requestOptions = {}) {
+  handleErrorResponse(response, data) {
     const { status } = response;
-    const requestUrl = String(requestOptions.url || '').toLowerCase();
-    const isAuthEndpoint = requestUrl.includes('/auth') || requestUrl.includes('/login') || requestUrl.includes('/logout') || requestUrl.includes('/refresh-token') || requestUrl.includes('/profile');
 
-    // Only clear auth state for actual auth requests. Other endpoints should
-    // surface the error without force-logging the user out.
+    // Handle 401 errors first
     if (status === 401) {
-      if (isAuthEndpoint) {
-        this.clearTokens();
-        throw new Error(`${this.errorTypes.AUTH}:${data?.message || 'Invalid credentials'}`);
-      }
-
-      throw new Error(data?.message || 'Authentication failed for this request');
+      this.clearTokens();
+      throw new Error(`${this.errorTypes.AUTH}:${data?.message || 'Invalid credentials'}`);
     }
 
     // FIXED: Safely check error message with proper null/undefined handling
@@ -217,11 +210,8 @@ class JEDApiService {
     // Safely check error message
     const errorMsg = error?.message || '';
     const errorMsgStr = String(errorMsg).toLowerCase();
-    const isAuthError = errorMsgStr.includes(this.errorTypes.AUTH.toLowerCase()) ||
-      errorMsgStr.includes('authentication required') ||
-      errorMsgStr.includes('invalid credentials');
     
-    if (isAuthError) {
+    if (errorMsgStr.includes('401')) {
       this.clearTokens();
       return new Error('Authentication required. Please login again.');
     }
@@ -379,8 +369,13 @@ class JEDApiService {
   }
 
   // ==================== VERIFICATION METHODS ====================
+  // CONFIRMED against real API docs: these live under /verification/*,
+  // scoped to the authenticated user via the Bearer token (not /auth/*).
+  // send-phone-otp / send-email-otp take no request body per the docs —
+  // callers may still pass one (e.g. VerificationModal sends { phone })
+  // but the backend ignores it.
   async sendPhoneOTP(data) {
-    const url = this.buildUrl(this.endpoints.AUTH.SEND_PHONE_OTP, true);
+    const url = this.utils.buildUrl(this.endpoints.VERIFICATION.SEND_PHONE_OTP, 'VERIFICATION');
     return await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -388,7 +383,7 @@ class JEDApiService {
   }
 
   async verifyPhone(data) {
-    const url = this.buildUrl(this.endpoints.AUTH.VERIFY_PHONE, true);
+    const url = this.utils.buildUrl(this.endpoints.VERIFICATION.VERIFY_PHONE, 'VERIFICATION');
     return await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -396,7 +391,7 @@ class JEDApiService {
   }
 
   async sendEmailOTP(data) {
-    const url = this.buildUrl(this.endpoints.AUTH.SEND_EMAIL_OTP, true);
+    const url = this.utils.buildUrl(this.endpoints.VERIFICATION.SEND_EMAIL_OTP, 'VERIFICATION');
     return await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -404,7 +399,7 @@ class JEDApiService {
   }
 
   async verifyEmail(data) {
-    const url = this.buildUrl(this.endpoints.AUTH.VERIFY_EMAIL, true);
+    const url = this.utils.buildUrl(this.endpoints.VERIFICATION.VERIFY_EMAIL, 'VERIFICATION');
     return await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -414,14 +409,17 @@ class JEDApiService {
   // ==================== USER MANAGEMENT METHODS ====================
   async getProfile() {
     const url = this.buildUrl(this.endpoints.AUTH.PROFILE, true);
-    const response = await this.makeRequest(url, { 
+    const response = await this.makeRequest(url, {
       method: 'GET',
       useCache: true,
       cacheKey: 'user-profile'
     });
 
-    if (response.user) {
-      this.storeUser(response.user);
+    // Real API returns the user under `data` (Success + data:User), not
+    // `user` — check both so the local cache actually stays in sync.
+    const userRecord = response.data || response.user;
+    if (userRecord) {
+      this.storeUser(userRecord);
       this.clearCache();
     }
 
@@ -435,11 +433,12 @@ class JEDApiService {
       body: JSON.stringify(profileData),
     });
 
-    if (response.user) {
-      this.storeUser(response.user);
+    const userRecord = response.data || response.user;
+    if (userRecord) {
+      this.storeUser(userRecord);
       this.clearCache();
     }
-    
+
     return response;
   }
 
@@ -448,6 +447,19 @@ class JEDApiService {
     return await this.makeRequest(url, {
       method: 'PUT',
       body: JSON.stringify(passwordData),
+    });
+  }
+
+  /**
+   * Admin action: reset another user's password to the system default.
+   * POST /auth/reset-password (bearerAuth), body: { userId }.
+   */
+  async resetPassword(userId) {
+    if (!userId) throw new Error('resetPassword requires a userId');
+    const url = this.buildUrl(this.endpoints.AUTH.RESET_PASSWORD, true);
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
     });
   }
 
@@ -482,8 +494,8 @@ class JEDApiService {
 
   // ==================== JED INTEGRATION METHODS ====================
   // Phase 1 lifecycle:
-  // 1. Customer requests meter via JED
-  // 2. We generate RRR (generatePaymentReference) and send to JED
+  // 1. Customer requests meter via JEED
+  // 2. We generate RRR (generatePaymentReference) and send to JEED
   // 3. Customer pays via Remita using the RRR
   // 4. Remita webhook notifies us of successful payment
   // 5. We confirmPayment with Remita -> Remita returns installation details
@@ -624,6 +636,34 @@ class JEDApiService {
     return await this.makeRequest(url, { method: 'GET' });
   }
 
+  /**
+   * Manually submit/replay a Remita payment notification — the same
+   * payload shape and endpoint Remita's own webhook uses
+   * (POST /webhooks/remita/payment, array of notification objects).
+   *
+   * Two legitimate uses:
+   * 1. Admin recovery — Remita's automatic webhook never fired for a
+   *    transaction, so an admin manually resubmits the notification with
+   *    details pulled from Remita's own dashboard/logs.
+   * 2. Possible fix path for confirm-payment failures — POST
+   *    /confirm-payment with only an accountNumber can fail with
+   *    "Failed to send installation details to JED" if the backend needs
+   *    richer transaction detail to complete the handoff. This endpoint's
+   *    full payload (rrr, amount, payer info, dates, etc.) may succeed
+   *    where the minimal call doesn't.
+   *
+   * @param {Object|Object[]} notifications - one notification object or
+   *   an array of them; always sent as an array per the documented schema.
+   */
+  async submitRemitaWebhook(notifications) {
+    const payload = Array.isArray(notifications) ? notifications : [notifications];
+    const url = this.utils.buildUrl(this.endpoints.WEBHOOKS.REMITA_PAYMENT, 'WEBHOOKS');
+    return await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   async getCustomerRequestsByStatus(status) {
     const url = this.buildUrl(this.endpoints.JED.GET_REQUESTS_BY_STATUS(status));
     return await this.makeRequest(url, {
@@ -653,19 +693,17 @@ class JEDApiService {
    */
   async getMyInstallations(params = {}) {
     const { employeeId, ...queryParams } = params;
-    const safeLimit = Math.min(queryParams.limit || 100, 100);
-    const requestParams = { ...queryParams, limit: safeLimit };
 
     try {
       const url = this.utils.buildUrlWithParams(
         this.endpoints.JED.GET_REQUESTS_FOR_INSTALLERS,
-        requestParams,
+        queryParams,
         'JED'
       );
       return await this.makeRequest(url, {
         method: 'GET',
         useCache: true,
-        cacheKey: `my-installations-${JSON.stringify(requestParams)}`
+        cacheKey: `my-installations-${JSON.stringify(queryParams)}`
       });
     } catch (error) {
       const errMsg = String(error?.message || '').toLowerCase();
@@ -750,112 +788,6 @@ class JEDApiService {
       }
       throw error;
     }
-  }
-
-  async getSystemAnalytics(params = {}) {
-    const url = this.utils.buildUrlWithParams(
-      this.endpoints.ADMIN.SYSTEM_ANALYTICS,
-      params,
-      'ADMIN'
-    );
-    return await this.makeRequest(url, {
-      method: 'GET',
-      useCache: true,
-      cacheKey: `system-analytics-${JSON.stringify(params)}`
-    });
-  }
-
-  async getPerformanceReports(params = {}) {
-    const url = this.utils.buildUrlWithParams(
-      this.endpoints.ADMIN.PERFORMANCE_REPORTS,
-      params,
-      'ADMIN'
-    );
-    return await this.makeRequest(url, {
-      method: 'GET',
-      useCache: true,
-      cacheKey: `performance-reports-${JSON.stringify(params)}`
-    });
-  }
-
-  async getSystemLogs(params = {}) {
-    const url = this.utils.buildUrlWithParams(
-      this.endpoints.ADMIN.SYSTEM_LOGS,
-      params,
-      'ADMIN'
-    );
-    return await this.makeRequest(url, {
-      method: 'GET',
-      useCache: false,
-      cacheKey: `system-logs-${JSON.stringify(params)}`
-    });
-  }
-
-  async getAuditTrail(params = {}) {
-    const url = this.utils.buildUrlWithParams(
-      this.endpoints.ADMIN.AUDIT_TRAIL,
-      params,
-      'ADMIN'
-    );
-    return await this.makeRequest(url, {
-      method: 'GET',
-      useCache: false,
-      cacheKey: `audit-trail-${JSON.stringify(params)}`
-    });
-  }
-
-  async getSystemSettings() {
-    const url = this.buildApiUrl(this.endpoints.ADMIN.SYSTEM_SETTINGS);
-    return await this.makeRequest(url, {
-      method: 'GET',
-      useCache: true,
-      cacheKey: 'system-settings'
-    });
-  }
-
-  async getReportTypes() {
-    const url = this.buildUrl(this.endpoints.REPORTS.GET_REPORT_TYPES, 'REPORTS');
-    return await this.makeRequest(url, {
-      method: 'GET',
-      useCache: true,
-      cacheKey: 'report-types'
-    });
-  }
-
-  async getReportHistory(params = {}) {
-    const url = this.utils.buildUrlWithParams(
-      this.endpoints.REPORTS.GET_REPORT_HISTORY,
-      params,
-      'REPORTS'
-    );
-    return await this.makeRequest(url, {
-      method: 'GET',
-      useCache: true,
-      cacheKey: `report-history-${JSON.stringify(params)}`
-    });
-  }
-
-  async getRequestsByInstaller(employeeId, params = {}) {
-    if (!employeeId) throw new Error('getRequestsByInstaller requires an employeeId');
-    const url = this.utils.buildUrlWithParams(
-      this.endpoints.JED.GET_REQUESTS_BY_INSTALLER(employeeId),
-      params,
-      'JED'
-    );
-    return await this.makeRequest(url, {
-      method: 'GET',
-      useCache: false,
-      cacheKey: `requests-installer-${employeeId}-${JSON.stringify(params)}`
-    });
-  }
-
-  async getRequestsByDateRange(startDate, endDate) {
-    if (!startDate || !endDate) throw new Error('getRequestsByDateRange requires startDate and endDate');
-    const url = this.buildUrl(this.endpoints.JED.GET_REQUESTS_BY_DATE_RANGE(startDate, endDate), 'JED');
-    return await this.makeRequest(url, {
-      method: 'GET',
-      useCache: false
-    });
   }
 
   // ==================== METERS MANAGEMENT METHODS ====================
@@ -1100,14 +1032,11 @@ class JEDApiService {
   }
 
   async getApiKeyById(id) {
-    const safeId = typeof id === 'string' || typeof id === 'number' || typeof id === 'boolean'
-      ? String(id)
-      : (id?.$oid ? String(id.$oid) : JSON.stringify(id));
     const url = this.utils.buildUrl(this.endpoints.APIKEYS.BY_ID(id), 'APIKEYS');
     return await this.makeRequest(url, {
       method: 'GET',
       useCache: true,
-      cacheKey: `apikey-${safeId}`
+      cacheKey: `apikey-${id}`
     });
   }
 
@@ -1264,15 +1193,7 @@ class JEDApiService {
         getMyInstallations: typeof this.getMyInstallations === 'function',
         getPayments: typeof this.getPayments === 'function',
         verifyPaymentByRRR: typeof this.verifyPaymentByRRR === 'function',
-        getSystemAnalytics: typeof this.getSystemAnalytics === 'function',
-        getPerformanceReports: typeof this.getPerformanceReports === 'function',
-        getSystemLogs: typeof this.getSystemLogs === 'function',
-        getAuditTrail: typeof this.getAuditTrail === 'function',
-        getSystemSettings: typeof this.getSystemSettings === 'function',
-        getReportTypes: typeof this.getReportTypes === 'function',
-        getReportHistory: typeof this.getReportHistory === 'function',
-        getRequestsByInstaller: typeof this.getRequestsByInstaller === 'function',
-        getRequestsByDateRange: typeof this.getRequestsByDateRange === 'function',
+        resetPassword: typeof this.resetPassword === 'function',
       }
     };
     

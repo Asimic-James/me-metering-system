@@ -1,21 +1,25 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import JEDApiService from '../services/api';
-import { 
+import { usePermissions } from '../auth/usePermissions';
+import ConfirmationModal from '../common/ConfirmationModal';
+import {
   Calendar, MapPin, User, Phone, Clock, CheckCircle,
   AlertCircle, FileText, Search, // Navigation and Filter icons removed — confirmed unused
-  Zap, 
-  Cpu, 
-  Battery, 
-  Wrench, 
-  AlertTriangle, 
+  Zap,
+  Cpu,
+  Battery,
+  Wrench,
+  AlertTriangle,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
   Download,
   Upload,
-  ChevronsLeft,   
+  ChevronsLeft,
   ChevronsRight,
-  Database
+  Database,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { formatDateOnly } from '../../utils/date';
 
@@ -489,7 +493,7 @@ const PhaseTypeBadge = ({ phaseType }) => {
 
 
 // Meter Card Component
-const MeterCard = ({ meter }) => (
+const MeterCard = ({ meter, canDelete, deleting, onDeleteClick }) => (
   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 hover:shadow-lg transition-shadow duration-200">
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1 min-w-0">
@@ -501,7 +505,19 @@ const MeterCard = ({ meter }) => (
         </p>
       </div>
       <div className="flex flex-col items-end gap-1">
-        <MeterStatusBadge status={getMeterStatus(meter)} />
+        <div className="flex items-center gap-1">
+          <MeterStatusBadge status={getMeterStatus(meter)} />
+          {canDelete && (
+            <button
+              onClick={() => onDeleteClick(meter)}
+              disabled={deleting}
+              className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+              title="Delete meter from inventory"
+            >
+              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+            </button>
+          )}
+        </div>
         <PhaseTypeBadge phaseType={meter.phaseType} />
       </div>
     </div>
@@ -997,8 +1013,29 @@ const Pagination = ({ pagination, onPageChange, loading }) => {
 };
 
 // Meter Inventory Component
-const MeterInventory = ({ meterInventory }) => {
+const MeterInventory = ({ meterInventory, canManageSchedule }) => {
   const { meters, loading, error, pagination, filters, fetchMeters, updateFilters, changePage, exportMeters } = meterInventory;
+
+  const [meterToDelete, setMeterToDelete] = useState(null);
+  const [deletingNumber, setDeletingNumber] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+
+  const handleDelete = useCallback(async () => {
+    if (!meterToDelete) return;
+
+    try {
+      setDeletingNumber(meterToDelete.meterNumber);
+      setDeleteError(null);
+      await JEDApiService.deleteMeter(meterToDelete.meterNumber);
+      await fetchMeters();
+      setMeterToDelete(null);
+    } catch (err) {
+      console.error('[MeterInventory] Failed to delete meter:', err);
+      setDeleteError(err.message || 'Failed to delete meter');
+    } finally {
+      setDeletingNumber(null);
+    }
+  }, [meterToDelete, fetchMeters]);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -1010,14 +1047,24 @@ const MeterInventory = ({ meterInventory }) => {
         onExport={exportMeters}
       />
 
-      {error && (
+      {(error || deleteError) && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center gap-2 text-red-800">
             <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">{error}</span>
+            <span className="text-sm">{error || deleteError}</span>
           </div>
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={!!meterToDelete}
+        onClose={() => setMeterToDelete(null)}
+        onConfirm={handleDelete}
+        loading={!!deletingNumber}
+        title="Delete Meter"
+        message={`Remove meter "${meterToDelete?.meterNumber}" from inventory? This cannot be undone.`}
+        confirmText="Delete"
+      />
 
       {loading && <MeterLoadingSkeleton />}
 
@@ -1025,10 +1072,16 @@ const MeterInventory = ({ meterInventory }) => {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {meters.map(meter => (
-              <MeterCard key={meter.id} meter={meter} />
+              <MeterCard
+                key={meter.id}
+                meter={meter}
+                canDelete={canManageSchedule}
+                deleting={deletingNumber === meter.meterNumber}
+                onDeleteClick={setMeterToDelete}
+              />
             ))}
           </div>
-          
+
           <Pagination
             pagination={pagination}
             onPageChange={changePage}
@@ -1038,8 +1091,8 @@ const MeterInventory = ({ meterInventory }) => {
       )}
 
       {!loading && meters.length === 0 && (
-        <EmptyState 
-          hasFilters={filters.status !== 'ALL' || filters.phaseType !== 'ALL'} 
+        <EmptyState
+          hasFilters={filters.status !== 'ALL' || filters.phaseType !== 'ALL'}
           searchTerm={filters.searchTerm}
           type="meters"
         />
@@ -1115,6 +1168,7 @@ const MeterQuery = ({ meterQuery }) => {
 
 // Main Component
 function MeterSchedule() {
+  const { canManageSchedule } = usePermissions();
   const { meterStats, loading: statsLoading, error: statsError, refetch: refetchStats } = useMeterStatistics();
 
   // activeTab now declared before the two useMeterData() instances so each
@@ -1274,7 +1328,7 @@ function MeterSchedule() {
       </div>
 
       {activeTab === 'inventory' && (
-        <MeterInventory meterInventory={meterInventory} />
+        <MeterInventory meterInventory={meterInventory} canManageSchedule={canManageSchedule} />
       )}
 
       {activeTab === 'query' && (

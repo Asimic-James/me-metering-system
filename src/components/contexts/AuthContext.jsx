@@ -207,9 +207,12 @@ export const AuthProvider = ({ children }) => {
       }
       
       const response = await JEDApiService.getProfile();
-      
-      if (response.user) {
-        const normalizedUser = normalizeUser(response.user);
+
+      // Real API returns the user under `data` (Success + data:User), not
+      // `user` — check both so this doesn't silently no-op.
+      const userRecord = response.data || response.user;
+      if (userRecord) {
+        const normalizedUser = normalizeUser(userRecord);
         setUser(normalizedUser);
         console.log('[AuthContext] User data refreshed');
       }

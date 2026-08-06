@@ -248,6 +248,8 @@ function UserManagement() {
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
+  const [userToResetPassword, setUserToResetPassword] = useState(null);
+  const [resetPasswordMessage, setResetPasswordMessage] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState('all');
 
@@ -345,14 +347,14 @@ function UserManagement() {
 
   const handleDeleteUser = useCallback(async () => {
     if (!userToDelete) return;
-    
+
     try {
       setActionLoading(`delete-${userToDelete.id}`);
       setError(null);
-      
+
       console.log('[UserManagement] Deleting user:', userToDelete.id);
       await jedApi.deleteUser(userToDelete.id);
-      
+
       await fetchUsers();
       setUserToDelete(null); // Close modal on success
     } catch (err) {
@@ -363,6 +365,31 @@ function UserManagement() {
       setActionLoading(null);
     }
   }, [userToDelete, fetchUsers]);
+
+  const handleResetPassword = useCallback(async () => {
+    if (!userToResetPassword) return;
+
+    try {
+      setActionLoading(`reset-${userToResetPassword.id}`);
+      setError(null);
+      setResetPasswordMessage(null);
+
+      console.log('[UserManagement] Resetting password for user:', userToResetPassword.id);
+      await jedApi.resetPassword(userToResetPassword.id);
+
+      setResetPasswordMessage(
+        `Password for ${userToResetPassword.firstName || ''} ${userToResetPassword.lastName || ''}`.trim() +
+        ' has been reset to the system default.'
+      );
+      setUserToResetPassword(null); // Close modal on success
+    } catch (err) {
+      console.error('[UserManagement] Error resetting password:', err);
+      setError(err.message || 'Failed to reset password');
+      // Keep the modal open on error so the user sees the message
+    } finally {
+      setActionLoading(null);
+    }
+  }, [userToResetPassword]);
 
   // Fetch users on mount
   useEffect(() => {
@@ -414,6 +441,24 @@ function UserManagement() {
           Add User
         </button>
       </div>
+
+      {/* Reset Password Success Alert */}
+      {resetPasswordMessage && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+          <div className="flex gap-3">
+            <Check className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-green-700 dark:text-green-300">{resetPasswordMessage}</p>
+            </div>
+            <button
+              onClick={() => setResetPasswordMessage(null)}
+              className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Error Alert */}
       {error && (
@@ -481,6 +526,17 @@ function UserManagement() {
         loading={actionLoading === `delete-${userToDelete?.id}`}
         title="Delete User"
         message={`Are you sure you want to delete the user "${userToDelete?.firstName} ${userToDelete?.lastName}"? This action cannot be undone.`}
+      />
+
+      {/* Reset Password Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={!!userToResetPassword}
+        onClose={() => setUserToResetPassword(null)}
+        onConfirm={handleResetPassword}
+        loading={actionLoading === `reset-${userToResetPassword?.id}`}
+        title="Reset Password"
+        message={`Reset the password for "${userToResetPassword?.firstName} ${userToResetPassword?.lastName}" to the system default? They will need to change it after logging in.`}
+        confirmText="Reset Password"
       />
 
       {/* Filters and Search */}
@@ -607,6 +663,18 @@ function UserManagement() {
                           title="Edit user"
                         >
                           <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setUserToResetPassword(user)}
+                          disabled={actionLoading === `delete-${user.id}` || actionLoading === `reset-${user.id}`}
+                          className="p-2 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors disabled:opacity-50"
+                          title="Reset password to default"
+                        >
+                          {actionLoading === `reset-${user.id}` ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Lock className="w-4 h-4" />
+                          )}
                         </button>
                         <button
                           onClick={() => setUserToDelete(user)}

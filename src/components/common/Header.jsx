@@ -1,9 +1,10 @@
-import { Power, User, LogOut, ChevronDown, Menu, X, Bell, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2, Sun, Moon } from 'lucide-react';
+import { Power, User, LogOut, ChevronDown, Menu, X, Bell, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2, Sun, Moon, Pencil, KeyRound, Save } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import JEDApiService from '../services/api';
 import VerificationModal from '../auth/VerificationModal';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 
 // Header-specific constants
 const HEADER_STYLES = {
@@ -53,11 +54,170 @@ const getUserInitials = (user) => {
   return 'U';
 };
 
+// Profile Edit Form — PUT /auth/profile (UserUpdate schema: firstName,
+// lastName, email, homeAddress, officeAddress). Role is intentionally
+// left out — self-service profile edit isn't the place to change role.
+const EditProfileForm = ({ profileData, onCancel, onSaved }) => {
+  const [form, setForm] = useState({
+    firstName: profileData.firstName || '',
+    lastName: profileData.lastName || '',
+    email: profileData.email || '',
+    homeAddress: profileData.homeAddress || '',
+    officeAddress: profileData.officeAddress || '',
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState(null);
+
+  const update = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      const response = await JEDApiService.updateProfile(form);
+      onSaved(response?.data || response?.user || { ...profileData, ...form });
+    } catch (err) {
+      setFormError(err.message || 'Failed to update profile');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent";
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {formError && (
+        <div className="flex gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          {formError}
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">First Name</label>
+          <input className={inputClass} value={form.firstName} onChange={update('firstName')} required minLength={2} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Last Name</label>
+          <input className={inputClass} value={form.lastName} onChange={update('lastName')} required minLength={2} />
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+        <input type="email" className={inputClass} value={form.email} onChange={update('email')} required />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Home Address</label>
+        <input className={inputClass} value={form.homeAddress} onChange={update('homeAddress')} />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Office Address</label>
+        <input className={inputClass} value={form.officeAddress} onChange={update('officeAddress')} />
+      </div>
+      <div className="flex gap-3 pt-2">
+        <button type="button" onClick={onCancel} disabled={submitting} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+          Cancel
+        </button>
+        <button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Save Changes
+        </button>
+      </div>
+    </form>
+  );
+};
+
+// Change Password Form — PUT /auth/change-password (currentPassword,
+// newPassword). Client-side pattern check mirrors the documented
+// backend rule (lowercase + uppercase + digit, 6+ chars) so users get
+// immediate feedback instead of a round-trip 400.
+const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
+
+const ChangePasswordForm = ({ onCancel, onSaved }) => {
+  const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState(null);
+
+  const update = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (form.newPassword !== form.confirmPassword) {
+      setFormError('New password and confirmation do not match');
+      return;
+    }
+    if (!PASSWORD_PATTERN.test(form.newPassword)) {
+      setFormError('New password must be at least 6 characters and include an uppercase letter, a lowercase letter, and a number');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await JEDApiService.changePassword({
+        currentPassword: form.currentPassword,
+        newPassword: form.newPassword,
+      });
+      onSaved();
+    } catch (err) {
+      setFormError(err.message || 'Failed to change password');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent";
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {formError && (
+        <div className="flex gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          {formError}
+        </div>
+      )}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Current Password</label>
+        <input type="password" className={inputClass} value={form.currentPassword} onChange={update('currentPassword')} required />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">New Password</label>
+        <input type="password" className={inputClass} value={form.newPassword} onChange={update('newPassword')} required minLength={6} />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Confirm New Password</label>
+        <input type="password" className={inputClass} value={form.confirmPassword} onChange={update('confirmPassword')} required minLength={6} />
+      </div>
+      <div className="flex gap-3 pt-2">
+        <button type="button" onClick={onCancel} disabled={submitting} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+          Cancel
+        </button>
+        <button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Update Password
+        </button>
+      </div>
+    </form>
+  );
+};
+
 // Profile Modal Component
-const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVerification }) => {
+const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVerification, onProfileUpdated }) => {
+  const [mode, setMode] = useState('view'); // 'view' | 'edit' | 'password'
+  const [successMessage, setSuccessMessage] = useState(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setMode('view');
+      setSuccessMessage(null);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-   
   const DetailItem = ({ icon: Icon, label, value, isVerified, verificationType, contact }) => (
     <div className="flex items-start gap-3">
       <Icon className="w-4 h-4 text-gray-500 mt-1 flex-shrink-0" />
@@ -73,11 +233,13 @@ const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVer
     </div>
   );
 
+  const titles = { view: 'User Profile', edit: 'Edit Profile', password: 'Change Password' };
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
         <div className="p-4 sm:p-6 border-b flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">User Profile</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{titles[mode]}</h2>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
             <X className="w-5 h-5" />
           </button>
@@ -96,15 +258,60 @@ const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVer
               <p className="mt-3 text-sm text-red-600">{error}</p>
             </div>
           )}
-          {!loading && !error && profileData && (
+
+          {!loading && !error && profileData && mode === 'edit' && (
+            <EditProfileForm
+              profileData={profileData}
+              onCancel={() => setMode('view')}
+              onSaved={(updated) => {
+                onProfileUpdated(updated);
+                setSuccessMessage('Profile updated successfully.');
+                setMode('view');
+              }}
+            />
+          )}
+
+          {!loading && !error && mode === 'password' && (
+            <ChangePasswordForm
+              onCancel={() => setMode('view')}
+              onSaved={() => {
+                setSuccessMessage('Password changed successfully.');
+                setMode('view');
+              }}
+            />
+          )}
+
+          {!loading && !error && profileData && mode === 'view' && (
             <div className="space-y-6">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center font-bold text-white text-2xl shadow-lg">
-                  {getUserInitials(profileData)}
+              {successMessage && (
+                <div className="flex gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">
+                  <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  {successMessage}
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">{`${profileData.firstName || ''} ${profileData.lastName || ''}`}</h3>
-                  <p className="text-sm text-gray-600 capitalize">{profileData.role?.toLowerCase()}</p>
+              )}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center font-bold text-white text-2xl shadow-lg">
+                    {getUserInitials(profileData)}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">{`${profileData.firstName || ''} ${profileData.lastName || ''}`}</h3>
+                    <p className="text-sm text-gray-600 capitalize">{profileData.role?.toLowerCase()}</p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    onClick={() => setMode('edit')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Edit
+                  </button>
+                  <button
+                    onClick={() => setMode('password')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" /> Password
+                  </button>
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t pt-6">
@@ -125,6 +332,7 @@ const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVer
 };
 
 function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
+  const { updateUser } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileData, setProfileData] = useState(null);
@@ -352,13 +560,20 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
         </div>
       </div>
 
-      <ProfileModal 
+      <ProfileModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
         profileData={profileData}
         loading={profileLoading}
         error={profileError}
         onStartVerification={handleStartVerification}
+        onProfileUpdated={(updated) => {
+          setProfileData(updated);
+          // Keeps the header avatar/name (driven by AuthContext's user,
+          // not this modal's local profileData) in sync immediately
+          // instead of waiting for the next login.
+          updateUser(updated);
+        }}
       />
 
       <VerificationModal

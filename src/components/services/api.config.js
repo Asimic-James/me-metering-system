@@ -155,7 +155,13 @@ export const ENDPOINTS = {
 
   // ==================== WEBHOOKS ENDPOINTS (root-level, no auth) ====================
   WEBHOOKS: {
-    REMITA_PAYMENT: '/remita/payment', // server-to-server only, not called from FE
+    // Documented as "server-to-server only" (Remita calls this
+    // automatically per the merchant dashboard config), but the admin UI
+    // now also calls this directly as a manual replay/recovery tool —
+    // see JEDApiService.submitRemitaWebhook(). Accepts an array of
+    // payment notification objects; see ReplayWebhookTab.jsx for the
+    // full documented payload schema.
+    REMITA_PAYMENT: '/remita/payment',
     VERIFY_PAYMENT: (rrr) => `/verify-payment/${rrr}`, // FE-usable: check payment status by RRR
   },
 
