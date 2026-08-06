@@ -7,6 +7,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import JEDApiService from '../services/api';
 import RequestInfoPanel from './RequestInfoPanel';
+import PaymentTimeline from '../common/PaymentTimeline';
+import GenerateRRRModal from '../common/GenerateRRRModal';
+import { buildRrrPayload } from '../../utils/rrrPayload';
 import { getStatusBadgeClass, isCompletedStatus } from '../../utils/statusBadge';
 import {
   ArrowLeft,
@@ -34,9 +37,11 @@ function InstallationDetail() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitted, setSubmitted] = useState(false);
+  const [genModalOpen, setGenModalOpen] = useState(false);
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState(null);
   const [genResult, setGenResult] = useState(null);
+  const [genGeneratedAt, setGenGeneratedAt] = useState(null);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -62,29 +67,28 @@ function InstallationDetail() {
     fetchDetail();
   }, [fetchDetail]);
 
-  const handleGenerateReference = async () => {
-    if (!job || !job.accountNumber) return;
-    setGenLoading(true);
+  // Built from the already-loaded request — every field POST
+  // /external/jed/generate-ref needs is already on the record, so there's
+  // no separate "form" step; the modal's preview step reviews this same
+  // object before it's submitted.
+  const rrrPayload = buildRrrPayload(job);
+
+  const openGenerateModal = () => {
     setGenError(null);
     setGenResult(null);
+    setGenModalOpen(true);
+  };
 
-    // Build payload based on API example and defensive field names
-    const payload = {
-      accountNumber: job.accountNumber,
-      custNames: job.custNames || job.customerName || job.applicantName || '',
-      gsm: job.phone || job.phoneNumber || job.msisdn || '',
-      email: job.email || job.emailAddress || '',
-      address: job.address || job.customerAddress || '',
-      meterRecommended: job.meterRecommended || job.meterType || job.meterModel || '',
-      discoCode: job.discoCode || job.disco || '',
-      requestRef: job.requestRef || job.requestRefNo || job.requestId || job.id || '',
-      region: job.region || job.area || job.location || ''
-    };
+  const handleGenerateReference = async () => {
+    if (!rrrPayload) return;
+    setGenLoading(true);
+    setGenError(null);
 
     try {
-      const response = await JEDApiService.generatePaymentReference(payload);
+      const response = await JEDApiService.generatePaymentReference(rrrPayload);
       const data = response?.data || response;
       setGenResult(data);
+      setGenGeneratedAt(new Date());
 
       // Try to extract RRR/payment reference from common fields
       const rrr = data?.RRR || data?.rrr || data?.reference || data?.paymentReference || data?.payment_ref || null;
@@ -210,25 +214,31 @@ function InstallationDetail() {
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Reference</p>
                   <p className="font-mono text-sm text-gray-900 dark:text-white">{job.rrr || job.paymentReference || job.paymentRef || 'No reference generated'}</p>
-                  {genResult && (
-                    <pre className="mt-2 text-xs text-gray-700 dark:text-gray-300 overflow-auto max-h-40">{JSON.stringify(genResult, null, 2)}</pre>
-                  )}
-                  {genError && (
-                    <p className="mt-2 text-sm text-red-600">{genError}</p>
-                  )}
                 </div>
 
                 <div className="flex-shrink-0">
                   <button
                     type="button"
-                    onClick={handleGenerateReference}
-                    disabled={genLoading}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                    onClick={openGenerateModal}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                   >
-                    {genLoading ? 'Generating...' : (job.rrr || job.paymentReference ? 'Regenerate Reference' : 'Generate Reference')}
+                    {job.rrr || job.paymentReference ? 'Regenerate Reference' : 'Generate Reference'}
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Payment timeline — built only from real timestamps the API
+              returns on this request (dateRequested/datePaid/dateCompleted) */}
+          {(job.dateRequested || job.datePaid || job.dateCompleted) && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Payment Timeline</h3>
+              <PaymentTimeline
+                dateRequested={job.dateRequested}
+                datePaid={job.datePaid}
+                dateCompleted={job.dateCompleted}
+              />
             </div>
           )}
 
@@ -349,6 +359,17 @@ function InstallationDetail() {
           </div>
         </div>
       )}
+
+      <GenerateRRRModal
+        isOpen={genModalOpen}
+        onClose={() => setGenModalOpen(false)}
+        payload={rrrPayload}
+        loading={genLoading}
+        error={genError}
+        result={genResult}
+        generatedAt={genGeneratedAt}
+        onConfirm={handleGenerateReference}
+      />
     </div>
   );
 }

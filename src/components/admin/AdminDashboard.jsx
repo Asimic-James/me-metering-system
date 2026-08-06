@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import JEDApiService from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrencyNGN } from '../../utils/currency';
 import { formatDateTime } from '../../utils/date';
 import { getStatusBadgeClass } from '../../utils/statusBadge';
-import { 
+import { buildDailySeries } from '../../utils/trendAggregation';
+import TrendChart from './TrendChart';
+import {
   BarChart,
   Users,
   CheckCircle,
@@ -21,6 +23,22 @@ import {
   LayoutDashboard,
   Wrench
 } from 'lucide-react';
+
+// Reference dataviz palette slots (see the project's dataviz skill —
+// palette.md). Slot 1 (blue) is the default sequential hue, used here for
+// Revenue; slot 3 (aqua) is a second categorical slot, used for
+// Installations so the two single-series charts stay visually distinct
+// without needing cross-series CVD validation (each chart has only one
+// series, so the single-hue "sequential or 1 categorical" rule for
+// trend-over-time applies, not the multi-series categorical rules).
+const REVENUE_COLOR = { light: '#2a78d6', dark: '#3987e5' };
+const INSTALLATIONS_COLOR = { light: '#1baf7a', dark: '#199e70' };
+
+const TREND_RANGE_PRESETS = [
+  { id: 7, label: '7 days' },
+  { id: 30, label: '30 days' },
+  { id: 90, label: '90 days' },
+];
 
 // Stat Card Component - Mobile First
  
@@ -367,6 +385,15 @@ function AdminDashboard({ isInstallerView = false }) {
   const [error, setError] = useState(null);
   const [showExportModal, setShowExportModal] = useState(false);
 
+  // Revenue / Installations trend — built entirely from real payment
+  // records (GET /external/jed/payments), aggregated client-side per day.
+  const [trendDays, setTrendDays] = useState(30);
+  const [revenueSeries, setRevenueSeries] = useState([]);
+  const [installationsSeries, setInstallationsSeries] = useState([]);
+  const [trendLoading, setTrendLoading] = useState(true);
+  const [trendError, setTrendError] = useState(null);
+  const [trendTruncated, setTrendTruncated] = useState(null);
+
   const isAdmin = user?.role === 'admin';
   const showInstallerData = isInstallerView || !isAdmin;
 
@@ -497,6 +524,53 @@ function AdminDashboard({ isInstallerView = false }) {
     // NOTE: `recentInstallations` intentionally excluded — it's set inside
     // this effect, so including it as a dependency caused a refetch loop.
   }, [user, showInstallerData, isAdmin]);
+
+  // Revenue / Installations trend — admin-only, mirrors the KPI section's
+  // admin-vs-installer scoping above. Fetches real payment records for the
+  // selected window (GET /external/jed/payments) and buckets them
+  // client-side; nothing here is invented. `revenueSeries`/`installationsSeries`
+  // are kept in state across refetches (not cleared to []) so the chart can
+  // hold its previous render at reduced opacity while a new range loads,
+  // instead of flashing to a skeleton or empty state.
+  const fetchTrendData = useCallback(async (days) => {
+    setTrendLoading(true);
+    setTrendError(null);
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - (days - 1));
+      startDate.setHours(0, 0, 0, 0);
+
+      const response = await JEDApiService.getPayments({
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        limit: 100,
+      });
+
+      const records = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+          ? response.data
+          : [];
+      const pagination = response?.pagination || {};
+      const totalCount = pagination.totalCount ?? records.length;
+
+      setTrendTruncated(totalCount > records.length ? { shown: records.length, total: totalCount } : null);
+      setRevenueSeries(buildDailySeries(records, { dateField: 'datePaid', valueField: 'amount', aggregate: 'sum', days }));
+      setInstallationsSeries(buildDailySeries(records, { dateField: 'dateCompleted', aggregate: 'count', days }));
+    } catch (err) {
+      console.error('[Dashboard] Failed to load revenue/installations trend:', err);
+      setTrendError(err.message || 'Failed to load trend data');
+    } finally {
+      setTrendLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user && isAdmin && !showInstallerData) {
+      fetchTrendData(trendDays);
+    }
+  }, [user, isAdmin, showInstallerData, trendDays, fetchTrendData]);
 
   const handleExportData = async (exportType, format) => {
     try {
@@ -661,6 +735,67 @@ function AdminDashboard({ isInstallerView = false }) {
             changeType={stats.revenueChange > 0 ? 'positive' : stats.revenueChange < 0 ? 'negative' : 'neutral'}
           />
         </div>
+
+        {/* Revenue / Installations Trend — admin only, built from real
+            GET /external/jed/payments records for the selected window */}
+        {isAdmin && !showInstallerData && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Trend</h2>
+              <div className="flex items-center gap-1.5">
+                {TREND_RANGE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => setTrendDays(preset.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      trendDays === preset.id
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {trendError && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-800 dark:text-red-300 flex gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                {trendError}
+              </div>
+            )}
+
+            {trendTruncated && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-800 dark:text-amber-300">
+                Showing {trendTruncated.shown} of {trendTruncated.total} matching transactions in this range (API page limit is 100) — the trend below may be incomplete. Narrow the date range for full accuracy.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              <TrendChart
+                title="Revenue"
+                data={revenueSeries}
+                type="area"
+                colorLight={REVENUE_COLOR.light}
+                colorDark={REVENUE_COLOR.dark}
+                formatValue={formatCurrencyNGN}
+                loading={trendLoading}
+                emptyMessage="No payments recorded in this range."
+              />
+              <TrendChart
+                title="Installations Completed"
+                data={installationsSeries}
+                type="bar"
+                colorLight={INSTALLATIONS_COLOR.light}
+                colorDark={INSTALLATIONS_COLOR.dark}
+                formatValue={(n) => String(Math.round(n))}
+                loading={trendLoading}
+                emptyMessage="No installations completed in this range."
+              />
+            </div>
+          </div>
+        )}
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">

@@ -12,21 +12,30 @@ import { getStatusBadgeClass } from '../../utils/statusBadge';
 import { formatCurrencyNGN } from '../../utils/currency';
 import ConfirmationModal from '../common/ConfirmationModal';
 import ConfirmPaymentTab from './ConfirmPaymentTab';
+import ReplayWebhookTab from './ReplayWebhookTab';
+import PaymentTimeline from '../common/PaymentTimeline';
+import GenerateRRRModal from '../common/GenerateRRRModal';
+import RequestInfoPanel from '../installation/RequestInfoPanel';
+import { buildRrrPayload } from '../../utils/rrrPayload';
 import {
   CreditCard, Search, RefreshCw, CheckCircle, AlertCircle, ShieldCheck,
-  Loader2, Calendar, Filter, ArrowRight, ExternalLink, Info
+  Loader2, Calendar, Filter, ArrowRight, ExternalLink, Info, Receipt
 } from 'lucide-react';
 import { formatDateTime, parseTimestamp } from '../../utils/date';
 
-// Order matters here: "Confirm Payment" is the routine, everyday action
-// (an admin confirming a customer's payment), placed ahead of "RRR / Order
-// Lookup" which is more of a diagnostic/fallback tool (checking Remita
-// directly, or manually confirming a payment whose webhook was missed).
+// Order matters here: "Generate RRR" is the first step in the payment
+// lifecycle (before a customer can pay at all), so it leads. "Confirm
+// Payment" is the routine, everyday action after that (an admin
+// confirming a customer's payment), placed ahead of "RRR / Order Lookup"
+// which is more of a diagnostic/fallback tool (checking Remita directly,
+// or manually confirming a payment whose webhook was missed).
 const TABS = [
   { id: 'payments', label: 'Payments' },
+  { id: 'generateRRR', label: 'Generate RRR' },
   { id: 'confirm', label: 'Confirm Payment' },
   { id: 'lookup', label: 'RRR / Order Lookup' },
   { id: 'byStatus', label: 'Requests by Status' },
+  { id: 'webhook', label: 'Webhook Replay' },
 ];
 
 const DATE_PRESETS = [
@@ -99,6 +108,34 @@ function StatusBadge({ status }) {
     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(status)}`}>
       {status}
     </span>
+  );
+}
+
+// The real backend only ever returns INITIATED/PAID/COMPLETED for a
+// request's status (confirmed against the JedCustomerRequest schema) —
+// there is no FAILED/EXPIRED/CANCELLED state today. This maps those
+// three real values to the friendlier verification language, and falls
+// back to "Unknown" for anything else rather than guessing a bucket for
+// a status the backend doesn't currently emit.
+const VERIFY_STATUS_LABELS = { INITIATED: 'Pending', PAID: 'Successful', COMPLETED: 'Successful' };
+const verifyStatusLabel = (status) => VERIFY_STATUS_LABELS[String(status || '').toUpperCase()] || 'Unknown';
+
+function VerificationStatusBadge({ status }) {
+  return (
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClass(status)}`}>
+      {verifyStatusLabel(status)}
+    </span>
+  );
+}
+
+function VerifyField({ label, value, mono = false }) {
+  return (
+    <div>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+      <p className={`text-sm font-medium text-gray-900 dark:text-white truncate ${mono ? 'font-mono' : ''}`}>
+        {value || value === 0 ? value : '-'}
+      </p>
+    </div>
   );
 }
 
@@ -246,6 +283,149 @@ function PaymentsTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---- Tab: Generate RRR ----
+// Looks a request up by account number (GET /external/jed/requests/{accountNumber},
+// the same endpoint InstallationDetail.jsx uses), then reuses the shared
+// GenerateRRRModal/buildRrrPayload — the identical Preview -> Confirm ->
+// Success flow available from an installation's detail page, just
+// reachable directly from the Payments hub without navigating to a
+// specific job first.
+function GenerateRRRTab() {
+  const [accountNumber, setAccountNumber] = useState('');
+  const [job, setJob] = useState(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState(null);
+
+  const [genModalOpen, setGenModalOpen] = useState(false);
+  const [genLoading, setGenLoading] = useState(false);
+  const [genError, setGenError] = useState(null);
+  const [genResult, setGenResult] = useState(null);
+  const [genGeneratedAt, setGenGeneratedAt] = useState(null);
+
+  const rrrPayload = buildRrrPayload(job);
+
+  const handleLookup = async () => {
+    if (!accountNumber.trim()) return;
+    setLookupLoading(true);
+    setLookupError(null);
+    setJob(null);
+    try {
+      const response = await jedApi.getCustomerRequest(accountNumber.trim());
+      setJob(response?.data || response);
+    } catch (err) {
+      console.error('[GenerateRRR] Lookup failed:', err);
+      setLookupError(String(err?.message || 'No request found for this account number'));
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  const openGenerateModal = () => {
+    setGenError(null);
+    setGenResult(null);
+    setGenModalOpen(true);
+  };
+
+  const handleGenerateReference = async () => {
+    if (!rrrPayload) return;
+    setGenLoading(true);
+    setGenError(null);
+
+    try {
+      const response = await jedApi.generatePaymentReference(rrrPayload);
+      const data = response?.data || response;
+      setGenResult(data);
+      setGenGeneratedAt(new Date());
+
+      const rrr = data?.RRR || data?.rrr || data?.reference || data?.paymentReference || null;
+      if (rrr) {
+        setJob((prev) => (prev ? { ...prev, rrr, paymentReference: rrr } : prev));
+      }
+    } catch (err) {
+      console.error('[GenerateRRR] generate payment reference failed:', err);
+      setGenError(err.message || 'Failed to generate payment reference');
+    } finally {
+      setGenLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Generate RRR</h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Look up a customer request by account number, then generate a Remita payment reference (RRR) for it.
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={accountNumber}
+              onChange={(e) => { setAccountNumber(e.target.value); setLookupError(null); }}
+              onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
+              placeholder="e.g., 477014"
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+            />
+          </div>
+          <button
+            onClick={handleLookup}
+            disabled={lookupLoading || !accountNumber.trim()}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-sm font-medium shrink-0"
+          >
+            {lookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            <span className="hidden sm:inline">Look Up</span>
+          </button>
+        </div>
+
+        {lookupError && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-800 dark:text-red-300 flex gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            {lookupError}
+          </div>
+        )}
+      </div>
+
+      {job && (
+        <>
+          <RequestInfoPanel data={job} title="Request Found" compact />
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Reference</p>
+              <p className="font-mono text-sm text-gray-900 dark:text-white">
+                {job.rrr || job.paymentReference || job.paymentRef || 'No reference generated'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openGenerateModal}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
+            >
+              <Receipt className="w-4 h-4" />
+              {job.rrr || job.paymentReference ? 'Regenerate Reference' : 'Generate Reference'}
+            </button>
+          </div>
+        </>
+      )}
+
+      <GenerateRRRModal
+        isOpen={genModalOpen}
+        onClose={() => setGenModalOpen(false)}
+        payload={rrrPayload}
+        loading={genLoading}
+        error={genError}
+        result={genResult}
+        generatedAt={genGeneratedAt}
+        onConfirm={handleGenerateReference}
+      />
     </div>
   );
 }
@@ -403,8 +583,28 @@ function LookupTab() {
 
             {verifyError && <p className="text-sm text-red-600 dark:text-red-400">{verifyError}</p>}
             {verifyResult && (
-              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-xs text-green-800 dark:text-green-300">
-                <pre className="overflow-auto max-h-32">{JSON.stringify(verifyResult, null, 2)}</pre>
+              <div className="bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">Payment Verification</p>
+                  <div className="flex items-center gap-2">
+                    <VerificationStatusBadge status={verifyResult.status} />
+                    <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500">({verifyResult.status || 'no status returned'})</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <VerifyField label="RRR" value={verifyResult.rrr} mono />
+                  <VerifyField label="Account Number" value={verifyResult.accountNumber} mono />
+                  <VerifyField label="Customer" value={verifyResult.custNames} />
+                  <VerifyField label="Amount" value={formatCurrencyNGN(verifyResult.amount)} />
+                  <VerifyField label="Order Ref" value={verifyResult.orderRef} mono />
+                </div>
+
+                {(verifyResult.dateRequested || verifyResult.datePaid) && (
+                  <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <PaymentTimeline dateRequested={verifyResult.dateRequested} datePaid={verifyResult.datePaid} />
+                  </div>
+                )}
               </div>
             )}
 
@@ -583,9 +783,11 @@ function PaymentsPage() {
       </div>
 
       {activeTab === 'payments' && <PaymentsTab />}
+      {activeTab === 'generateRRR' && <GenerateRRRTab />}
       {activeTab === 'confirm' && <ConfirmPaymentTab />}
       {activeTab === 'lookup' && <LookupTab />}
       {activeTab === 'byStatus' && <ByStatusTab />}
+      {activeTab === 'webhook' && <ReplayWebhookTab />}
     </div>
   );
 }
