@@ -5,9 +5,9 @@
 // needs is already on the loaded request — the preview step doubles as
 // both review and confirmation of what will be sent.
 //
-// Shared between InstallationDetail.jsx (generating from a known job) and
-// PaymentsPage's Generate RRR tab (looking a request up by account number
-// first) so both call sites stay in sync with a single implementation.
+// Used by InstallationDetail.jsx to generate an RRR for the installation
+// currently being viewed (a standalone duplicate in PaymentsPage was
+// removed — RRR generation is always in the context of a specific job).
 import { CheckCircle, AlertCircle, Loader2, X, Receipt, Info } from 'lucide-react';
 import { formatCurrencyNGN } from '../../utils/currency';
 import { formatDateTime } from '../../utils/date';

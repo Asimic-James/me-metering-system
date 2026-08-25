@@ -22,7 +22,10 @@ export const AuthProvider = ({ children }) => {
 
     return {
       ...userData,
-      role: userData.role?.toLowerCase()?.trim() || 'installer',
+      // Real API's User.role enum is uppercase (SUPERADMIN/ADMIN/INSTALLER)
+      // and is used as-is throughout the app now — uppercase here only to
+      // tolerate incidental casing/whitespace, not to translate a scheme.
+      role: userData.role?.toUpperCase()?.trim() || 'INSTALLER',
       // Ensure all required fields are present
       id: userData.id,
       phone: userData.phone,
@@ -172,8 +175,8 @@ export const AuthProvider = ({ children }) => {
         const updated = {
           ...prev,
           ...updates,
-          // Ensure role remains normalized
-          role: (updates.role || prev.role)?.toLowerCase()?.trim() || 'installer'
+          // Ensure role remains normalized (uppercase, matching the API enum)
+          role: (updates.role || prev.role)?.toUpperCase()?.trim() || 'INSTALLER'
         };
         
         // Update localStorage

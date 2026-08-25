@@ -2,8 +2,8 @@
 // Refactored and optimized to align with latest app updates
 import { useState, useEffect, useCallback } from 'react';
 import ConfirmationModal from '../common/ConfirmationModal';
-import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../auth/usePermissions';
+import { ROLES, getRoleMetadata } from '../auth/permissions';
 import jedApi from '../services/api';
 import {
   Users,
@@ -16,17 +16,26 @@ import {
   X,
   Shield,
   Loader2,
-  Lock
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
-// Constants
-const ROLES = {
-  ADMIN: 'admin',
-  INSTALLER: 'installer'
+const roleBadgeClass = (role) => {
+  if (role === ROLES.SUPERADMIN) return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
+  if (role === ROLES.ADMIN) return 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300';
+  return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
 };
 
 // User Form Component
-const UserForm = ({ user, onSubmit, onCancel, loading }) => {
+// `canAssignPrivilegedRoles` gates whether ADMIN/SUPERADMIN are even
+// selectable — per the real API's documented rule that only a SUPERADMIN
+// may create/edit an Admin (or Super Admin) account. An ADMIN using this
+// form can still manage INSTALLER accounts freely.
+const UserForm = ({ user, onSubmit, onCancel, loading, canAssignPrivilegedRoles }) => {
+  const isEditingPrivilegedUser = !!user && (user.role === ROLES.ADMIN || user.role === ROLES.SUPERADMIN);
+  const formLocked = isEditingPrivilegedUser && !canAssignPrivilegedRoles;
+
   const [formData, setFormData] = useState({
     firstName: user?.firstName || (user?.name ? user.name.split(' ')[0] : ''),
     lastName: user?.lastName || (user?.name ? user.name.split(' ').slice(1).join(' ') : ''),
@@ -39,33 +48,49 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
   });
 
   const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.firstName.trim()) {
       newErrors.firstName = 'First Name is required';
     }
     if (!formData.lastName.trim()) {
       newErrors.lastName = 'Last Name is required';
     }
-    
+
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone is required';
     } else if (!/^\d{11}$/.test(formData.phone)) {
       newErrors.phone = 'Phone must be 11 digits';
     }
-    
+
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Invalid email format';
     }
-    
+
     if (!formData.nin.trim()) {
       newErrors.nin = 'NIN is required';
     } else if (!/^\d{11}$/.test(formData.nin)) {
       newErrors.nin = 'NIN must be 11 digits';
+    }
+
+    // Password is required by the real UserCreate schema (minLength 6) —
+    // only collected/validated when creating, since UserUpdate has no
+    // password field at all (password changes go through a separate flow).
+    if (!user) {
+      if (!formData.password) {
+        newErrors.password = 'Password is required';
+      } else if (formData.password.length < 6) {
+        newErrors.password = 'Password must be at least 6 characters';
+      }
+      if (formData.confirmPassword !== formData.password) {
+        newErrors.confirmPassword = 'Passwords do not match';
+      }
     }
 
     setErrors(newErrors);
@@ -81,6 +106,15 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {formLocked && (
+        <div className="flex gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+          <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            Access Restricted: only a Super Administrator can modify an Admin or Super Admin account.
+          </p>
+        </div>
+      )}
+      <fieldset disabled={formLocked} className="contents">
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         {/* First Name Field */}
         <div>
@@ -175,11 +209,18 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
           <select
             value={formData.role}
             onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            disabled={!canAssignPrivilegedRoles && formData.role !== ROLES.INSTALLER && !user}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           >
             <option value={ROLES.INSTALLER}>Installer</option>
-            <option value={ROLES.ADMIN}>Admin</option>
+            {canAssignPrivilegedRoles && <option value={ROLES.ADMIN}>Admin</option>}
+            {canAssignPrivilegedRoles && <option value={ROLES.SUPERADMIN}>Super Admin</option>}
           </select>
+          {!canAssignPrivilegedRoles && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Only a Super Administrator can assign Admin or Super Admin roles.
+            </p>
+          )}
         </div>
 
         {/* NIN Field */}
@@ -192,8 +233,8 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
             value={formData.nin}
             onChange={(e) => setFormData({ ...formData, nin: e.target.value })}
             className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-              errors.nin 
-                ? 'border-red-300 dark:border-red-600' 
+              errors.nin
+                ? 'border-red-300 dark:border-red-600'
                 : 'border-gray-300 dark:border-gray-600'
             }`}
             placeholder="11-digit NIN"
@@ -203,7 +244,79 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.nin}</p>
           )}
         </div>
+
+        {/* Password fields — required by the real UserCreate schema
+            (minLength 6), only collected when creating a new user. There
+            is no password field on UserUpdate, so editing never touches it. */}
+        {!user && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Password *
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className={`w-full px-3 py-2 pr-10 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
+                    errors.password
+                      ? 'border-red-300 dark:border-red-600'
+                      : 'border-gray-300 dark:border-gray-600'
+                  }`}
+                  placeholder="At least 6 characters"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {errors.password && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Confirm Password *
+              </label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={formData.confirmPassword}
+                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  className={`w-full px-3 py-2 pr-10 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
+                    errors.confirmPassword
+                      ? 'border-red-300 dark:border-red-600'
+                      : 'border-gray-300 dark:border-gray-600'
+                  }`}
+                  placeholder="Re-enter password"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  tabIndex={-1}
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {errors.confirmPassword && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.confirmPassword}</p>
+              )}
+            </div>
+          </>
+        )}
       </div>
+      </fieldset>
 
       {/* Form Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -217,7 +330,7 @@ const UserForm = ({ user, onSubmit, onCancel, loading }) => {
         </button>
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || formLocked}
           className="flex items-center gap-2 px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
           {loading ? (
@@ -254,24 +367,32 @@ function UserManagement() {
   const [filterRole, setFilterRole] = useState('all');
 
 
+  // Admin's user-management scope is Installers only (per the real API's
+  // documented "Create an Admin user (SUPERADMIN only)" rule, extended
+  // consistently here to viewing too — an Admin has no business reason to
+  // see other Admin/SuperAdmin accounts). Requesting `role: INSTALLER`
+  // server-side means an Admin's browser never even receives the other
+  // records, not just that the UI hides them.
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       console.log('[UserManagement] Fetching users...');
-      const response = await jedApi.getUsers();
-      
+      const response = await jedApi.getUsers(
+        permissions.isSuperAdmin ? {} : { role: ROLES.INSTALLER }
+      );
+
       // Handle different response formats
-      const usersData = 
-        response?.data?.users || 
-        response?.data || 
-        response?.users || 
+      const usersData =
+        response?.data?.users ||
+        response?.data ||
+        response?.users ||
         (Array.isArray(response) ? response : []);
-      
+
       console.log('[UserManagement] Users loaded:', usersData.length);
       setUsers(usersData);
-      
+
     } catch (err) {
       console.error('[UserManagement] Error fetching users:', err);
       
@@ -291,20 +412,37 @@ function UserManagement() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [permissions.isSuperAdmin]);
 
   const handleCreateUser = useCallback(async (userData) => {
+    const role = userData.role.toUpperCase();
+    // Client-side guard as a UX nicety (clear message instead of a raw
+    // 403) — the backend remains the real authorization boundary here.
+    if ((role === ROLES.ADMIN || role === ROLES.SUPERADMIN) && !permissions.isSuperAdmin) {
+      setError('Access Restricted: only a Super Administrator can create an Admin or Super Admin account.');
+      return;
+    }
+
     try {
       setActionLoading('create');
       setError(null);
-      
+
+      // Real UserCreate schema: firstName, lastName, phone, email,
+      // password, nin, role (optional homeAddress/officeAddress omitted —
+      // not collected by this form). confirmPassword is a client-only
+      // field and is deliberately not sent.
       const payload = {
-        ...userData,
-        role: userData.role.toUpperCase(),
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        phone: userData.phone,
+        email: userData.email,
+        password: userData.password,
+        nin: userData.nin,
+        role,
       };
       console.log('[UserManagement] Creating user:', payload.email);
       await jedApi.createUser(payload);
-      
+
       setShowForm(false);
       await fetchUsers();
     } catch (err) {
@@ -313,13 +451,19 @@ function UserManagement() {
     } finally {
       setActionLoading(null);
     }
-  }, [fetchUsers]);
+  }, [fetchUsers, permissions.isSuperAdmin]);
 
   const handleUpdateUser = useCallback(async (userData) => {
+    const role = userData.role.toUpperCase();
+    if ((role === ROLES.ADMIN || role === ROLES.SUPERADMIN) && !permissions.isSuperAdmin) {
+      setError('Access Restricted: only a Super Administrator can assign an Admin or Super Admin role.');
+      return;
+    }
+
     try {
       setActionLoading(`update-${editingUser.id}`);
       setError(null);
-      
+
       // Construct the payload to match the API's expected format
       const payload = {
         firstName: userData.firstName,
@@ -327,13 +471,13 @@ function UserManagement() {
         name: `${userData.firstName} ${userData.lastName}`.trim(),
         email: userData.email,
         phone: userData.phone,
-        role: userData.role,
+        role,
         nin: userData.nin,
       };
 
       console.log('[UserManagement] Updating user:', editingUser.id, 'with payload:', payload);
       await jedApi.updateUser(editingUser.id, payload);
-      
+
       setShowForm(false);
       setEditingUser(null);
       await fetchUsers();
@@ -343,10 +487,15 @@ function UserManagement() {
     } finally {
       setActionLoading(null);
     }
-  }, [editingUser, fetchUsers]);
+  }, [editingUser, fetchUsers, permissions.isSuperAdmin]);
 
   const handleDeleteUser = useCallback(async () => {
     if (!userToDelete) return;
+    if (!permissions.isSuperAdmin) {
+      setError('Access Restricted: only a Super Administrator can delete user accounts.');
+      setUserToDelete(null);
+      return;
+    }
 
     try {
       setActionLoading(`delete-${userToDelete.id}`);
@@ -364,10 +513,15 @@ function UserManagement() {
     } finally {
       setActionLoading(null);
     }
-  }, [userToDelete, fetchUsers]);
+  }, [userToDelete, fetchUsers, permissions.isSuperAdmin]);
 
   const handleResetPassword = useCallback(async () => {
     if (!userToResetPassword) return;
+    if (!permissions.isSuperAdmin) {
+      setError('Access Restricted: only a Super Administrator can reset a user\'s password.');
+      setUserToResetPassword(null);
+      return;
+    }
 
     try {
       setActionLoading(`reset-${userToResetPassword.id}`);
@@ -389,7 +543,7 @@ function UserManagement() {
     } finally {
       setActionLoading(null);
     }
-  }, [userToResetPassword]);
+  }, [userToResetPassword, permissions.isSuperAdmin]);
 
   // Fetch users on mount
   useEffect(() => {
@@ -398,20 +552,25 @@ function UserManagement() {
     }
   }, [permissions.isAdmin, fetchUsers]);
 
-  // Filter users based on search and role
+  // Filter users based on search and role. The `role: INSTALLER` request
+  // param already keeps non-SuperAdmins from receiving other accounts, but
+  // this client-side filter is defense-in-depth in case that param is ever
+  // dropped or the backend response includes more than requested.
   const filteredUsers = users.filter(user => {
+    if (!permissions.isSuperAdmin && user?.role !== ROLES.INSTALLER) return false;
+
     const searchLower = searchQuery.toLowerCase();
     const userName = `${user?.firstName || ''} ${user?.lastName || ''}`;
     const userEmail = user?.email || '';
     const userPhone = user?.phone || '';
-    
-    const matchesSearch = 
+
+    const matchesSearch =
       userName.toLowerCase().includes(searchLower) ||
       userEmail.toLowerCase().includes(searchLower) ||
       userPhone.includes(searchQuery);
-    
+
     const matchesRole = filterRole === 'all' || user?.role === filterRole;
-    
+
     return matchesSearch && matchesRole;
   });
 
@@ -426,7 +585,9 @@ function UserManagement() {
               User Management
             </h1>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Manage system users and their roles
+              {permissions.isSuperAdmin
+                ? 'Manage Admin and Installer accounts'
+                : 'Add and manage Installer accounts'}
             </p>
           </div>
         </div>
@@ -512,6 +673,7 @@ function UserManagement() {
                   setEditingUser(null);
                 }}
                 loading={!!actionLoading}
+                canAssignPrivilegedRoles={permissions.isSuperAdmin}
               />
             </div>
           </div>
@@ -558,7 +720,8 @@ function UserManagement() {
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Roles</option>
-            <option value={ROLES.ADMIN}>Admin</option>
+            {permissions.isSuperAdmin && <option value={ROLES.SUPERADMIN}>Super Admin</option>}
+            {permissions.isSuperAdmin && <option value={ROLES.ADMIN}>Admin</option>}
             <option value={ROLES.INSTALLER}>Installer</option>
           </select>
         </div>
@@ -628,13 +791,9 @@ function UserManagement() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                        user?.role === ROLES.ADMIN
-                          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300'
-                          : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
-                      }`}>
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${roleBadgeClass(user?.role)}`}>
                         <Shield className="w-3 h-3" />
-                        {user?.role || 'Unknown'}
+                        {getRoleMetadata(user?.role).displayName || user?.role || 'Unknown'}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -652,43 +811,56 @@ function UserManagement() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => {
-                            setEditingUser(user);
-                            setShowForm(true);
-                          }}
-                          disabled={actionLoading === `delete-${user.id}`}
-                          className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors disabled:opacity-50"
-                          title="Edit user"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setUserToResetPassword(user)}
-                          disabled={actionLoading === `delete-${user.id}` || actionLoading === `reset-${user.id}`}
-                          className="p-2 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors disabled:opacity-50"
-                          title="Reset password to default"
-                        >
-                          {actionLoading === `reset-${user.id}` ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Lock className="w-4 h-4" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => setUserToDelete(user)}
-                          disabled={actionLoading === `delete-${user.id}`}
-                          className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
-                          title="Delete user"
-                        >
-                          {actionLoading === `delete-${user.id}` ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
+                      {(() => {
+                        const isPrivilegedTarget = user?.role === ROLES.ADMIN || user?.role === ROLES.SUPERADMIN;
+                        const canEditThisUser = permissions.isSuperAdmin || !isPrivilegedTarget;
+                        // Delete and password-reset are Super Admin-only,
+                        // for every account including Installers — Admin's
+                        // scope is add/view/edit Installers, not destructive
+                        // or security-sensitive actions.
+                        const canDestructivelyManage = permissions.isSuperAdmin;
+                        const editRestrictedTitle = 'Access Restricted: only a Super Administrator can manage Admin/Super Admin accounts';
+                        const superAdminOnlyTitle = 'Access Restricted: only a Super Administrator can do this';
+                        return (
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingUser(user);
+                                setShowForm(true);
+                              }}
+                              disabled={!canEditThisUser || actionLoading === `delete-${user.id}`}
+                              className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors disabled:opacity-50"
+                              title={canEditThisUser ? 'Edit user' : editRestrictedTitle}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setUserToResetPassword(user)}
+                              disabled={!canDestructivelyManage || actionLoading === `delete-${user.id}` || actionLoading === `reset-${user.id}`}
+                              className="p-2 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors disabled:opacity-50"
+                              title={canDestructivelyManage ? 'Reset password to default' : superAdminOnlyTitle}
+                            >
+                              {actionLoading === `reset-${user.id}` ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Lock className="w-4 h-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => setUserToDelete(user)}
+                              disabled={!canDestructivelyManage || actionLoading === `delete-${user.id}`}
+                              className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+                              title={canDestructivelyManage ? 'Delete user' : superAdminOnlyTitle}
+                            >
+                              {actionLoading === `delete-${user.id}` ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}
@@ -698,19 +870,23 @@ function UserManagement() {
         </div>
       )}
 
-      {/* Stats Footer */}
+      {/* Stats Footer — "Admins" count only shown to Super Admin, since an
+          Admin's view is scoped to Installer accounts only and doesn't
+          have the full picture to make that count meaningful. */}
       {!loading && users.length > 0 && (
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
           <div className="flex items-center justify-between text-sm">
             <span className="text-blue-800 dark:text-blue-200">
-              Total Users: <strong>{users.length}</strong>
+              Total {permissions.isSuperAdmin ? 'Users' : 'Installers'}: <strong>{users.length}</strong>
             </span>
             <span className="text-blue-800 dark:text-blue-200">
               Showing: <strong>{filteredUsers.length}</strong>
             </span>
-            <span className="text-blue-800 dark:text-blue-200">
-              Admins: <strong>{users.filter(u => u.role === ROLES.ADMIN).length}</strong>
-            </span>
+            {permissions.isSuperAdmin && (
+              <span className="text-blue-800 dark:text-blue-200">
+                Admins: <strong>{users.filter(u => u.role === ROLES.ADMIN || u.role === ROLES.SUPERADMIN).length}</strong>
+              </span>
+            )}
           </div>
         </div>
       )}

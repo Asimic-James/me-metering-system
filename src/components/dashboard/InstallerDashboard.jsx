@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import JEDApiService from '../services/api';
-import { getStatusBadgeClass, isCompletedStatus } from '../../utils/statusBadge';
+import { getStatusBadgeClass, isCompletedStatus, isAwaitingInstallationStatus } from '../../utils/statusBadge';
 import {
   Wrench,
   Clock,
@@ -48,7 +48,7 @@ function JobRow({ job, onClick }) {
           Acct: {job.accountNumber} &middot; Meter: {job.meterNo || job.meterNumber || 'N/A'}
         </p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-          {formatDateOnly(job.submittedAt)}
+          {formatDateOnly(job.dateRequested)}
         </p>
       </div>
       <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
@@ -78,7 +78,7 @@ function JobTableRow({ job, onClick }) {
         </span>
       </td>
       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-        {formatDateOnly(job.submittedAt)}
+        {formatDateOnly(job.dateRequested)}
       </td>
       <td className="px-4 py-3 text-right">
         <ChevronRight className="w-4 h-4 text-gray-400 inline-block" />
@@ -137,42 +137,41 @@ function InstallerDashboard() {
   const [allJobs, setAllJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState('awaiting');
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchJobs = useCallback(async (forceRefresh = false) => {
+  const fetchJobs = useCallback(async () => {
     if (!user) return;
 
     try {
       setLoading(true);
       setError(null);
 
-      // CORRECTED: getMyInstallations() no longer requires employeeId in
-      // order to query /requests/installer. The auth token already scopes
-      // the request to the logged-in installer. employeeId is only used for
-      // the fallback client-side filter when the endpoint is unavailable.
-      const response = await JEDApiService.getMyInstallations({
-        limit: 100,
-        useCache: !forceRefresh,
-        ...(user.employeeId ? { employeeId: user.employeeId } : {})
-      });
+      // GET /external/jed/requests/installer, scoped only by role (auth
+      // token) and status — this is the shared queue every installer sees,
+      // not a personally-assigned list (the real API has no per-installer
+      // assignment field or endpoint; see API_GAP_REPORT.md).
+      const response = await JEDApiService.getMyInstallations({ limit: 100 });
       const list = Array.isArray(response) ? response : (response?.data || []);
       setAllJobs(list);
     } catch (err) {
       console.error('[InstallerDashboard] Failed to load jobs:', err);
-      setError('Unable to load your installations. Pull down or tap refresh to try again.');
+      setError('Unable to load installations. Pull down or tap refresh to try again.');
     } finally {
       setLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
-    fetchJobs(refreshKey !== 0);
+    fetchJobs();
   }, [fetchJobs, refreshKey]);
 
-  const pendingJobs = useMemo(
-    () => allJobs.filter((j) => !isCompletedStatus(j.status)),
+  // Awaiting Installation = PAID only (INITIATED requests haven't been
+  // paid yet, so there's nothing for an installer to act on there — they
+  // don't appear in either tab). Completed = COMPLETED only.
+  const awaitingJobs = useMemo(
+    () => allJobs.filter((j) => isAwaitingInstallationStatus(j.status)),
     [allJobs]
   );
   const completedJobs = useMemo(
@@ -181,7 +180,7 @@ function InstallerDashboard() {
   );
 
   const visibleJobs = useMemo(() => {
-    const source = activeTab === 'pending' ? pendingJobs : completedJobs;
+    const source = activeTab === 'awaiting' ? awaitingJobs : completedJobs;
     if (!searchTerm.trim()) return source;
     const term = searchTerm.toLowerCase();
     return source.filter(
@@ -191,7 +190,7 @@ function InstallerDashboard() {
         j.applicantName?.toLowerCase().includes(term) ||
         j.meterNo?.toString().toLowerCase().includes(term)
     );
-  }, [activeTab, pendingJobs, completedJobs, searchTerm]);
+  }, [activeTab, awaitingJobs, completedJobs, searchTerm]);
 
   const handleRowClick = (job) => {
     navigate(`/installations/${job.accountNumber}`);
@@ -202,7 +201,7 @@ function InstallerDashboard() {
       <div className="min-h-[60vh] flex items-center justify-center p-4">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400 text-sm">Loading your installations...</p>
+          <p className="mt-4 text-gray-600 dark:text-gray-400 text-sm">Loading installation queue...</p>
         </div>
       </div>
     );
@@ -218,10 +217,10 @@ function InstallerDashboard() {
           </div>
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
-              My Installations
+              Installation Queue
             </h1>
             <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm truncate">
-              {user?.name ? `Welcome, ${user.name}` : 'Jobs assigned to you'}
+              {user?.name ? `Welcome, ${user.name} — paid requests awaiting installation` : 'Paid requests awaiting installation'}
             </p>
           </div>
         </div>
@@ -249,17 +248,17 @@ function InstallerDashboard() {
         <div className="flex border-b border-gray-200 dark:border-gray-700">
           <button
             type="button"
-            onClick={() => setActiveTab('pending')}
+            onClick={() => setActiveTab('awaiting')}
             className={`flex-1 flex items-center justify-center gap-2 py-3 sm:py-4 text-sm font-medium border-b-2 transition-all duration-150 ${
-              activeTab === 'pending'
+              activeTab === 'awaiting'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 active:scale-[0.98]'
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>Pending</span>
+            <span>Awaiting Installation</span>
             <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded-full">
-              {pendingJobs.length}
+              {awaitingJobs.length}
             </span>
           </button>
           <button
@@ -297,10 +296,10 @@ function InstallerDashboard() {
         <JobList
           jobs={visibleJobs}
           onRowClick={handleRowClick}
-          emptyIcon={activeTab === 'pending' ? Clock : CheckCircle}
+          emptyIcon={activeTab === 'awaiting' ? Clock : CheckCircle}
           emptyMessage={
-            activeTab === 'pending'
-              ? 'No pending installations — check back after a payment is confirmed'
+            activeTab === 'awaiting'
+              ? 'No installations awaiting installation — check back after a payment is confirmed'
               : 'No completed installations yet'
           }
         />

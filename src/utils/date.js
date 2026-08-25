@@ -56,7 +56,7 @@ export function formatDateTime(value, options = {}) {
 
   try {
     return d.toLocaleString(undefined, opts);
-  } catch (e) {
+  } catch {
     return d.toString();
   }
 }
@@ -66,7 +66,7 @@ export function formatDateOnly(value, localeOptions = {}) {
   if (!d) return '-';
   try {
     return d.toLocaleDateString(undefined, localeOptions);
-  } catch (e) {
+  } catch {
     return d.toDateString();
   }
 }

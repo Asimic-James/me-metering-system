@@ -1,10 +1,11 @@
-import { Power, User, LogOut, ChevronDown, Menu, X, Bell, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2, Sun, Moon, Pencil, KeyRound, Save } from 'lucide-react';
+import { Power, User, LogOut, ChevronDown, Menu, X, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2, Sun, Moon, Pencil, KeyRound, Save } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import JEDApiService from '../services/api';
 import VerificationModal from '../auth/VerificationModal';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { getRoleMetadata } from '../auth/permissions';
 
 // Header-specific constants
 const HEADER_STYLES = {
@@ -408,7 +409,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-gray-900 truncate">{user.name}</p>
           <div className="flex items-center gap-2">
-            <p className="text-xs text-gray-600 truncate capitalize">{user.role}</p>
+            <p className="text-xs text-gray-600 truncate">{getRoleMetadata(user.role).displayName || user.role}</p>
             <p className="text-xs text-gray-600 truncate">• {user.email}</p>
           </div>
         </div>
@@ -462,50 +463,56 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
 
   const { isDark, toggleTheme } = useTheme();
 
-  const ThemeToggleButton = useCallback(() => (
-    <button
-      onClick={toggleTheme}
-      className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
-      aria-label="Toggle Theme"
-    >
-      {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-100" />}
-    </button>
-  ), [isDark, toggleTheme]);
+  const handleThemeToggleClick = useCallback((e) => {
+    e.stopPropagation();
+    toggleTheme();
+  }, [toggleTheme]);
+
+  const handleThemeToggleKeyDown = useCallback((e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTheme();
+    }
+  }, [toggleTheme]);
 
   const UserAvatar = useCallback(() => (
     <button
       onClick={handleDropdownToggle}
-      className="flex items-center gap-2 sm:gap-3 bg-white/10 hover:bg-white/20 rounded-lg sm:px-4 sm:py-2 p-1.5 transition-all duration-200 hover:shadow-lg"
+      className="flex items-center gap-1.5 sm:gap-2 bg-white/10 hover:bg-white/20 rounded-lg sm:pl-1 sm:pr-4 sm:py-2 p-1.5 transition-all duration-200 hover:shadow-lg"
       aria-expanded={showDropdown}
       aria-haspopup="true"
     >
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={handleThemeToggleClick}
+        onKeyDown={handleThemeToggleKeyDown}
+        className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
+        aria-label="Toggle Theme"
+      >
+        {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-100" />}
+      </span>
+
+      <div className="w-px h-5 bg-white/20 hidden sm:block" />
+
       <div className={`${HEADER_STYLES.mobile.avatar} ${HEADER_STYLES.desktop.avatar} rounded-full flex items-center justify-center font-semibold text-sm shadow-md`}>
         {getUserInitials(user)}
       </div>
       <div className="text-left hidden md:block">
         <p className="text-sm font-semibold leading-tight">{user.name}</p>
-        <p className="text-xs text-blue-200 leading-tight capitalize">{user.role}</p>
+        <p className="text-xs text-blue-200 leading-tight">{getRoleMetadata(user.role).displayName || user.role}</p>
       </div>
 
-      <ChevronDown 
+      <ChevronDown
         className={`w-4 h-4 transition-transform duration-200 hidden sm:block ${
           showDropdown ? 'rotate-180' : ''
-        }`} 
+        }`}
       />
     </button>
-  ), [user, showDropdown, handleDropdownToggle]);
+  ), [user, showDropdown, handleDropdownToggle, isDark, handleThemeToggleClick, handleThemeToggleKeyDown]);
 
-  const NotificationsButton = useCallback(() => (
-    <button
-      className="relative p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
-      aria-label="Notifications"
-    >
-      <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-      <span className="absolute top-1 right-1 w-2 h-2 bg-red-400 rounded-full border-2 border-transparent" />
-    </button>
-  ), []);
-
-  const DropdownContent = useCallback(() => 
+  const DropdownContent = useCallback(() =>
     showDropdown ? (
       <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-[60] animate-fade-in">
         <UserInfo />
@@ -542,9 +549,6 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
 
           {user && (
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-              <ThemeToggleButton />
-              <NotificationsButton />
-              
               <div className="relative" ref={dropdownRef}>
                 <UserAvatar />
                 {showDropdown && (

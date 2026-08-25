@@ -18,7 +18,14 @@ import { formatCurrencyNGN } from '../../utils/currency';
 import { getStatusBadgeClass, normalizeStatus } from '../../utils/statusBadge';
 import InfoModal from '../common/InfoModal';
 
-// Comprehensive field definitions for export
+// Export fields — trimmed to only what the real JedCustomerRequest schema
+// actually returns (id, accountNumber, custNames, gsm, email, address,
+// meterRecommended, discoCode, requestRef, region, rrr, amount, orderId,
+// status, meterType, sealNo, meterNo, dateRequested, datePaid,
+// dateCompleted). Columns with no backing field on the real API — installer
+// name/phone (no installer relationship exists on a request at all), feeder
+// name, tariff class, GPS coordinates, meter phase, remarks — were removed
+// rather than always rendering blank.
 const EXPORT_FIELDS = [
   { key: 'id', label: 'Installation ID', width: 120 },
   { key: 'accountNumber', label: 'Account Number', width: 140 },
@@ -26,21 +33,13 @@ const EXPORT_FIELDS = [
   { key: 'sealNumber', label: 'Seal Number', width: 120 },
   { key: 'customerName', label: 'Customer Name', width: 200 },
   { key: 'customerAddress', label: 'Customer Address', width: 250 },
-  { key: 'area', label: 'Area/Location', width: 150 },
-  { key: 'feederName', label: 'Feeder Name', width: 150 },
+  { key: 'area', label: 'Area/Region', width: 150 },
   { key: 'meterType', label: 'Meter Type', width: 120 },
-  { key: 'meterPhase', label: 'Meter Phase', width: 100 },
-  { key: 'tariffClass', label: 'Tariff Class', width: 120 },
-  { key: 'installerName', label: 'Installer Name', width: 180 },
-  { key: 'installerPhone', label: 'Installer Phone', width: 140 },
   { key: 'status', label: 'Status', width: 100 },
   { key: 'amount', label: 'Amount (₦)', width: 120 },
-  { key: 'paymentReference', label: 'Payment Reference', width: 180 },
-  { key: 'installationDate', label: 'Installation Date', width: 160 },
+  { key: 'paymentReference', label: 'Payment Reference (RRR)', width: 180 },
   { key: 'submittedDate', label: 'Submitted Date', width: 160 },
   { key: 'completedDate', label: 'Completed Date', width: 160 },
-  { key: 'gpsCoordinates', label: 'GPS Coordinates', width: 180 },
-  { key: 'remarks', label: 'Remarks/Notes', width: 200 }
 ];
 
 const formatStatusText = (status) => normalizeStatus(status).replace(/_/g, ' ');
@@ -92,28 +91,19 @@ function AdminReports() {
         };
 
         const normalized = (Array.isArray(data) ? data : []).map((r) => ({
-          id: r.id || r.installationId || r.requestId || '-',
-          accountNumber: r.accountNumber || r.account_no || r.accountNo || '-',
-          meterNumber: r.meterNo || r.meterNumber || r.meter_number || '-',
-          sealNumber: r.sealNo || r.sealNumber || r.seal_number || '-',
-          customerName: r.custNames || r.customerName || r.applicantName || r.customer_name || '-',
-          customerAddress: r.address || r.customerAddress || r.custAddress || r.installation_address || '-',
-          area: r.area || r.location || r.region || r.district || '-',
-          feederName: r.feederName || r.feeder || r.feeder_name || '-',
-          meterType: r.meterType || r.meter_type || r.type || '-',
-          meterPhase: r.meterPhase || r.phase || r.meter_phase || '-',
-          tariffClass: r.tariffClass || r.tariff || r.tariff_class || '-',
-          installerName: r.installer?.name || r.installerName || r.installer_name || '-',
-          installerPhone: r.installer?.phone || r.installerPhone || r.installer_phone || '-',
-          status: normalizeStatus(r.status || r.state || 'unknown'),
-          amount: Number(r.amount || r.fee || r.paymentAmount || 0),
-          paymentReference: r.paymentReference || r.payment_ref || r.reference || '-',
-          installationDate: r.installationDate || r.installation_date || r.dateInstalled || null,
-          submittedDate: r.submittedAt || r.dateRequested || r.submitted_at || r.createdAt || null,
-          completedDate: r.completedAt || r.completed_at || r.dateCompleted || null,
-          gpsCoordinates: r.gpsCoordinates || r.coordinates || r.location_coords || 
-            (r.latitude && r.longitude ? `${r.latitude}, ${r.longitude}` : '-'),
-          remarks: r.remarks || r.notes || r.comments || '-',
+          id: r.id ?? '-',
+          accountNumber: r.accountNumber || '-',
+          meterNumber: r.meterNo || '-',
+          sealNumber: r.sealNo || '-',
+          customerName: r.custNames || '-',
+          customerAddress: r.address || '-',
+          area: r.region || '-',
+          meterType: r.meterType || r.meterRecommended || '-',
+          status: normalizeStatus(r.status || 'unknown'),
+          amount: Number(r.amount || 0),
+          paymentReference: r.rrr || '-',
+          submittedDate: r.dateRequested || null,
+          completedDate: r.dateCompleted || null,
           raw: r
         }));
 
@@ -138,7 +128,7 @@ function AdminReports() {
     return rows.filter(r => {
       if (status && normalizeStatus(status) !== normalizeStatus(r.status)) return false;
       if (q) {
-        const searchFields = [r.accountNumber, r.meterNumber, r.sealNumber, r.customerName, r.installerName, r.area, r.customerAddress].join(' ').toLowerCase();
+        const searchFields = [r.accountNumber, r.meterNumber, r.sealNumber, r.customerName, r.area, r.customerAddress].join(' ').toLowerCase();
         if (!searchFields.includes(q)) return false;
       }
       if (fromTs || toTs) {
@@ -201,72 +191,28 @@ function AdminReports() {
       .replace(/[_-]+/g, ' ')
       .trim();
 
+    // Real JedCustomerRequest field names only — see EXPORT_FIELDS comment.
     const labelMap = {
       accountNumber: 'Account Number',
-      account_no: 'Account Number',
-      meterNumber: 'Meter Number',
-      meterNo: 'Meter Number',
-      meter_number: 'Meter Number',
-      sealNumber: 'Seal Number',
-      sealNo: 'Seal Number',
-      seal_number: 'Seal Number',
-      customerName: 'Customer Name',
       custNames: 'Customer Name',
-      applicantName: 'Applicant Name',
-      customer_name: 'Customer Name',
-      customerAddress: 'Customer Address',
-      custAddress: 'Customer Address',
+      gsm: 'Phone (GSM)',
+      email: 'Email',
       address: 'Customer Address',
-      installation_address: 'Installation Address',
-      area: 'Area / Location',
-      location: 'Location',
+      meterRecommended: 'Meter Type Recommended',
+      discoCode: 'Disco Code',
+      requestRef: 'Request Reference',
       region: 'Region',
-      district: 'District',
-      feederName: 'Feeder Name',
-      feeder: 'Feeder',
-      feeder_name: 'Feeder Name',
-      meterType: 'Meter Type',
-      meter_type: 'Meter Type',
-      type: 'Type',
-      meterPhase: 'Meter Phase',
-      meter_phase: 'Meter Phase',
-      phase: 'Phase',
-      tariffClass: 'Tariff Class',
-      tariff: 'Tariff',
-      tariff_class: 'Tariff Class',
-      installerName: 'Installer Name',
-      installer_name: 'Installer Name',
-      installerPhone: 'Installer Phone',
-      installer_phone: 'Installer Phone',
-      phone: 'Phone',
-      status: 'Status',
-      state: 'State',
+      rrr: 'Payment Reference (RRR)',
       amount: 'Amount',
-      fee: 'Fee',
-      paymentAmount: 'Payment Amount',
-      paymentReference: 'Payment Reference',
-      payment_ref: 'Payment Reference',
-      reference: 'Reference',
-      installationDate: 'Installation Date',
-      installation_date: 'Installation Date',
-      dateInstalled: 'Installation Date',
-      submittedDate: 'Submitted Date',
-      submitted_at: 'Submitted Date',
+      orderId: 'Order ID',
+      status: 'Status',
+      meterType: 'Meter Type',
+      sealNo: 'Seal Number',
+      meterNo: 'Meter Number',
       dateRequested: 'Submitted Date',
-      completedDate: 'Completed Date',
-      completed_at: 'Completed Date',
+      datePaid: 'Paid Date',
       dateCompleted: 'Completed Date',
-      gpsCoordinates: 'GPS Coordinates',
-      coordinates: 'Coordinates',
-      location_coords: 'Location Coordinates',
-      remarks: 'Remarks',
-      notes: 'Notes',
-      comments: 'Comments',
-      createdAt: 'Created At',
-      updatedAt: 'Updated At',
       id: 'ID',
-      requestId: 'Request ID',
-      installationId: 'Installation ID',
     };
 
     return labelMap[cleaned.toLowerCase()] || cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
@@ -281,21 +227,13 @@ function AdminReports() {
       { label: 'Seal Number', value: selectedRecord.sealNumber },
       { label: 'Customer Name', value: selectedRecord.customerName },
       { label: 'Customer Address', value: selectedRecord.customerAddress },
-      { label: 'Area / Location', value: selectedRecord.area },
-      { label: 'Feeder Name', value: selectedRecord.feederName },
+      { label: 'Region', value: selectedRecord.area },
       { label: 'Meter Type', value: selectedRecord.meterType },
-      { label: 'Meter Phase', value: selectedRecord.meterPhase },
-      { label: 'Tariff Class', value: selectedRecord.tariffClass },
-      { label: 'Installer Name', value: selectedRecord.installerName },
-      { label: 'Installer Phone', value: selectedRecord.installerPhone },
       { label: 'Status', value: selectedRecord.status },
       { label: 'Amount', value: formatCurrencyNGN(selectedRecord.amount) },
-      { label: 'Payment Reference', value: selectedRecord.paymentReference },
+      { label: 'Payment Reference (RRR)', value: selectedRecord.paymentReference },
       { label: 'Submitted Date', value: formatDateTime(selectedRecord.submittedDate) },
-      { label: 'Installation Date', value: formatDateTime(selectedRecord.installationDate) },
       { label: 'Completed Date', value: formatDateTime(selectedRecord.completedDate) },
-      { label: 'GPS Coordinates', value: selectedRecord.gpsCoordinates },
-      { label: 'Remarks', value: selectedRecord.remarks },
     ];
 
     const rawEntries = Object.entries(selectedRecord.raw || {}).filter(([, value]) => {
@@ -471,8 +409,7 @@ function AdminReports() {
               <th className="px-3 sm:px-4 py-3 font-semibold">Account</th>
               <th className="px-3 sm:px-4 py-3 font-semibold">Meter No.</th>
               <th className="px-3 sm:px-4 py-3 font-semibold">Customer</th>
-              <th className="px-3 sm:px-4 py-3 font-semibold">Area</th>
-              <th className="px-3 sm:px-4 py-3 font-semibold">Installer</th>
+              <th className="px-3 sm:px-4 py-3 font-semibold">Region</th>
               <th className="px-3 sm:px-4 py-3 font-semibold">Status</th>
               <th className="px-3 sm:px-4 py-3 font-semibold text-right">Amount</th>
               <th className="px-3 sm:px-4 py-3 font-semibold">Date</th>
@@ -497,7 +434,6 @@ function AdminReports() {
                   <td className="px-3 sm:px-4 py-3 text-gray-700 dark:text-gray-300 font-mono text-xs">{r.meterNumber}</td>
                   <td className="px-3 sm:px-4 py-3 text-gray-700 dark:text-gray-300">{r.customerName}</td>
                   <td className="px-3 sm:px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{r.area}</td>
-                  <td className="px-3 sm:px-4 py-3 text-gray-700 dark:text-gray-300">{r.installerName}</td>
                   <td className="px-3 sm:px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium uppercase ${getStatusBadgeClass(r.status)}`}>
                       {formatStatusText(r.status)}
@@ -563,12 +499,8 @@ function AdminReports() {
                   <p className="text-gray-900 dark:text-white font-mono">{r.meterNumber}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500 dark:text-gray-400">Area</p>
+                  <p className="text-gray-500 dark:text-gray-400">Region</p>
                   <p className="text-gray-900 dark:text-white">{r.area}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Installer</p>
-                  <p className="text-gray-900 dark:text-white">{r.installerName}</p>
                 </div>
                 <div>
                   <p className="text-gray-500 dark:text-gray-400">Amount</p>

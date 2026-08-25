@@ -1,8 +1,10 @@
 // src/utils/rrrPayload.js
-// Shared payload builder for POST /external/jed/generate-ref, used by
-// both InstallationDetail.jsx and PaymentsPage's Generate RRR tab so the
-// field-mapping logic (and the required-fields list shown in
-// GenerateRRRModal) lives in exactly one place.
+// Payload builder for POST /external/jed/generate-ref, used by
+// InstallationDetail.jsx's Generate RRR action (the only place this
+// happens — a duplicate standalone tab in PaymentsPage was removed as
+// unnecessary since RRR generation is always in the context of a
+// specific installation). Field-mapping logic (and the required-fields
+// list shown in GenerateRRRModal) lives in exactly one place.
 
 // Fields required by POST /external/jed/generate-ref per the API docs.
 // Checked before submit so the admin sees exactly what's missing instead

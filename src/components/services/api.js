@@ -3,12 +3,11 @@
 // Optimized JED API Service with Enhanced Configuration
 // ============================================
 
-import { 
-  API_CONFIG, 
-  ENDPOINTS, 
-  ERROR_TYPES, 
-  ERROR_CODES,
-  API_UTILS 
+import {
+  API_CONFIG,
+  ENDPOINTS,
+  ERROR_TYPES,
+  API_UTILS
 } from './api.config.js';
 
 // Enable API debugging globally if needed
@@ -21,7 +20,6 @@ class JEDApiService {
     this.config = API_CONFIG;
     this.endpoints = ENDPOINTS;
     this.errorTypes = ERROR_TYPES;
-    this.errorCodes = ERROR_CODES;
     this.utils = API_UTILS;
     
     // Request cache for deduplication
@@ -31,11 +29,14 @@ class JEDApiService {
 
   // Enhanced request method with caching and better error handling
   async makeRequest(url, options = {}) {
-    const { 
+    const {
       maxRetries = this.config.RETRY_CONFIG.MAX_RETRIES,
       useCache = false,
       cacheKey = null,
-      ...requestOptions 
+      // Set only for the two ApiKeyAuth-only endpoints (generate-ref,
+      // status/rrr|order) — see getActiveApiKey()/buildHeaders().
+      apiKey = null,
+      ...requestOptions
     } = options;
 
     // Check cache first if enabled
@@ -60,8 +61,8 @@ class JEDApiService {
 
         // Build headers with FormData support
         const isFormData = typeof FormData !== 'undefined' && requestOptions.body instanceof FormData;
-        const headers = this.utils.buildHeaders(requestOptions.headers);
-        
+        const headers = this.utils.buildHeaders(requestOptions.headers, null, apiKey);
+
         if (isFormData && headers['Content-Type']) {
           delete headers['Content-Type'];
         }
@@ -183,23 +184,32 @@ class JEDApiService {
     const errorMsg = data?.message || data?.error || '';
     const errorMsgStr = String(errorMsg).toLowerCase(); // Convert to string safely
     const isHtmlError = errorMsgStr.includes('doctype') || errorMsgStr.includes('<!');
-    
+
     if (isHtmlError) {
       console.error('[API] Server returned HTML error page — possible CORS or server issue');
       throw new Error(`${this.errorTypes.SERVER}:Server responded with an error page — check CORS and API endpoint`);
     }
 
+    // Real ValidationError responses ({ success, message, errors: [{field,
+    // message}] }) carry per-field detail beyond the top-level message —
+    // surface it so users see exactly which field failed, not just
+    // "Validation failed".
+    const fieldErrors = Array.isArray(data?.errors) && data.errors.length > 0
+      ? data.errors.map((e) => (e.field ? `${e.field}: ${e.message}` : e.message)).filter(Boolean).join('; ')
+      : null;
+    const baseMessage = fieldErrors ? `${data?.message || 'Validation failed'} (${fieldErrors})` : data?.message;
+
     // Map status codes to error messages
     const errorMap = {
-      400: `${this.errorTypes.VALIDATION}:${data?.message || 'Invalid request'}`,
+      400: `${this.errorTypes.VALIDATION}:${baseMessage || 'Invalid request'}`,
       403: `${this.errorTypes.PERMISSION}:${data?.message || 'Access denied'}`,
       404: `${this.errorTypes.NOT_FOUND}:${data?.message || 'Resource not found'}`,
       500: `${this.errorTypes.SERVER}:${data?.message || 'Internal server error'}`
     };
 
-    const errorMessage = errorMap[status] || 
-      data?.message || 
-      data?.error || 
+    const errorMessage = errorMap[status] ||
+      baseMessage ||
+      data?.error ||
       `HTTP ${status}: ${response.statusText}`;
 
     throw new Error(errorMessage);
@@ -260,49 +270,18 @@ class JEDApiService {
     });
   }
 
+  /**
+   * POST /auth/login — real LoginRequest schema is exactly
+   * { phone, password }, real LoginResponse is Success + { data: { user, token } }.
+   */
   async login(credentials) {
     console.log('[Auth] Login request:', { phone: credentials.phone, hasPassword: !!credentials.password });
     const url = this.buildUrl(this.endpoints.AUTH.LOGIN, true);
-    
-    const payloads = [
-      { phone: credentials.phone, password: credentials.password },
-      { phoneNumber: credentials.phone, password: credentials.password },
-      { username: credentials.phone, password: credentials.password },
-      { data: { phone: credentials.phone, password: credentials.password } }
-    ];
 
-    let response = null;
-    let lastErr = null;
-
-    for (let i = 0; i < payloads.length; i++) {
-      const payload = payloads[i];
-      try {
-        console.log(`[Auth] Login attempt ${i + 1}/${payloads.length}`);
-        response = await this.makeRequest(url, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        console.log('[Auth] Login successful on attempt', i + 1);
-        break;
-      } catch (err) {
-        lastErr = err;
-        console.warn(`[Auth] Login attempt ${i + 1} failed:`, err.message);
-        
-        const msg = String(err?.message || '').toLowerCase();
-        const isAuthOrValidationError = msg.includes(this.errorTypes.AUTH.toLowerCase()) ||
-                                        msg.includes(this.errorTypes.VALIDATION.toLowerCase()) ||
-                                        msg.includes('invalid credentials');
-        
-        if (!isAuthOrValidationError) {
-          throw err;
-        }
-      }
-    }
-
-    if (!response) {
-      console.error('[Auth] All login attempts failed:', lastErr?.message);
-      throw lastErr || new Error(`${this.errorTypes.VALIDATION}:Invalid authentication response`);
-    }
+    const response = await this.makeRequest(url, {
+      method: 'POST',
+      body: JSON.stringify({ phone: credentials.phone, password: credentials.password }),
+    });
 
     const { userData, token } = this.extractAuthData(response);
 
@@ -311,60 +290,39 @@ class JEDApiService {
       throw new Error(`${this.errorTypes.VALIDATION}:Invalid authentication response`);
     }
 
-    console.log('[Auth] Login successful - storing user:', { 
-      id: userData.id, 
-      phone: userData.phone, 
-      role: userData.role 
+    console.log('[Auth] Login successful - storing user:', {
+      id: userData.id,
+      phone: userData.phone,
+      role: userData.role
     });
 
-    // Diagnostic: installer-scoped features (My Jobs, Meter Schedule,
-    // complete-installation payloads) expect an installer identifier.
-    // Surface it loudly here rather than let it fail silently downstream —
-    // this is exactly the gap that caused InstallerDashboard to hang
-    // indefinitely on load until traced back to this field being absent.
-    const normalizedRole = (userData.role || '').toLowerCase();
-    if (normalizedRole === 'installer' && !userData.employeeId && !userData.staffId) {
-      console.warn(
-        '[Auth] Installer login response has no "employeeId" or "staffId" field. ' +
-        'Installer-scoped API calls will fall back to user.id. If that is not the ' +
-        'correct identifier, check the real field name on the login response and ' +
-        'update AuthContext/normalizeUserData accordingly.'
-      );
-    }
-    
     this.storeTokens({ token });
     this.storeUser(userData);
 
     return this.normalizeUserData(userData);
   }
 
+  /**
+   * Real LoginResponse shape is `{ success, message, data: { user, token } }`.
+   * A top-level `{ user, token }` fallback is kept only as a harmless safety
+   * net, not because the shape is unconfirmed.
+   */
   extractAuthData(response) {
-    console.log('[Auth] Extracting auth data from response');
-    let userData = null;
-    let token = null;
-
     if (response.data?.user) {
-      userData = response.data.user;
-      token = response.data.token || response.token;
-    } else if (response.user) {
-      userData = response.user;
-      token = response.token;
-    } else if (response.phone && response.role) {
-      userData = response;
-      token = response.token || response.accessToken || response.access_token;
-    } else if (response.data && response.data.phone && response.data.role) {
-      userData = response.data;
-      token = response.token || response.data.token;
+      return { userData: response.data.user, token: response.data.token };
     }
-
-    console.log('[Auth] Extracted - userData found:', !!userData, 'token found:', !!token);
-    return { userData, token };
+    if (response.user) {
+      return { userData: response.user, token: response.token };
+    }
+    return { userData: null, token: null };
   }
 
   normalizeUserData(userData) {
+    // Real API's User.role enum is uppercase (SUPERADMIN/ADMIN/INSTALLER),
+    // used as-is — uppercase here only guards against incidental casing.
     return {
       ...userData,
-      role: (userData.role?.toLowerCase() || 'installer').trim()
+      role: (userData.role?.toUpperCase() || 'INSTALLER').trim()
     };
   }
 
@@ -463,33 +421,15 @@ class JEDApiService {
     });
   }
 
+  /**
+   * The real API has no /auth/logout endpoint — logout is purely a local
+   * operation (clear the stored JWT/user/cache). Kept async for call-site
+   * compatibility (AuthContext.logout awaits it).
+   */
   async logout() {
-    try {
-      const token = this.getAuthToken();
-      if (token) {
-        const url = this.buildUrl(this.endpoints.AUTH.LOGOUT, true);
-        try {
-          console.log('[Auth] Attempting server logout...');
-          await this.makeRequest(url, { method: 'POST' });
-          console.log('[Auth] Server logout successful');
-        } catch (err) {
-          const errMsg = String(err?.message || '').toLowerCase();
-          if (errMsg.includes('not_found') || errMsg.includes('404')) {
-            console.warn('[Auth] Logout endpoint not found on server, proceeding with local logout');
-          } else {
-            console.warn('[Auth] Server logout failed:', err.message);
-          }
-        }
-      } else {
-        console.log('[Auth] No token found, skipping server logout');
-      }
-    } catch (error) {
-      console.error('[Auth] Logout error:', error);
-    } finally {
-      console.log('[Auth] Clearing local tokens and cache');
-      this.clearTokens();
-      this.clearCache();
-    }
+    console.log('[Auth] Clearing local tokens and cache');
+    this.clearTokens();
+    this.clearCache();
   }
 
   // ==================== JED INTEGRATION METHODS ====================
@@ -511,10 +451,18 @@ class JEDApiService {
   }
 
   async generatePaymentReference(meterData) {
+    const apiKey = this.getActiveApiKey();
+    if (!apiKey) {
+      throw new Error(
+        `${this.errorTypes.AUTH}:No active API key configured — set one in Settings → API Keys ` +
+        `before generating a payment reference (this endpoint authenticates via a real API key, not your login session).`
+      );
+    }
     const url = this.buildUrl(this.endpoints.JED.GENERATE_REF);
     return await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(meterData),
+      apiKey,
     });
   }
 
@@ -609,8 +557,15 @@ class JEDApiService {
    */
   async checkRemitaStatusByRRR(rrr) {
     if (!rrr) throw new Error('checkRemitaStatusByRRR requires an rrr');
+    const apiKey = this.getActiveApiKey();
+    if (!apiKey) {
+      throw new Error(
+        `${this.errorTypes.AUTH}:No active API key configured — set one in Settings → API Keys ` +
+        `before checking Remita status (this endpoint authenticates via a real API key, not your login session).`
+      );
+    }
     const url = this.buildUrl(this.endpoints.JED.CHECK_STATUS_BY_RRR(rrr));
-    return await this.makeRequest(url, { method: 'GET' });
+    return await this.makeRequest(url, { method: 'GET', apiKey });
   }
 
   /**
@@ -619,8 +574,15 @@ class JEDApiService {
    */
   async checkRemitaStatusByOrderId(orderId) {
     if (!orderId) throw new Error('checkRemitaStatusByOrderId requires an orderId');
+    const apiKey = this.getActiveApiKey();
+    if (!apiKey) {
+      throw new Error(
+        `${this.errorTypes.AUTH}:No active API key configured — set one in Settings → API Keys ` +
+        `before checking Remita status (this endpoint authenticates via a real API key, not your login session).`
+      );
+    }
     const url = this.buildUrl(this.endpoints.JED.CHECK_STATUS_BY_ORDER_ID(orderId));
-    return await this.makeRequest(url, { method: 'GET' });
+    return await this.makeRequest(url, { method: 'GET', apiKey });
   }
 
   /**
@@ -674,68 +636,33 @@ class JEDApiService {
   }
 
   /**
-   * Get installations assigned to the CURRENTLY AUTHENTICATED installer
-   * (Phase 1, step 6/7: the installer pulls jobs where JEED has already
-   * handed over installation details, i.e. payment has been confirmed via
-   * Remita).
+   * Get the installer-visible queue of customer requests (paid/completed
+   * installation jobs). GET /external/jed/requests/installer, scoped only
+   * by the Bearer token's role (INSTALLER required) and an optional
+   * `status` filter — NOT by which installer it's assigned to.
    *
-   * CORRECTED: the real endpoint is GET /external/jed/requests/installer
-   * with NO employeeId in the path — it's scoped by the Bearer token, not
-   * a URL param. An earlier version of this method assumed a path param;
-   * that was wrong against the confirmed API docs and has been fixed.
+   * IMPORTANT: the real JedCustomerRequest schema has no installerId or
+   * equivalent field, and there is no assignment endpoint anywhere on the
+   * real API. Every installer who calls this sees the same shared list —
+   * there is no server-side "my jobs" concept today. A previous version of
+   * this method tried to fake per-installer scoping with a client-side
+   * filter on fields (installer.employeeId, etc.) that don't exist on real
+   * data and could never match; that dead filter has been removed rather
+   * than kept as a false promise. See API_GAP_REPORT.md.
    *
-   * `params.employeeId`, if passed, is used ONLY by the client-side
-   * fallback filter below (never sent to the real endpoint as a query
-   * param) — useful if an admin wants a specific installer's history via
-   * the general /requests list as a last resort.
-   *
-   * @param {Object} params - { page, limit, status, employeeId? }
+   * @param {Object} params - { page, limit, status }
    */
   async getMyInstallations(params = {}) {
-    const { employeeId, ...queryParams } = params;
-
-    try {
-      const url = this.utils.buildUrlWithParams(
-        this.endpoints.JED.GET_REQUESTS_FOR_INSTALLERS,
-        queryParams,
-        'JED'
-      );
-      return await this.makeRequest(url, {
-        method: 'GET',
-        useCache: true,
-        cacheKey: `my-installations-${JSON.stringify(queryParams)}`
-      });
-    } catch (error) {
-      const errMsg = String(error?.message || '').toLowerCase();
-      if (!errMsg.includes('not_found') && !errMsg.includes('404')) {
-        throw error;
-      }
-      console.warn('[API] /requests/installer not found on server, falling back to client-side filter');
-    }
-
-    if (!employeeId) {
-      console.warn('[API] getMyInstallations fallback needs employeeId to filter — returning empty set');
-      return { data: [], pagination: { totalCount: 0 } };
-    }
-
-    // Fallback: fetch a wide page of requests, filter to this installer,
-    // then apply the caller's requested page/limit on the filtered set.
-    const fetchLimit = Math.max(queryParams.limit || 5, 200);
-    const response = await this.getAllCustomerRequests({ ...queryParams, page: 1, limit: fetchLimit });
-    const list = Array.isArray(response) ? response : (response?.data || []);
-
-    const mine = list.filter(
-      (item) =>
-        item.installer?.employeeId === employeeId ||
-        item.installerEmployeeId === employeeId ||
-        item.installer?.id === employeeId
+    const url = this.utils.buildUrlWithParams(
+      this.endpoints.JED.GET_REQUESTS_FOR_INSTALLERS,
+      params,
+      'JED'
     );
-
-    const requestedLimit = queryParams.limit || mine.length;
-    return {
-      data: mine.slice(0, requestedLimit),
-      pagination: { totalCount: mine.length }
-    };
+    return await this.makeRequest(url, {
+      method: 'GET',
+      useCache: true,
+      cacheKey: `my-installations-${JSON.stringify(params)}`
+    });
   }
 
   // ==================== ADMIN & DASHBOARD METHODS ====================
@@ -759,36 +686,10 @@ class JEDApiService {
     }
   }
 
-  async getInstallerPerformance(params = {}) {
-    const url = this.utils.buildUrlWithParams(
-      this.endpoints.JED.GET_INSTALLER_PERFORMANCE, 
-      params, 
-      'JED'
-    );
-    return await this.makeRequest(url, { 
-      method: 'GET',
-      useCache: true,
-      cacheKey: `installer-performance-${JSON.stringify(params)}`
-    });
-  }
-
-  async getInstallerDashboard() {
-    try {
-      const url = this.buildUrl(this.endpoints.JED.GET_INSTALLER_DASHBOARD);
-      return await this.makeRequest(url, { 
-        method: 'GET',
-        useCache: true,
-        cacheKey: 'installer-dashboard'
-      });
-    } catch (error) {
-      const errMsg = String(error?.message || '').toLowerCase();
-      if (errMsg.includes('not_found') || errMsg.includes('404')) {
-        console.warn('[API] Installer dashboard endpoint not found, will calculate from requests');
-        return null;
-      }
-      throw error;
-    }
-  }
+  // Per-installer stats/performance/dashboard endpoints do not exist on
+  // the real API (no such paths in the OpenAPI spec) and were removed —
+  // installer-facing stats are now computed client-side from the results
+  // of getMyInstallations() (see InstallerDashboard.jsx).
 
   // ==================== METERS MANAGEMENT METHODS ====================
   async uploadMeters(formData) {
@@ -910,35 +811,10 @@ class JEDApiService {
     return await response.blob();
   }
 
-  // ==================== COMPLAINTS METHODS ====================
-  async submitComplaint(complaintData) {
-    const url = this.buildApiUrl(this.endpoints.COMPLAINTS.BASE);
-    return await this.makeRequest(url, {
-      method: 'POST',
-      body: JSON.stringify(complaintData),
-    });
-  }
-
-  async getComplaints(params = {}) {
-    const url = this.utils.buildUrlWithParams(
-      this.endpoints.COMPLAINTS.BASE,
-      params
-    );
-    return await this.makeRequest(url, { 
-      method: 'GET',
-      useCache: true,
-      cacheKey: `complaints-${JSON.stringify(params)}`
-    });
-  }
-
-  async getComplaintById(complaintId) {
-    const url = this.buildApiUrl(this.endpoints.COMPLAINTS.BY_ID(complaintId));
-    return await this.makeRequest(url, { 
-      method: 'GET',
-      useCache: true,
-      cacheKey: `complaint-${complaintId}`
-    });
-  }
+  // There is no /complaints resource on the real API (no such tag/paths in
+  // the OpenAPI spec) — the complaint submission feature was removed
+  // entirely rather than shipping a form with no working backend; see
+  // API_GAP_REPORT.md.
 
   // ==================== SETTINGS MANAGEMENT METHODS ====================
   async getMeterTypes(params = {}) {
@@ -1122,20 +998,16 @@ class JEDApiService {
   }
 
   // ==================== TOKEN & STORAGE MANAGEMENT ====================
+  // Note: there is no /auth/refresh-token endpoint on the real API, so
+  // there is no refresh token to store or read — the app relies on the
+  // JWT's own expiry and a re-login when it lapses.
   getAuthToken() {
     return localStorage.getItem('jedAuthToken');
-  }
-
-  getRefreshToken() {
-    return localStorage.getItem('jedRefreshToken');
   }
 
   storeTokens(tokens) {
     if (tokens.token) {
       localStorage.setItem('jedAuthToken', tokens.token);
-    }
-    if (tokens.refreshToken) {
-      localStorage.setItem('jedRefreshToken', tokens.refreshToken);
     }
   }
 
@@ -1145,7 +1017,6 @@ class JEDApiService {
 
   clearTokens() {
     localStorage.removeItem('jedAuthToken');
-    localStorage.removeItem('jedRefreshToken');
     localStorage.removeItem('jedUser');
   }
 
@@ -1168,12 +1039,46 @@ class JEDApiService {
     return user?.role || null;
   }
 
+  isSuperAdmin() {
+    return this.getUserRole() === 'SUPERADMIN';
+  }
+
   isAdmin() {
-    return this.getUserRole() === 'admin';
+    const role = this.getUserRole();
+    return role === 'ADMIN' || role === 'SUPERADMIN';
   }
 
   isInstaller() {
-    return this.getUserRole() === 'installer';
+    return this.getUserRole() === 'INSTALLER';
+  }
+
+  // ==================== ACTIVE API KEY (ApiKeyAuth) ====================
+  // POST /external/jed/generate-ref and GET /external/jed/status/rrr|order
+  // authenticate via a real X-API-Key (ApiKeyAuth), not the user's JWT.
+  // The plaintext key value is only ever returned once, at creation time
+  // (see ApiKeySettings.jsx), so it's captured then and stored here for
+  // reuse — deliberately a separate localStorage slot from the JWT.
+  getActiveApiKey() {
+    return localStorage.getItem('jedActiveApiKey');
+  }
+
+  setActiveApiKey(key, name = null) {
+    if (!key) return;
+    localStorage.setItem('jedActiveApiKey', key);
+    if (name) {
+      localStorage.setItem('jedActiveApiKeyName', name);
+    } else {
+      localStorage.removeItem('jedActiveApiKeyName');
+    }
+  }
+
+  getActiveApiKeyName() {
+    return localStorage.getItem('jedActiveApiKeyName');
+  }
+
+  clearActiveApiKey() {
+    localStorage.removeItem('jedActiveApiKey');
+    localStorage.removeItem('jedActiveApiKeyName');
   }
 
   // ==================== HEALTH CHECK & VALIDATION ====================

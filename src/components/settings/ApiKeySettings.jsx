@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   KeyRound, Plus, Trash2, PowerOff, Power, Check, X,
-  AlertCircle, Loader2, Search, Copy, CheckCircle2, BarChart3, ShieldAlert
+  AlertCircle, Loader2, Search, Copy, CheckCircle2, BarChart3, ShieldAlert, Star, StarOff
 } from 'lucide-react';
 import jedApi from '../services/api';
 import ConfirmationModal from '../common/ConfirmationModal';
@@ -87,6 +87,14 @@ const ApiKeySettings = () => {
   // after creation, then never again.
   const [newlyCreatedKey, setNewlyCreatedKey] = useState(null);
   const [copied, setCopied] = useState(false);
+
+  // POST /external/jed/generate-ref and GET /external/jed/status/rrr|order
+  // authenticate via ApiKeyAuth (a real X-API-Key), not the logged-in
+  // user's JWT. The backend only ever returns a key's plaintext once, at
+  // creation, so "the active app key" is captured then (see
+  // handleUseAsActiveKey below) and stored client-side for reuse — this
+  // just tracks its (non-secret) display name for the status indicator.
+  const [activeKeyName, setActiveKeyNameState] = useState(() => jedApi.getActiveApiKeyName());
 
   // Lightweight usage modal (not a confirm/cancel flow, so it doesn't use
   // ConfirmationModal — a self-contained display modal instead).
@@ -216,6 +224,17 @@ const ApiKeySettings = () => {
     }
   }, []);
 
+  const handleUseAsActiveKey = useCallback((key, value) => {
+    if (!value) return;
+    jedApi.setActiveApiKey(value, getKeyName(key));
+    setActiveKeyNameState(jedApi.getActiveApiKeyName());
+  }, []);
+
+  const handleClearActiveKey = useCallback(() => {
+    jedApi.clearActiveApiKey();
+    setActiveKeyNameState(null);
+  }, []);
+
   const openUsageModal = useCallback(async (key, days = 30) => {
     setUsageModal({ open: true, key, data: null, loading: true, error: null, days });
     try {
@@ -273,6 +292,50 @@ const ApiKeySettings = () => {
         </button>
       </div>
 
+      {/* Active app key indicator — never shows the secret, only which key
+          (by name) is currently used for Generate RRR / Remita status
+          lookups. */}
+      <div className={`rounded-lg p-4 border flex items-start gap-3 ${
+        activeKeyName
+          ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+          : 'bg-gray-50 dark:bg-gray-900/40 border-gray-200 dark:border-gray-700'
+      }`}>
+        {activeKeyName ? (
+          <Star className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+        ) : (
+          <StarOff className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
+        )}
+        <div className="flex-1 min-w-0">
+          {activeKeyName ? (
+            <>
+              <p className="text-sm font-medium text-green-900 dark:text-green-200">
+                Active app key: {activeKeyName}
+              </p>
+              <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+                Used for Generate RRR and Remita status lookups.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                No active app key configured
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Generate RRR and Remita status lookups in the Payments page will fail until one is set — create a key above and choose "Use as active app key".
+              </p>
+            </>
+          )}
+        </div>
+        {activeKeyName && (
+          <button
+            onClick={handleClearActiveKey}
+            className="text-xs font-medium text-green-700 dark:text-green-400 hover:text-green-900 dark:hover:text-green-200 flex-shrink-0"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       {/* Error Alert */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
@@ -313,6 +376,22 @@ const ApiKeySettings = () => {
                   {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
+
+              {/* Generate RRR and Remita status-lookup calls authenticate
+                  via a real API key (X-API-Key), not the JWT — this is the
+                  only moment the plaintext is available to set that up. */}
+              <button
+                onClick={() => handleUseAsActiveKey(newlyCreatedKey, newlyCreatedKey.key || newlyCreatedKey.apiKey || newlyCreatedKey.secret || '')}
+                disabled={!(newlyCreatedKey.key || newlyCreatedKey.apiKey || newlyCreatedKey.secret)}
+                className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-900 border border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-300 text-xs font-medium rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Star className="w-3.5 h-3.5" />
+                Use as active app key
+              </button>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-1.5">
+                Needed for Generate RRR and Remita status lookups in the Payments page — those endpoints require a real API key, not your login session.
+              </p>
+
               <button
                 onClick={() => setNewlyCreatedKey(null)}
                 className="mt-3 text-xs font-medium text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200"

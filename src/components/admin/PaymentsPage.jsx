@@ -14,24 +14,22 @@ import ConfirmationModal from '../common/ConfirmationModal';
 import ConfirmPaymentTab from './ConfirmPaymentTab';
 import ReplayWebhookTab from './ReplayWebhookTab';
 import PaymentTimeline from '../common/PaymentTimeline';
-import GenerateRRRModal from '../common/GenerateRRRModal';
-import RequestInfoPanel from '../installation/RequestInfoPanel';
-import { buildRrrPayload } from '../../utils/rrrPayload';
 import {
   CreditCard, Search, RefreshCw, CheckCircle, AlertCircle, ShieldCheck,
-  Loader2, Calendar, Filter, ArrowRight, ExternalLink, Info, Receipt
+  Loader2, Calendar, Filter, Info
 } from 'lucide-react';
 import { formatDateTime, parseTimestamp } from '../../utils/date';
 
-// Order matters here: "Generate RRR" is the first step in the payment
-// lifecycle (before a customer can pay at all), so it leads. "Confirm
-// Payment" is the routine, everyday action after that (an admin
-// confirming a customer's payment), placed ahead of "RRR / Order Lookup"
-// which is more of a diagnostic/fallback tool (checking Remita directly,
-// or manually confirming a payment whose webhook was missed).
+// Order matters here: "Confirm Payment" is the routine, everyday action
+// (an admin confirming a customer's payment), placed ahead of "RRR /
+// Order Lookup" which is more of a diagnostic/fallback tool (checking
+// Remita directly, or manually confirming a payment whose webhook was
+// missed). Generate RRR was removed from here — it's already available
+// per-installation from InstallationDetail.jsx (the natural place to
+// generate a reference while looking at that specific job), so a
+// standalone duplicate in the Payments hub wasn't a required workflow.
 const TABS = [
   { id: 'payments', label: 'Payments' },
-  { id: 'generateRRR', label: 'Generate RRR' },
   { id: 'confirm', label: 'Confirm Payment' },
   { id: 'lookup', label: 'RRR / Order Lookup' },
   { id: 'byStatus', label: 'Requests by Status' },
@@ -44,7 +42,11 @@ const DATE_PRESETS = [
   { id: '90', label: 'Last 90 days' },
 ];
 
-const STATUS_OPTIONS = ['INITIATED', 'PAID', 'COMPLETED', 'FAILED', 'CANCELLED'];
+// Real JedCustomerRequest.status enum is exactly these 3 values — FAILED
+// and CANCELLED were previously offered here despite the code's own
+// comment below (VERIFY_STATUS_LABELS) already acknowledging they don't
+// exist; removed rather than left as filterable-but-always-empty options.
+const STATUS_OPTIONS = ['INITIATED', 'PAID', 'COMPLETED'];
 
 const unwrapPaymentsPayload = (response) => {
   if (Array.isArray(response)) return response;
@@ -68,38 +70,9 @@ const getAmount = (p) => p?.amount ?? p?.amountPaid ?? p?.amount_paid ?? p?.tota
 const getRRR = (p) => p?.rrr || p?.RRR || p?.paymentReference || p?.reference || p?.payment_reference || null;
 const getAccount = (p) => p?.accountNumber || p?.account_number || p?.account || p?.customerAccount || 'N/A';
 const getPaymentStatus = (p) => p?.status || p?.paymentStatus || p?.transactionStatus || p?.state || 'UNKNOWN';
-const getPaymentDate = (p) => {
-  const candidates = [
-    p?.transactionDate,
-    p?.transactiondate,
-    p?.transactionDateTime,
-    p?.paymentDate,
-    p?.payment_date,
-    p?.paymentDateTime,
-    p?.paidAt,
-    p?.paid_at,
-    p?.createdAt,
-    p?.created_at,
-    p?.date,
-    p?.dateCreated,
-    p?.updatedAt,
-    p?.timestamp,
-    p?.timeStamp,
-    p?.datetime,
-    p?.dateTime,
-    p?.payment?.transactionDate,
-    p?.payment?.createdAt,
-    p?.payment?.date,
-    p?.data?.transactionDate,
-    p?.data?.createdAt,
-    p?.data?.date,
-    p?.transaction?.date,
-    p?.transaction?.timestamp,
-    p?.transaction?.createdAt,
-  ];
-
-  return candidates.find((value) => value !== null && value !== undefined && value !== '') || null;
-};
+// Real GET /external/jed/payments item schema: datePaid, dateCompleted
+// (no transactionDate/createdAt/etc. — those were guesses).
+const getPaymentDate = (p) => p?.datePaid || p?.dateCompleted || null;
 
 // use robust formatter from utils/date
 
@@ -283,149 +256,6 @@ function PaymentsTab() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ---- Tab: Generate RRR ----
-// Looks a request up by account number (GET /external/jed/requests/{accountNumber},
-// the same endpoint InstallationDetail.jsx uses), then reuses the shared
-// GenerateRRRModal/buildRrrPayload — the identical Preview -> Confirm ->
-// Success flow available from an installation's detail page, just
-// reachable directly from the Payments hub without navigating to a
-// specific job first.
-function GenerateRRRTab() {
-  const [accountNumber, setAccountNumber] = useState('');
-  const [job, setJob] = useState(null);
-  const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupError, setLookupError] = useState(null);
-
-  const [genModalOpen, setGenModalOpen] = useState(false);
-  const [genLoading, setGenLoading] = useState(false);
-  const [genError, setGenError] = useState(null);
-  const [genResult, setGenResult] = useState(null);
-  const [genGeneratedAt, setGenGeneratedAt] = useState(null);
-
-  const rrrPayload = buildRrrPayload(job);
-
-  const handleLookup = async () => {
-    if (!accountNumber.trim()) return;
-    setLookupLoading(true);
-    setLookupError(null);
-    setJob(null);
-    try {
-      const response = await jedApi.getCustomerRequest(accountNumber.trim());
-      setJob(response?.data || response);
-    } catch (err) {
-      console.error('[GenerateRRR] Lookup failed:', err);
-      setLookupError(String(err?.message || 'No request found for this account number'));
-    } finally {
-      setLookupLoading(false);
-    }
-  };
-
-  const openGenerateModal = () => {
-    setGenError(null);
-    setGenResult(null);
-    setGenModalOpen(true);
-  };
-
-  const handleGenerateReference = async () => {
-    if (!rrrPayload) return;
-    setGenLoading(true);
-    setGenError(null);
-
-    try {
-      const response = await jedApi.generatePaymentReference(rrrPayload);
-      const data = response?.data || response;
-      setGenResult(data);
-      setGenGeneratedAt(new Date());
-
-      const rrr = data?.RRR || data?.rrr || data?.reference || data?.paymentReference || null;
-      if (rrr) {
-        setJob((prev) => (prev ? { ...prev, rrr, paymentReference: rrr } : prev));
-      }
-    } catch (err) {
-      console.error('[GenerateRRR] generate payment reference failed:', err);
-      setGenError(err.message || 'Failed to generate payment reference');
-    } finally {
-      setGenLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Generate RRR</h2>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Look up a customer request by account number, then generate a Remita payment reference (RRR) for it.
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={accountNumber}
-              onChange={(e) => { setAccountNumber(e.target.value); setLookupError(null); }}
-              onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
-              placeholder="e.g., 477014"
-              className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-sm font-mono"
-            />
-          </div>
-          <button
-            onClick={handleLookup}
-            disabled={lookupLoading || !accountNumber.trim()}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-sm font-medium shrink-0"
-          >
-            {lookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-            <span className="hidden sm:inline">Look Up</span>
-          </button>
-        </div>
-
-        {lookupError && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-800 dark:text-red-300 flex gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            {lookupError}
-          </div>
-        )}
-      </div>
-
-      {job && (
-        <>
-          <RequestInfoPanel data={job} title="Request Found" compact />
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Reference</p>
-              <p className="font-mono text-sm text-gray-900 dark:text-white">
-                {job.rrr || job.paymentReference || job.paymentRef || 'No reference generated'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={openGenerateModal}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
-            >
-              <Receipt className="w-4 h-4" />
-              {job.rrr || job.paymentReference ? 'Regenerate Reference' : 'Generate Reference'}
-            </button>
-          </div>
-        </>
-      )}
-
-      <GenerateRRRModal
-        isOpen={genModalOpen}
-        onClose={() => setGenModalOpen(false)}
-        payload={rrrPayload}
-        loading={genLoading}
-        error={genError}
-        result={genResult}
-        generatedAt={genGeneratedAt}
-        onConfirm={handleGenerateReference}
-      />
     </div>
   );
 }
@@ -783,7 +613,6 @@ function PaymentsPage() {
       </div>
 
       {activeTab === 'payments' && <PaymentsTab />}
-      {activeTab === 'generateRRR' && <GenerateRRRTab />}
       {activeTab === 'confirm' && <ConfirmPaymentTab />}
       {activeTab === 'lookup' && <LookupTab />}
       {activeTab === 'byStatus' && <ByStatusTab />}

@@ -18,10 +18,18 @@ import {
  */
 export function usePermissions() {
   const { user } = useAuth();
-  const userRole = user?.role?.toLowerCase() || null;
+  // Role strings from the API (and AuthContext's normalizeUser) are
+  // uppercase (SUPERADMIN/ADMIN/INSTALLER) — used as-is, no case translation.
+  const userRole = user?.role || null;
 
   // Compute role flags
-  const isAdmin = useMemo(() => userRole === ROLES.ADMIN, [userRole]);
+  const isSuperAdmin = useMemo(() => userRole === ROLES.SUPERADMIN, [userRole]);
+  const isAdminRole = useMemo(() => userRole === ROLES.ADMIN, [userRole]);
+  // "isAdmin" here means admin-tier access (ADMIN or SUPERADMIN) — kept as
+  // the name every call site already uses for the coarse full-access check.
+  // Use isSuperAdmin/isAdminRole directly where the distinction matters
+  // (e.g. gating creation of ADMIN/SUPERADMIN accounts).
+  const isAdmin = useMemo(() => isAdminRole || isSuperAdmin, [isAdminRole, isSuperAdmin]);
   const isInstaller = useMemo(() => userRole === ROLES.INSTALLER, [userRole]);
 
   // Get role metadata
@@ -67,11 +75,6 @@ export function usePermissions() {
     // Upload permissions
     canUploadExcel: hasPermission(userRole, PERMISSIONS.UPLOADS.EXCEL),
     canUploadFiles: isAdmin || hasPermission(userRole, PERMISSIONS.UPLOADS.FILES),
-    
-    // Complaint permissions
-    canCreateComplaint: hasPermission(userRole, PERMISSIONS.COMPLAINTS.CREATE),
-    canViewComplaints: isAdmin || hasPermission(userRole, PERMISSIONS.COMPLAINTS.VIEW),
-    canManageComplaints: isAdmin,
   }), [userRole, isAdmin]);
 
   return {
@@ -82,6 +85,8 @@ export function usePermissions() {
     
     // Role flags
     isAdmin,
+    isAdminRole,
+    isSuperAdmin,
     isInstaller,
     
     // Role metadata

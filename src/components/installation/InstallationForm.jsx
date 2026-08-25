@@ -3,18 +3,18 @@ import { useAuth } from '../contexts/AuthContext';
 import UserInfoPanel from './UserInfoPanel'; // Assuming UserInfoPanel is in the same directory
 import RequestInfoPanel from './RequestInfoPanel';
 import JEDApiService from '../services/api';
-import { 
-  CheckCircle, 
-  XCircle, 
-  AlertCircle, 
+import {
+  CheckCircle,
+  XCircle,
+  AlertCircle,
   RefreshCw,
   FileText,
-  User,
   Hash,
-  Zap,
   Search,
   Loader2
-} from 'lucide-react';// Constants for better maintainability
+} from 'lucide-react';
+
+// Constants for better maintainability
 const VALIDATION_RULES = {
   sealNo: { required: true, message: 'Seal Number is required' },
   meterNo: { 
@@ -429,19 +429,6 @@ function InstallationForm({ onSuccess }) {
 
   return (
     <div>
-      {/* Page Header */}
-      <div className="mb-8 flex items-center gap-3">
-        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
-          <Zap className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Complete Meter Installation</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Finalize the meter installation process by recording the details below.
-          </p>
-        </div>
-      </div>
-
       {/* User Information */}
       <UserInfoPanel user={user} />
 

@@ -18,10 +18,8 @@ import {
   Download,
   FileText,
   Settings,
-  Menu,
   X,
-  LayoutDashboard,
-  Wrench
+  LayoutDashboard
 } from 'lucide-react';
 
 // Reference dataviz palette slots (see the project's dataviz skill —
@@ -43,7 +41,7 @@ const TREND_RANGE_PRESETS = [
 // Stat Card Component - Mobile First
  
 const StatCard = ({ title, value, icon: Icon, change, changeType = 'neutral' }) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6 flex flex-col">
+  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6 flex flex-col transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 dark:hover:shadow-black/30">
     <div className="flex items-center justify-between mb-3">
       <div className={`p-2 rounded-lg ${
         changeType === 'positive' ? 'bg-green-100 text-green-600' :
@@ -70,26 +68,12 @@ const StatCard = ({ title, value, icon: Icon, change, changeType = 'neutral' }) 
 );
 
 /**
- * Resolve a display-ready installation date from a request object.
- *
- * NOTE: the real API response's date field name is unconfirmed — the
- * dashboard was previously reading only `submittedAt`, which showed as a
- * dash ("-") for every row because the real field is (most likely) named
- * something else. This checks the most probable candidates in priority
- * order rather than assuming a single field name. Once the real response
- * shape is confirmed, this fallback chain can be trimmed to just the
- * correct field.
+ * Resolve a display-ready request date. Real JedCustomerRequest schema
+ * field is `dateRequested`; `datePaid`/`dateCompleted` are used as a
+ * fallback for rows where it's genuinely absent from the row shape.
  */
 const getInstallDate = (install) => {
-  const raw =
-    install?.submittedAt ||
-    install?.createdAt ||
-    install?.dateCreated ||
-    install?.requestDate ||
-    install?.transactiondate ||
-    install?.date ||
-    null;
-
+  const raw = install?.dateRequested || install?.datePaid || install?.dateCompleted || null;
   if (!raw) return '-';
   return formatDateTime(raw);
 };
@@ -260,8 +244,11 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
               <option value="completed">Completed Requests</option>
               <option value="jed">All Requests — Detailed (JED)</option>
               <option value="meters">Meters</option>
-              <option value="installers">Installer Performance</option>
             </select>
+            {/* "Installer Performance" was removed — there is no backing
+                endpoint on the real API for it (see API_GAP_REPORT.md);
+                the option previously fell through to exporting "All Data"
+                under a misleading label instead of erroring. */}
           </div>
 
           <div>
@@ -318,22 +305,22 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
 // background, producing low-contrast, hard-to-read buttons (confirmed in
 // the reported screenshot). Text is now always dark (`text-gray-900`),
 // matching the backgrounds' actual (always-light) appearance.
-const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) => (
+// AdminDashboard (the only caller) is admin-tier only, so these actions
+// are always shown — no per-button role gating needed here.
+const QuickActions = ({ onManageUsers, onGoToSettings, onExportData }) => (
   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6">
     <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h3>
     <div className="grid grid-cols-2 gap-3">
-      {isAdmin && (
-        <button 
-          onClick={onManageUsers}
-          className="p-3 sm:p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg hover:shadow-md transition-all border border-blue-200"
-        >
-          <Users className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 mb-2 mx-auto" />
-          <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
-            Manage Users
-          </span>
-        </button>
-      )}
-      <button 
+      <button
+        onClick={onManageUsers}
+        className="p-3 sm:p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg hover:shadow-md transition-all border border-blue-200"
+      >
+        <Users className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 mb-2 mx-auto" />
+        <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
+          Manage Users
+        </span>
+      </button>
+      <button
         onClick={onExportData}
         className="p-3 sm:p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg hover:shadow-md transition-all border border-green-200"
       >
@@ -342,31 +329,25 @@ const QuickActions = ({ onManageUsers, onGoToSettings, onExportData, isAdmin }) 
           Export Data
         </span>
       </button>
-      {isAdmin && (
-        <button 
-          onClick={onGoToSettings}
-          className="p-3 sm:p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg hover:shadow-md transition-all border border-purple-200 col-span-2"
-        >
-          <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 mb-2 mx-auto" />
-          <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
-            System Settings
-          </span>
-        </button>
-      )}
+      <button
+        onClick={onGoToSettings}
+        className="p-3 sm:p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg hover:shadow-md transition-all border border-purple-200 col-span-2"
+      >
+        <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 mb-2 mx-auto" />
+        <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
+          System Settings
+        </span>
+      </button>
     </div>
   </div>
 );
 
-const normalizePercentage = (value) => {
-  if (typeof value === 'number') return Math.round(value);
-  if (typeof value === 'string') {
-    const numericValue = Number(String(value).replace(/[^0-9.-]+/g, ''));
-    return Number.isFinite(numericValue) ? Math.round(numericValue) : undefined;
-  }
-  return undefined;
-};
-
-function AdminDashboard({ isInstallerView = false }) {
+// AdminDashboard is only ever mounted for admin-tier users (App.jsx routes
+// installers to InstallerDashboard instead), so it no longer branches on
+// role internally — an earlier "installer view" code path here was dead
+// (isInstallerView was never actually passed by any caller) and has been
+// removed rather than kept as unreachable complexity.
+function AdminDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [stats, setStats] = useState({
@@ -374,10 +355,6 @@ function AdminDashboard({ isInstallerView = false }) {
     completedRequests: 0,
     activeInstallers: 0,
     totalRevenue: 0,
-    pendingChange: undefined,
-    completedChange: undefined,
-    activeInstallersChange: undefined,
-    revenueChange: undefined
   });
   const [recentInstallations, setRecentInstallations] = useState([]);
   const [requestsTotalCount, setRequestsTotalCount] = useState(0);
@@ -394,121 +371,49 @@ function AdminDashboard({ isInstallerView = false }) {
   const [trendError, setTrendError] = useState(null);
   const [trendTruncated, setTrendTruncated] = useState(null);
 
-  const isAdmin = user?.role === 'admin';
-  const showInstallerData = isInstallerView || !isAdmin;
-
   useEffect(() => {
-    // Helper: calculate stats client-side from a given installations array.
-    // Takes the array explicitly rather than reading from state, so it's
-    // never stale and never needs to be a dependency of the outer effect.
-    const calculateStatsFromInstallations = (installations, forInstallerView) => {
-      const normalized = {
-        pendingRequests: installations.filter(inst =>
-          inst.status === 'pending' || inst.status === 'processing'
-        ).length,
-        completedRequests: installations.filter(inst =>
-          inst.status === 'completed'
-        ).length,
-        activeInstallers: forInstallerView ? 1 : 0, // installer view: just themselves
-        totalRevenue: installations
-          .filter(inst => inst.status === 'completed')
-          .reduce((sum, inst) => sum + (parseFloat(inst.amount) || 0), 0)
-      };
-      setStats(normalized);
-      console.log('[Dashboard] Stats calculated from installations:', normalized);
-    };
-
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        if (isAdmin && !showInstallerData) {
-          // ---- Admin: full pipeline visibility across all installers ----
-          const installationsResponse = await JEDApiService.getAllCustomerRequests({
-            page: 1,
-            limit: 5
+        const installationsResponse = await JEDApiService.getAllCustomerRequests({
+          page: 1,
+          limit: 5
+        });
+        const installations = Array.isArray(installationsResponse)
+          ? installationsResponse
+          : (installationsResponse?.data || []);
+        const paginationData = installationsResponse?.pagination || {};
+
+        setRecentInstallations(installations);
+        setRequestsTotalCount(paginationData.totalCount || installations.length);
+
+        try {
+          const statsResponse = await JEDApiService.getDashboardStats();
+          const payload = statsResponse?.data ?? statsResponse ?? {};
+          // Real GET /dashboard-stats returns exactly these 4 flat numbers
+          // — no percent-change/delta fields exist server-side, so none
+          // are fabricated here.
+          setStats({
+            pendingRequests: payload.pendingRequests ?? 0,
+            completedRequests: payload.completedRequests ?? 0,
+            activeInstallers: payload.activeInstallers ?? 0,
+            totalRevenue: payload.totalRevenue ?? 0,
           });
-          const installations = Array.isArray(installationsResponse)
-            ? installationsResponse
-            : (installationsResponse?.data || []);
-          const paginationData = installationsResponse?.pagination || {};
-
-          setRecentInstallations(installations);
-          setRequestsTotalCount(paginationData.totalCount || installations.length);
-
-          try {
-            const statsResponse = await JEDApiService.getDashboardStats();
-            const payload = statsResponse?.data ?? statsResponse ?? {};
-            setStats({
-              pendingRequests: payload.pendingRequests ?? payload.pendingCount ?? payload.pending ?? 0,
-              completedRequests: payload.completedRequests ?? payload.completedCount ?? payload.completed ?? 0,
-              activeInstallers: payload.activeInstallers ?? payload.active_installers ?? payload.installersActive ?? 0,
-              totalRevenue: payload.totalRevenue ?? payload.total_revenue ?? payload.revenue ?? 0,
-              pendingChange: normalizePercentage(
-                payload.pendingChange ?? payload.pending_change ?? payload.pendingPercent ?? payload.pendingPercentChange ?? payload.pendingRequestsChange
-              ),
-              completedChange: normalizePercentage(
-                payload.completedChange ?? payload.completed_change ?? payload.completedPercent ?? payload.completedPercentChange ?? payload.completedRequestsChange
-              ),
-              activeInstallersChange: normalizePercentage(
-                payload.activeInstallersChange ?? payload.active_installers_change ?? payload.installersChange ?? payload.installersChangePercent
-              ),
-              revenueChange: normalizePercentage(
-                payload.revenueChange ?? payload.totalRevenueChange ?? payload.revenue_change ?? payload.revenuePercent ?? payload.revenueGrowth
-              )
-            });
-          } catch (statsError) {
-            console.warn('[Dashboard] Failed to fetch admin stats, calculating from installations:', statsError.message);
-            calculateStatsFromInstallations(installations, false);
-          }
-        } else {
-          // ---- Installer: jobs assigned to THIS installer only ----
-          // CORRECTED: getMyInstallations() no longer takes employeeId as
-          // a positional argument — the real endpoint (/requests/installer)
-          // is scoped by the auth token, not a URL param. employeeId is
-          // now passed inside params, used only by the client-side
-          // fallback filter if the dedicated endpoint isn't available.
-          const myResponse = await JEDApiService.getMyInstallations({
-            page: 1,
-            limit: 5,
-            employeeId: user?.employeeId || user?.staffId || user?.id
+        } catch (statsError) {
+          // Fallback: compute from the fetched page of requests using the
+          // real status enum (INITIATED/PAID/COMPLETED), not guessed
+          // lowercase values.
+          console.warn('[Dashboard] Failed to fetch admin stats, calculating from installations:', statsError.message);
+          setStats({
+            pendingRequests: installations.filter((inst) => inst.status === 'INITIATED' || inst.status === 'PAID').length,
+            completedRequests: installations.filter((inst) => inst.status === 'COMPLETED').length,
+            activeInstallers: 0,
+            totalRevenue: installations
+              .filter((inst) => inst.status === 'COMPLETED')
+              .reduce((sum, inst) => sum + (parseFloat(inst.amount) || 0), 0)
           });
-          const installations = Array.isArray(myResponse) ? myResponse : (myResponse?.data || []);
-          const paginationData = myResponse?.pagination || {};
-
-          setRecentInstallations(installations);
-          setRequestsTotalCount(paginationData.totalCount || installations.length);
-
-          try {
-            const installerStatsResponse = await JEDApiService.getInstallerDashboard();
-            if (installerStatsResponse) {
-              const payload = installerStatsResponse?.data ?? installerStatsResponse ?? {};
-              setStats({
-                pendingRequests: payload.pendingRequests ?? payload.pendingCount ?? payload.pending ?? 0,
-                completedRequests: payload.completedRequests ?? payload.completedCount ?? payload.completed ?? 0,
-                activeInstallers: 1,
-                totalRevenue: payload.totalRevenue ?? payload.total_revenue ?? payload.revenue ?? 0,
-                pendingChange: normalizePercentage(
-                  payload.pendingChange ?? payload.pending_change ?? payload.pendingPercent ?? payload.pendingPercentChange ?? payload.pendingRequestsChange
-                ),
-                completedChange: normalizePercentage(
-                  payload.completedChange ?? payload.completed_change ?? payload.completedPercent ?? payload.completedPercentChange ?? payload.completedRequestsChange
-                ),
-                activeInstallersChange: normalizePercentage(
-                  payload.activeInstallersChange ?? payload.active_installers_change ?? payload.installersChange ?? payload.installersChangePercent
-                ),
-                revenueChange: normalizePercentage(
-                  payload.revenueChange ?? payload.totalRevenueChange ?? payload.revenue_change ?? payload.revenuePercent ?? payload.revenueGrowth
-                )
-              });
-            } else {
-              calculateStatsFromInstallations(installations, true);
-            }
-          } catch (installerStatsError) {
-            console.warn('[Dashboard] Failed to fetch installer stats, calculating from installations:', installerStatsError.message);
-            calculateStatsFromInstallations(installations, true);
-          }
         }
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
@@ -523,7 +428,7 @@ function AdminDashboard({ isInstallerView = false }) {
     }
     // NOTE: `recentInstallations` intentionally excluded — it's set inside
     // this effect, so including it as a dependency caused a refetch loop.
-  }, [user, showInstallerData, isAdmin]);
+  }, [user]);
 
   // Revenue / Installations trend — admin-only, mirrors the KPI section's
   // admin-vs-installer scoping above. Fetches real payment records for the
@@ -567,10 +472,10 @@ function AdminDashboard({ isInstallerView = false }) {
   }, []);
 
   useEffect(() => {
-    if (user && isAdmin && !showInstallerData) {
+    if (user) {
       fetchTrendData(trendDays);
     }
-  }, [user, isAdmin, showInstallerData, trendDays, fetchTrendData]);
+  }, [user, trendDays, fetchTrendData]);
 
   const handleExportData = async (exportType, format) => {
     try {
@@ -583,11 +488,11 @@ function AdminDashboard({ isInstallerView = false }) {
           filename = `meters_export_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
           break;
         case 'pending':
-          blob = await JEDApiService.exportCustomerRequests({ status: 'pending', format });
+          blob = await JEDApiService.exportCustomerRequests({ status: 'INITIATED', format });
           filename = `pending_requests_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
           break;
         case 'completed':
-          blob = await JEDApiService.exportCustomerRequests({ status: 'completed', format });
+          blob = await JEDApiService.exportCustomerRequests({ status: 'COMPLETED', format });
           filename = `completed_requests_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
           break;
         case 'jed':
@@ -668,61 +573,36 @@ function AdminDashboard({ isInstallerView = false }) {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              {showInstallerData && !isAdmin
-                ? <Wrench className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                : <LayoutDashboard className="w-6 h-6 text-blue-600 dark:text-blue-400" />}
+              <LayoutDashboard className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-              {showInstallerData && !isAdmin ? 'Installer Dashboard' : 'Admin Dashboard'}
+              Admin Dashboard
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1 text-sm sm:text-base">
-              {showInstallerData && !isAdmin 
-                ? 'Track your installation activity and performance' 
-                : 'Monitor system performance and manage users'}
+              Monitor system performance and manage users
             </p>
           </div>
           </div>
           <div className="mt-4 sm:mt-0">
-            {isAdmin && (
-              <button 
-                onClick={handleGenerateReport}
-                className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-              >
-                <FileText className="w-4 h-4" />
-                Generate Report
-              </button>
-            )}
+            <button
+              onClick={handleGenerateReport}
+              className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              Generate Report
+            </button>
           </div>
         </div>
 
-        {/* Statistics Grid */}
+        {/* Statistics Grid — real GET /dashboard-stats returns only these
+            4 flat numbers, no percent-change/delta fields, so none are
+            fabricated here (see the Trend section below for real
+            day-over-day data, sourced from actual payment records). */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-          <StatCard
-            title="Pending"
-            value={stats.pendingRequests}
-            icon={Clock}
-            change={stats.pendingChange ?? (stats.pendingRequests + stats.completedRequests > 0
-              ? Math.round((stats.pendingRequests / (stats.pendingRequests + stats.completedRequests)) * 100)
-              : undefined)}
-            changeType={stats.pendingChange != null || stats.pendingRequests + stats.completedRequests > 0 ? 'negative' : 'neutral'}
-          />
-          <StatCard
-            title="Completed"
-            value={stats.completedRequests}
-            icon={CheckCircle}
-            change={stats.completedChange ?? (stats.pendingRequests + stats.completedRequests > 0
-              ? Math.round((stats.completedRequests / (stats.pendingRequests + stats.completedRequests)) * 100)
-              : undefined)}
-            changeType={stats.completedChange != null || stats.pendingRequests + stats.completedRequests > 0 ? 'positive' : 'neutral'}
-          />
-          <StatCard
-            title="Installers"
-            value={stats.activeInstallers}
-            icon={Users}
-            change={stats.activeInstallersChange}
-            changeType={stats.activeInstallersChange > 0 ? 'positive' : stats.activeInstallersChange < 0 ? 'negative' : 'neutral'}
-          />
+          <StatCard title="Pending" value={stats.pendingRequests} icon={Clock} />
+          <StatCard title="Completed" value={stats.completedRequests} icon={CheckCircle} />
+          <StatCard title="Installers" value={stats.activeInstallers} icon={Users} />
           <StatCard
             title="Revenue"
             value={
@@ -731,15 +611,12 @@ function AdminDashboard({ isInstallerView = false }) {
                 : stats.totalRevenue
             }
             icon={BarChart}
-            change={stats.revenueChange}
-            changeType={stats.revenueChange > 0 ? 'positive' : stats.revenueChange < 0 ? 'negative' : 'neutral'}
           />
         </div>
 
-        {/* Revenue / Installations Trend — admin only, built from real
+        {/* Revenue / Installations Trend — built from real
             GET /external/jed/payments records for the selected window */}
-        {isAdmin && !showInstallerData && (
-          <div className="space-y-3">
+        <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Trend</h2>
               <div className="flex items-center gap-1.5">
@@ -795,7 +672,6 @@ function AdminDashboard({ isInstallerView = false }) {
               />
             </div>
           </div>
-        )}
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -811,11 +687,10 @@ function AdminDashboard({ isInstallerView = false }) {
 
           {/* Quick Actions */}
           <div className="space-y-4 sm:space-y-6">
-            <QuickActions 
+            <QuickActions
               onManageUsers={handleManageUsers}
               onGoToSettings={handleGoToSettings}
               onExportData={() => setShowExportModal(true)}
-              isAdmin={isAdmin}
             />
           </div>
         </div>

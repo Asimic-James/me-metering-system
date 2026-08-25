@@ -40,12 +40,10 @@ export const API_CONFIG = {
     AUTH: '/auth',
     VERIFICATION: '/verification',
     JED: '/external/jed',
-    ADMIN: '',  // FIXED: Empty prefix - admin endpoints are at root level
-    REPORTS: '/reports',
+    ADMIN: '',  // Dashboard endpoint is at root level
     METERS: '/meters',
     USERS: '', // User endpoints are at the root level
     SETTINGS: '',  // Empty prefix for root-level settings endpoints
-    COMPLAINTS: '/complaints',
     UPLOADS: '/uploads',
     // Root-level webhook group. Distinct from /external/jed/remita/webhook —
     // this is the live Remita webhook receiver per the API docs (no auth
@@ -92,14 +90,14 @@ export const ERROR_TYPES = {
 // API Endpoints - Organized by functionality with better consistency
 export const ENDPOINTS = {
   // ==================== AUTHENTICATION ENDPOINTS ====================
+  // Confirmed against the real OpenAPI spec (Authentication tag). There is
+  // no logout, refresh-token, or forgot-password endpoint on the real API
+  // — those were previously invented and are intentionally not here.
   AUTH: {
     LOGIN: '/login',
     REGISTER: '/register',
-    LOGOUT: '/logout',
     PROFILE: '/profile',
     CHANGE_PASSWORD: '/change-password',
-    REFRESH_TOKEN: '/refresh-token',
-    FORGOT_PASSWORD: '/forgot-password',
     RESET_PASSWORD: '/reset-password',
   },
   
@@ -114,6 +112,8 @@ export const ENDPOINTS = {
   // ==================== JED INTEGRATION ENDPOINTS ====================
   JED: {
     // Payment Endpoints
+    // GENERATE_REF requires ApiKeyAuth (a real X-API-Key from /apikeys),
+    // not the user's JWT — see the "active API key" mechanism.
     GENERATE_REF: '/generate-ref',
     CONFIRM_PAYMENT: '/confirm-payment',
     COMPLETE_INSTALLATION: '/complete-installation',
@@ -126,31 +126,25 @@ export const ENDPOINTS = {
     GET_REQUEST_BY_ACCOUNT: (accountNumber) => `/requests/${accountNumber}`,
     GET_ALL_REQUESTS: '/requests',
     GET_REQUESTS_BY_STATUS: (status) => `/requests/status/${status}`,
-    // Unconfirmed against real API docs — kept for backward compatibility,
-    // superseded by GET_REQUESTS_FOR_INSTALLERS below which is what the
-    // docs actually show (no employeeId in the path; auth-scoped via JWT).
-    GET_REQUESTS_BY_INSTALLER: (employeeId) => `/requests/installer/${employeeId}`,
-    // CONFIRMED against real API docs: "Get customer requests for
-    // installers (non-sensitive fields only)" — self-scoped to the
-    // authenticated installer via the Bearer token, no employeeId param.
-    // This is the one JEDApiService.getMyInstallations() actually calls.
+    // CONFIRMED against the real OpenAPI spec: "Get customer requests for
+    // installers (non-sensitive fields only)" — GET /external/jed/requests/installer,
+    // filterable by status only (no per-installer scoping exists on the
+    // real API — every installer sees the same shared list; see
+    // getMyInstallations() in api.js for how this is surfaced honestly).
     GET_REQUESTS_FOR_INSTALLERS: '/requests/installer',
     // Export customer requests to Excel (admin-locked per docs). Distinct
     // from METERS.CUSTOMER_REQUESTS_EXPORT (/meters/customer-requests/export).
     EXPORT_REQUESTS: '/requests/export',
-    GET_REQUESTS_BY_DATE_RANGE: (startDate, endDate) => 
+    GET_REQUESTS_BY_DATE_RANGE: (startDate, endDate) =>
       `/requests?startDate=${startDate}&endDate=${endDate}`,
-    
-    // Payments & Remita status checks (admin-locked per docs)
+
+    // Payments & Remita status checks — confirmed real endpoints.
+    // GET_PAYMENTS uses bearerAuth; CHECK_STATUS_BY_RRR/ORDER_ID require
+    // ApiKeyAuth (a real X-API-Key, not the user's JWT — see the "active
+    // API key" mechanism in ApiKeySettings.jsx / buildHeaders below).
     GET_PAYMENTS: '/payments',
     CHECK_STATUS_BY_RRR: (rrr) => `/status/rrr/${rrr}`,
     CHECK_STATUS_BY_ORDER_ID: (orderId) => `/status/order/${orderId}`,
-    
-    // Installer Management
-    GET_INSTALLER_STATS: (employeeId) => `/installers/${employeeId}/dashboard-stats`,
-    GET_INSTALLER_PERFORMANCE: '/installer/performance',
-    UPDATE_INSTALLER_PROFILE: (employeeId) => `/installers/${employeeId}/profile`,
-    GET_INSTALLER_DASHBOARD: '/installer/dashboard',
   },
 
   // ==================== WEBHOOKS ENDPOINTS (root-level, no auth) ====================
@@ -186,61 +180,39 @@ export const ENDPOINTS = {
   },
   
   // ==================== USER MANAGEMENT ENDPOINTS ====================
+  // Confirmed real: GET/POST /users, GET/PUT/DELETE /users/{id}. There is
+  // no dedicated /users/{id}/status sub-route or /auth/users path on the
+  // real API — status changes and role updates go through PUT /users/{id}
+  // (see updateUser in api.js). The previous ADMIN.USERS group duplicated
+  // this at the wrong path (/auth/users) and has been removed.
   USERS: {
     BASE: '/users',
     BY_ID: (userId) => `/users/${userId}`,
-    STATUS: (userId) => `/users/${userId}/status`,
   },
 
   // ==================== ADMIN ENDPOINTS ====================
+  // Only /dashboard-stats is real. SYSTEM_ANALYTICS/PERFORMANCE_REPORTS/
+  // SYSTEM_LOGS/AUDIT_TRAIL/SYSTEM_SETTINGS had no counterpart in the real
+  // OpenAPI spec and have been removed rather than left as dead endpoints.
   ADMIN: {
-    // User Management
-    USERS: {
-      BASE: '/auth/users',  // FIXED: Auth users endpoint
-      BY_ID: (userId) => `/auth/users/${userId}`,
-      STATUS: (userId) => `/auth/users/${userId}/status`,
-    },
-    
-    // Dashboard & Analytics
-    DASHBOARD_STATS: '/dashboard-stats',  // FIXED: Root-level endpoint
-    SYSTEM_ANALYTICS: '/analytics',
-    PERFORMANCE_REPORTS: '/reports/performance',
-    
-    // System Management
-    SYSTEM_LOGS: '/system/logs',
-    AUDIT_TRAIL: '/system/audit-trail',
-    SYSTEM_SETTINGS: '/system/settings',
+    DASHBOARD_STATS: '/dashboard-stats',
   },
-  
+
   // ==================== SETTINGS ENDPOINTS ====================
-  // FIXED: These are root-level endpoints, not prefixed with /settings group
+  // These are root-level endpoints, not prefixed with /settings group
   SETTINGS: {
     METER_TYPES: {
       BASE: '/settings/meter-type',
       BY_ID: (id) => `/settings/meter-type/${id}`,
     }
   },
-  
-  // ==================== COMPLAINTS ENDPOINTS ====================
-  COMPLAINTS: {
-    BASE: '/complaints',
-    BY_ID: (complaintId) => `/complaints/${complaintId}`,
-  },
-  
+
   // ==================== UPLOADS ENDPOINTS ====================
   UPLOADS: {
     EXCEL: '/uploads/excel',
     EXCEL_FIRST_SHEET: '/uploads/excel-first-sheet',
     EXCEL_MODIFIED: '/uploads/excel-modified',
   },
-  
-  // ==================== REPORTS ENDPOINTS ====================
-  REPORTS: {
-    GENERATE_REPORT: '/reports/generate',
-    EXPORT_DATA: '/reports/export',
-    GET_REPORT_TYPES: '/reports/types',
-    GET_REPORT_HISTORY: '/reports/history',
-  }
 };
 
 // Status Constants - Organized by domain
@@ -304,51 +276,6 @@ export const STATUS = {
     MAINTENANCE: 'maintenance',
     DEGRADED: 'degraded',
     OFFLINE: 'offline',
-  }
-};
-
-// Error Codes and Messages
-export const ERROR_CODES = {
-  // Authentication Errors
-  AUTH: {
-    INVALID_CREDENTIALS: 'AUTH_001',
-    TOKEN_EXPIRED: 'AUTH_002',
-    ACCESS_DENIED: 'AUTH_003',
-    INVALID_TOKEN: 'AUTH_004',
-    SESSION_EXPIRED: 'AUTH_005',
-  },
-  
-  // Verification Errors
-  VERIFICATION: {
-    INVALID_OTP: 'VER_001',
-    OTP_EXPIRED: 'VER_002',
-    TOO_MANY_ATTEMPTS: 'VER_003',
-    ALREADY_VERIFIED: 'VER_004',
-    SEND_FAILED: 'VER_005',
-  },
-  
-  // Validation Errors
-  VALIDATION: {
-    INVALID_INPUT: 'VAL_001',
-    MISSING_REQUIRED_FIELD: 'VAL_002',
-    INVALID_FORMAT: 'VAL_003',
-    DUPLICATE_ENTRY: 'VAL_004',
-  },
-  
-  // Business Logic Errors
-  BUSINESS: {
-    PAYMENT_REQUIRED: 'BUS_001',
-    INSTALLATION_LIMIT_EXCEEDED: 'BUS_002',
-    INSUFFICIENT_PERMISSIONS: 'BUS_003',
-    RESOURCE_NOT_FOUND: 'BUS_004',
-  },
-  
-  // System Errors
-  SYSTEM: {
-    INTERNAL_ERROR: 'SYS_001',
-    SERVICE_UNAVAILABLE: 'SYS_002',
-    DATABASE_ERROR: 'SYS_003',
-    EXTERNAL_SERVICE_ERROR: 'SYS_004',
   }
 };
 
@@ -470,10 +397,9 @@ export const API_UTILS = {
    */
   getTimeout: (endpoint) => {
     const longRunningEndpoints = [
-      '/reports/generate',
-      '/reports/export',
-      '/admin/analytics',
       '/meters/export',
+      '/meters/upload',
+      '/meters/customer-requests/export',
       '/uploads/',
       '/requests/export'
     ];
@@ -519,26 +445,30 @@ export const API_UTILS = {
   delay: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
   
   /**
-   * Build headers with authentication
+   * Build headers with authentication.
+   *
+   * The real OpenAPI spec declares two mutually exclusive security
+   * schemes: `bearerAuth` (JWT, for user-facing endpoints) and
+   * `ApiKeyAuth` (a real API key from /apikeys, via X-API-Key — used only
+   * by POST /external/jed/generate-ref and GET /external/jed/status/*).
+   * A JWT is not a valid API key, so those two ApiKeyAuth-only endpoints
+   * pass `apiKey` explicitly (see api.js's "active app key" lookup) and
+   * get X-API-Key with no Bearer header; everything else gets Bearer only.
    */
-  buildHeaders: (customHeaders = {}, authToken = null) => {
+  buildHeaders: (customHeaders = {}, authToken = null, apiKey = null) => {
     const headers = {
       ...API_CONFIG.DEFAULT_HEADERS,
       ...customHeaders
     };
 
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
+      return headers;
+    }
+
     const token = authToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('jedAuthToken') : null);
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      // CONFIRMED against a real, working curl example targeting
-      // GET /external/jed/status/rrr/{rrr}: the live API authenticates
-      // that call via an `X-API-Key` header carrying the same JWT, not
-      // (or not only) via Authorization: Bearer. Sending both is safe and
-      // non-breaking — whichever header the backend actually reads for a
-      // given endpoint will work, and this avoids calls to endpoints that
-      // specifically expect X-API-Key silently failing with an auth error
-      // that looks identical to a missing/expired token.
-      headers['X-API-Key'] = token;
     }
 
     return headers;
@@ -550,7 +480,6 @@ export default {
   CONFIG: API_CONFIG,
   ENDPOINTS,
   STATUS,
-  ERROR_CODES,
   ERROR_TYPES,
   UTILS: API_UTILS,
   

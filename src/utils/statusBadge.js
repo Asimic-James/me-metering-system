@@ -34,9 +34,18 @@ export const getStatusBadgeClass = (status) =>
 
 /**
  * Whether a status represents a finished installation. Used to split
- * Pending vs Completed tabs (InstallerDashboard) and to decide whether to
- * show the complete-installation form or a read-only summary
- * (InstallationDetail).
+ * Awaiting Installation vs Completed tabs (InstallerDashboard) and to
+ * decide whether to show the complete-installation form or a read-only
+ * summary (InstallationDetail).
  */
 export const isCompletedStatus = (status) =>
   ['COMPLETED', 'PAID_COMPLETED'].includes(normalizeStatus(status));
+
+/**
+ * Whether a status represents a paid request that's ready for an installer
+ * to act on. Deliberately excludes INITIATED (not yet paid — nothing for
+ * an installer to do) so the installer's "Awaiting Installation" tab only
+ * ever shows real, actionable, paid customer accounts.
+ */
+export const isAwaitingInstallationStatus = (status) =>
+  normalizeStatus(status) === 'PAID';

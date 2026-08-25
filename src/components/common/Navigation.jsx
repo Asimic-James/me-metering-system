@@ -1,12 +1,36 @@
+// src/components/common/Navigation.jsx
+// Single sidebar navigation surface, mobile-first: base (unprefixed)
+// classes render it as an off-canvas drawer (the old MobileSidebar
+// behavior); `lg:` classes turn it into a persistent, always-visible
+// column fixed to the left edge of the viewport. There is no longer a
+// separate desktop top tab bar or mobile bottom tab bar — one nav
+// surface, one set of items, across every breakpoint.
+//
+// The persistent lg+ sidebar can also be collapsed to an icon-only rail
+// (`collapsed`/`onToggleCollapse`, lifted to App.jsx since the content
+// column's offset has to track the sidebar's current width). Collapsing
+// only ever applies at lg+ — the mobile drawer always shows full labels,
+// since there's no room pressure to save there the way there is on a
+// permanently-docked desktop rail.
 import {
-  LayoutDashboard, Database, Zap, Users, BarChart3,
-  Upload, Settings, MessageSquare, X, Layers2, CreditCard
+  LayoutDashboard, Database, Wrench, Users, BarChart3,
+  Upload, Settings, X, Layers2, CreditCard, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import InfoModal from './InfoModal';
 
-// Navigation-specific constants
+// Role strings match the real API's User.role enum (uppercase).
+const isAdminTierRole = (role) => role === 'ADMIN' || role === 'SUPERADMIN';
+
+// Sidebar widths — kept in one place since App.jsx's content column needs
+// a matching `lg:pl-*` offset to sit beside (not under) the persistent
+// desktop sidebar, and that offset has to track collapsed/expanded state.
+export const SIDEBAR_WIDTH_EXPANDED_CLASS = 'lg:w-64';
+export const SIDEBAR_WIDTH_COLLAPSED_CLASS = 'lg:w-20';
+export const CONTENT_OFFSET_EXPANDED_CLASS = 'lg:pl-64';
+export const CONTENT_OFFSET_COLLAPSED_CLASS = 'lg:pl-20';
+
 const NAVIGATION_CONFIG = {
   ITEMS: [
     {
@@ -14,7 +38,6 @@ const NAVIGATION_CONFIG = {
       label: 'Dashboard',
       path: '/dashboard',
       icon: LayoutDashboard,
-      mobileBottomNav: () => true,
       description: 'Overview and statistics',
       accessible: () => true,
     },
@@ -23,17 +46,15 @@ const NAVIGATION_CONFIG = {
       label: 'Meter Schedule',
       path: '/schedule',
       icon: Database,
-      mobileBottomNav: false,
       description: 'View and query meter inventory',
       accessible: () => true,
     },
     {
       id: 'submit',
-      label: 'Installations',
+      label: 'Complete Installation',
       path: '/submit',
-      icon: Zap,
-      mobileBottomNav: () => true,
-      description: 'Manage meter installs and complaints from one page',
+      icon: Wrench,
+      description: 'Look up a paid account and record the install',
       accessible: () => true,
     },
     {
@@ -41,27 +62,24 @@ const NAVIGATION_CONFIG = {
       label: 'Users',
       path: '/users',
       icon: Users,
-      mobileBottomNav: (role) => role === 'admin',
       description: 'Manage system users',
-      accessible: (userRole) => userRole === 'admin',
+      accessible: (userRole) => isAdminTierRole(userRole),
     },
     {
       id: 'reports',
       label: 'Reports',
       path: '/reports',
       icon: BarChart3,
-      mobileBottomNav: (role) => role === 'admin',
       description: 'Analytics & exports',
-      accessible: (userRole) => userRole === 'admin'
+      accessible: (userRole) => isAdminTierRole(userRole)
     },
     {
       id: 'payments',
       label: 'Payments',
       path: '/payments',
       icon: CreditCard,
-      mobileBottomNav: false,
       description: 'Payment reconciliation & Remita status',
-      accessible: (userRole) => userRole === 'admin'
+      accessible: (userRole) => isAdminTierRole(userRole)
     },
     {
       id: 'uploads',
@@ -69,7 +87,7 @@ const NAVIGATION_CONFIG = {
       path: '/uploads',
       icon: Upload,
       description: 'Upload meter data',
-      accessible: (userRole) => ['admin', 'installer'].includes(userRole)
+      accessible: (userRole) => isAdminTierRole(userRole) || userRole === 'INSTALLER'
     },
     {
       id: 'settings',
@@ -77,12 +95,14 @@ const NAVIGATION_CONFIG = {
       path: '/settings',
       icon: Settings,
       description: 'Application settings',
-      accessible: (userRole) => userRole === 'admin'
+      accessible: (userRole) => isAdminTierRole(userRole)
     }
   ]
 };
 
-// Navigation-specific hooks
+// Locks background scroll only while the mobile drawer (or the support
+// modal) is actually open as an overlay — irrelevant at lg+, where the
+// sidebar is part of the normal layout, not an overlay.
 const useBodyScroll = (isOpen) => {
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : 'unset';
@@ -90,7 +110,44 @@ const useBodyScroll = (isOpen) => {
   }, [isOpen]);
 };
 
-function Navigation({ userRole, isOpen, onMenuToggle: _onMenuToggle, onClose }) {
+function NavItem({ item, onClick, collapsed }) {
+  const Icon = item.icon;
+
+  return (
+    <NavLink to={item.path} onClick={onClick} end title={collapsed ? item.label : undefined}>
+      {({ isActive }) => (
+        <div
+          className={`w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-3.5 rounded-xl transition-all duration-200 ${
+            collapsed ? 'lg:justify-center lg:gap-0 lg:px-2.5' : ''
+          } ${
+            isActive
+              ? 'bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/20 border border-indigo-200 dark:border-indigo-800 shadow-sm'
+              : 'hover:bg-gray-50 dark:hover:bg-white/5 border border-transparent hover:border-gray-200 dark:hover:border-white/10'
+          }`}
+        >
+          <div className={`p-2 rounded-lg flex-shrink-0 ${
+            isActive
+              ? 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-md'
+              : 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400'
+          }`}>
+            <Icon className="w-4 h-4" />
+          </div>
+          <div className={`flex-1 text-left min-w-0 ${collapsed ? 'lg:hidden' : ''}`}>
+            <p className={`font-semibold text-sm truncate ${isActive ? 'text-indigo-900 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-200'}`}>
+              {item.label}
+            </p>
+            <p className={`text-xs mt-0.5 truncate ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-500'}`}>
+              {item.description}
+            </p>
+          </div>
+          {isActive && <div className={`w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0 ${collapsed ? 'lg:hidden' : ''}`} />}
+        </div>
+      )}
+    </NavLink>
+  );
+}
+
+function Navigation({ userRole, isOpen, onClose, collapsed = false, onToggleCollapse }) {
   const [isSupportModalOpen, setSupportModalOpen] = useState(false);
 
   useBodyScroll(isOpen || isSupportModalOpen);
@@ -98,207 +155,108 @@ function Navigation({ userRole, isOpen, onMenuToggle: _onMenuToggle, onClose }) 
   const handleOpenSupportModal = useCallback(() => setSupportModalOpen(true), []);
   const handleCloseSupportModal = useCallback(() => setSupportModalOpen(false), []);
 
-  const isItemAccessible = useCallback((item) => item.accessible(userRole), [userRole]);
-
   const handleLinkClick = useCallback(() => {
     if (window.navigator.vibrate) window.navigator.vibrate(50);
     onClose?.();
   }, [onClose]);
 
-  // Base Navigation Item Component
-  const NavItem = useCallback(({ item, variant = 'desktop' }) => {
-    const Icon = item.icon;
-    const isAccessible = isItemAccessible(item);
-
-    const getVariantStyles = (isActive) => {
-      const variants = {
-        desktop: {
-          container: `flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-4 border-b-2 transition-all duration-200 whitespace-nowrap group relative ${!isAccessible ? 'opacity-40 cursor-not-allowed text-gray-400 border-transparent' : ''}`,
-          active: 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-semibold bg-indigo-50/60 dark:bg-indigo-900/20',
-          inactive: 'border-transparent text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 hover:bg-indigo-50/40 dark:hover:bg-indigo-900/10',
-          icon: `w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:scale-110`,
-          text: item.label,
-        },
-        mobileSidebar: {
-          container: `w-full flex items-center gap-4 p-3.5 rounded-xl transition-all duration-200 ${!isAccessible ? 'opacity-40 cursor-not-allowed' : ''}`,
-          active: 'bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/20 border border-indigo-200 dark:border-indigo-800 shadow-sm',
-          inactive: 'hover:bg-gray-50 dark:hover:bg-white/5 border border-transparent hover:border-gray-200 dark:hover:border-white/10',
-          iconContainer: `p-2 rounded-lg flex-shrink-0 ${isActive ? 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-md' : 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400'}`,
-          icon: "w-4 h-4",
-          labelClass: `font-semibold text-sm ${isActive ? 'text-indigo-900 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-200'}`,
-          descriptionClass: `text-xs mt-0.5 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-500'}`,
-        },
-        mobileBottom: {
-          container: `relative flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all active:scale-95 touch-manipulation ${!isAccessible ? 'opacity-40 cursor-not-allowed' : ''}`,
-          active: 'text-indigo-600 dark:text-indigo-400',
-          inactive: 'text-gray-500 dark:text-gray-400 hover:text-indigo-500',
-          iconContainer: `relative rounded-lg p-1.5 transition-all duration-200 ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/40' : ''}`,
-          icon: `w-5 h-5 transition-transform duration-200 ${isActive ? 'scale-110' : ''}`,
-          text: item.label.split(' ')[0],
-        }
-      };
-      return variants[variant];
-    };
-
-    const renderContent = (isActive) => {
-      const styles = getVariantStyles(isActive);
-      if (variant === 'mobileSidebar') {
-        return (
-          <div className={`${styles.container} ${isActive ? styles.active : styles.inactive}`}>
-            <div className={styles.iconContainer}>
-              <Icon className={styles.icon} />
-            </div>
-            <div className="flex-1 text-left">
-              <p className={styles.labelClass}>{item.label}</p>
-              <p className={styles.descriptionClass}>{item.description}</p>
-            </div>
-            {isActive && (
-              <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
-            )}
-          </div>
-        );
-      }
-
-      return (
-        <div className={`${styles.container} ${isActive ? styles.active : styles.inactive}`}>
-          {variant === 'mobileBottom' ? (
-            <>
-              <div className={styles.iconContainer}>
-                <Icon className={styles.icon} />
-              </div>
-              <span className="text-[10px] font-medium">{styles.text}</span>
-              {isActive && (
-                <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-indigo-400 to-blue-500 rounded-b-full" />
-              )}
-            </>
-          ) : (
-            <>
-              <Icon className={styles.icon} />
-              <span className="text-sm font-medium">{styles.text}</span>
-              {isActive && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-400 via-blue-500 to-cyan-400" />
-              )}
-            </>
-          )}
-        </div>
-      );
-    };
-
-    if (!isAccessible) {
-      return <div title="Not available for your role">{renderContent(false)}</div>;
-    }
-
-    return (
-      <NavLink to={item.path} onClick={handleLinkClick} end>
-        {({ isActive }) => renderContent(isActive)}
-      </NavLink>
-    );
-  }, [isItemAccessible, handleLinkClick]);
-
   const filteredNavItems = useMemo(
-    () => NAVIGATION_CONFIG.ITEMS.filter(isItemAccessible),
-    [isItemAccessible]
+    () => NAVIGATION_CONFIG.ITEMS.filter((item) => item.accessible(userRole)),
+    [userRole]
   );
-
-  const MobileOverlay = useCallback(() => (
-    <div
-      className={`
-        fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden
-        transition-all duration-300 ease-in-out
-        ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}
-      `}
-      onClick={onClose}
-      aria-hidden={!isOpen}
-    />
-  ), [isOpen, onClose]);
-
-  const DesktopNavigation = useCallback(() => (
-    <nav className="hidden lg:block bg-white/70 dark:bg-black/30 backdrop-blur-md border-b border-white/40 dark:border-white/10 shadow-sm sticky top-16 sm:top-20 z-30">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-center items-center gap-0.5 px-2 sm:px-4 lg:px-6">
-          {filteredNavItems.map((item) => (
-            <NavItem key={item.id} item={item} variant="desktop" />
-          ))}
-        </div>
-      </div>
-    </nav>
-  ), [filteredNavItems]);
-
-  const MobileSidebar = useCallback(() => (
-    <aside
-      className={`
-        fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] z-50 lg:hidden flex flex-col
-        bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl
-        border-r border-white/40 dark:border-white/10
-        transform transition-all duration-300 ease-in-out overflow-y-auto
-        ${isOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0 pointer-events-none'}
-      `}
-      aria-hidden={!isOpen}
-    >
-      {/* Sidebar Header */}
-      <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 text-white p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-white/15 backdrop-blur-sm rounded-lg flex items-center justify-center">
-              <Layers2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="font-bold text-base">Navigation</h2>
-              <p className="text-blue-100 text-xs">JEDC Partnership</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-            aria-label="Close menu"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Nav Items */}
-      <div className="p-3 space-y-1 flex-1 overflow-y-auto">
-        {filteredNavItems.map((item) => (
-          <NavItem key={item.id} item={item} variant="mobileSidebar" />
-        ))}
-      </div>
-
-      {/* Support Box */}
-      <div className="p-4 border-t border-gray-100 dark:border-white/10">
-        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3">
-          <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-300 mb-1">Need Help?</p>
-          <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-2.5">Contact the support team</p>
-          <button
-            className="w-full px-3 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xs font-semibold rounded-lg hover:from-indigo-700 hover:to-blue-700 transition-all shadow-md"
-            onClick={handleOpenSupportModal}
-          >
-            Get Support
-          </button>
-        </div>
-      </div>
-    </aside>
-  ), [isOpen, onClose, filteredNavItems, handleOpenSupportModal]);
-
-  const MobileBottomNavigation = useCallback(() => (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-white/40 dark:border-white/10 bg-white/80 dark:bg-slate-900/90 backdrop-blur-xl shadow-lg pb-safe">
-      <div className="flex justify-around items-center h-16">
-        {filteredNavItems
-          .filter(item => item.mobileBottomNav && item.mobileBottomNav(userRole))
-          .slice(0, 5)
-          .map((item) => (
-            <NavItem key={item.id} item={item} variant="mobileBottom" />
-          ))}
-      </div>
-    </nav>
-  ), [filteredNavItems, userRole]);
 
   return (
     <>
-      <MobileOverlay />
-      <DesktopNavigation />
-      <MobileSidebar />
-      <MobileBottomNavigation />
+      {/* Overlay — mobile-only; the persistent lg+ sidebar has nothing to
+          dim behind it. */}
+      <div
+        className={`
+          fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden
+          transition-all duration-300 ease-in-out
+          ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}
+        `}
+        onClick={onClose}
+        aria-hidden={!isOpen}
+      />
+
+      {/* Sidebar — mobile-first: base classes are the off-canvas drawer
+          (fixed, off-screen until `isOpen`, high z-index, overlay shadow).
+          `lg:` classes override into a persistent column: always
+          translated on-screen, fixed to the viewport's left edge, lower
+          z-index (sits under the sticky header instead of above it), no
+          backdrop shadow needed since it's part of the layout, not an
+          overlay. Width switches between the expanded/collapsed constants
+          based on `collapsed` (desktop-only concern, mobile always uses
+          the full-width drawer). */}
+      <aside
+        className={`
+          fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] z-50 flex flex-col
+          bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl
+          border-r border-white/40 dark:border-white/10
+          transform transition-transform duration-300 ease-in-out
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:translate-x-0 lg:z-30 lg:shadow-none lg:max-w-none lg:transition-[width] lg:duration-200
+          ${collapsed ? SIDEBAR_WIDTH_COLLAPSED_CLASS : SIDEBAR_WIDTH_EXPANDED_CLASS}
+        `}
+      >
+        {/* Sidebar header / branding */}
+        <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 text-white p-5 flex-shrink-0">
+          <div className={`flex items-center ${collapsed ? 'lg:justify-center' : 'justify-between'}`}>
+            <div className={`flex items-center gap-3 min-w-0 ${collapsed ? 'lg:gap-0' : ''}`}>
+              <div className="w-9 h-9 bg-white/15 backdrop-blur-sm rounded-lg flex items-center justify-center flex-shrink-0">
+                <Layers2 className="w-5 h-5" />
+              </div>
+              <div className={`min-w-0 ${collapsed ? 'lg:hidden' : ''}`}>
+                <h2 className="font-bold text-base truncate">Navigation</h2>
+                <p className="text-blue-100 text-xs truncate">JEDC Partnership</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className={`p-2 hover:bg-white/10 rounded-lg transition-colors lg:hidden flex-shrink-0 ${collapsed ? 'lg:hidden' : ''}`}
+              aria-label="Close menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Collapse/expand toggle — desktop-only; the mobile drawer has
+            no equivalent (it's already full-width or fully closed). */}
+        <button
+          onClick={onToggleCollapse}
+          className={`hidden lg:flex items-center gap-2 px-5 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/10 flex-shrink-0 ${
+            collapsed ? 'lg:justify-center' : ''
+          }`}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
+          {!collapsed && <span>Collapse</span>}
+        </button>
+
+        {/* Nav items */}
+        <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
+          {filteredNavItems.map((item) => (
+            <NavItem key={item.id} item={item} onClick={handleLinkClick} collapsed={collapsed} />
+          ))}
+        </nav>
+
+        {/* Support box — hidden in the collapsed rail; not enough room to
+            say anything useful at icon-only width. */}
+        <div className={`p-4 border-t border-gray-100 dark:border-white/10 flex-shrink-0 ${collapsed ? 'lg:hidden' : ''}`}>
+          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3">
+            <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-300 mb-1">Need Help?</p>
+            <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-2.5">Contact the support team</p>
+            <button
+              className="w-full px-3 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xs font-semibold rounded-lg hover:from-indigo-700 hover:to-blue-700 transition-all shadow-md"
+              onClick={handleOpenSupportModal}
+            >
+              Get Support
+            </button>
+          </div>
+        </div>
+      </aside>
 
       <InfoModal
         isOpen={isSupportModalOpen}

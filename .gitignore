@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Environment config — was previously tracked in git; see API_GAP_REPORT.md.
+# Kept out of version control going forward, use src/.env.example as a template.
+src/.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

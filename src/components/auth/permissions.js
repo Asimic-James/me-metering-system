@@ -9,10 +9,14 @@
 // disregarded/deleted if a copy of it exists anywhere. Two real bugs found
 // while consolidating are fixed below (see ROLE_PERMISSIONS[INSTALLER]).
 
-// Role definitions
+// Role definitions — values match the real Pharez API's User.role enum
+// exactly (SUPERADMIN/ADMIN/INSTALLER, uppercase). Role strings from the
+// API are used as-is throughout the app now (no case normalization), so
+// these must stay in sync with that enum.
 export const ROLES = Object.freeze({
-  ADMIN: 'admin',
-  INSTALLER: 'installer'
+  SUPERADMIN: 'SUPERADMIN',
+  ADMIN: 'ADMIN',
+  INSTALLER: 'INSTALLER'
 });
 
 // Permission definitions organized by feature
@@ -67,13 +71,6 @@ export const PERMISSIONS = Object.freeze({
     FILES: 'uploads:files'
   },
   
-  // Complaint permissions
-  COMPLAINTS: {
-    CREATE: 'complaints:create',
-    VIEW: 'complaints:view',
-    MANAGE: 'complaints:manage'
-  },
-
   // Payments permissions — added for the Payments/Remita-reconciliation
   // page (/payments): view payment records and Remita status, and the
   // more consequential ability to manually confirm a missed-webhook
@@ -85,55 +82,65 @@ export const PERMISSIONS = Object.freeze({
   }
 });
 
+// Full admin-tier permission set — shared base for ADMIN and SUPERADMIN.
+// SUPERADMIN is a strict superset (see below); keeping one source list
+// here means the two roles can't silently drift apart.
+const ADMIN_TIER_PERMISSIONS = [
+  // Dashboard - Full access
+  PERMISSIONS.DASHBOARD.VIEW,
+  PERMISSIONS.DASHBOARD.VIEW_ADMIN,
+  PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
+
+  // Installations - Full access
+  PERMISSIONS.INSTALLATIONS.CREATE,
+  PERMISSIONS.INSTALLATIONS.VIEW,
+  PERMISSIONS.INSTALLATIONS.VIEW_ALL,
+  PERMISSIONS.INSTALLATIONS.MANAGE,
+  PERMISSIONS.INSTALLATIONS.COMPLETE,
+
+  // Users - Full access (creating/editing ADMIN or SUPERADMIN accounts is
+  // additionally gated to SUPERADMIN directly in UserManagement.jsx, per
+  // the API's documented "Create an Admin user (SUPERADMIN only)" rule —
+  // that's a finer-grained business rule than this permission system
+  // expresses, so it's enforced at the point of use, not here.)
+  PERMISSIONS.USERS.VIEW,
+  PERMISSIONS.USERS.CREATE,
+  PERMISSIONS.USERS.UPDATE,
+  PERMISSIONS.USERS.DELETE,
+  PERMISSIONS.USERS.MANAGE,
+
+  // Reports - Full access
+  PERMISSIONS.REPORTS.VIEW,
+  PERMISSIONS.REPORTS.EXPORT,
+  PERMISSIONS.REPORTS.GENERATE,
+
+  // Schedule - Full access
+  PERMISSIONS.SCHEDULE.VIEW,
+  PERMISSIONS.SCHEDULE.MANAGE,
+
+  // Settings - Full access
+  PERMISSIONS.SETTINGS.VIEW,
+  PERMISSIONS.SETTINGS.MANAGE,
+
+  // Uploads - Full access
+  PERMISSIONS.UPLOADS.EXCEL,
+  PERMISSIONS.UPLOADS.FILES,
+
+  // Payments - Full access
+  PERMISSIONS.PAYMENTS.VIEW,
+  PERMISSIONS.PAYMENTS.MANAGE
+];
+
 // Role-based permissions mapping
 const ROLE_PERMISSIONS = Object.freeze({
-  [ROLES.ADMIN]: new Set([
-    // Dashboard - Full access
-    PERMISSIONS.DASHBOARD.VIEW,
-    PERMISSIONS.DASHBOARD.VIEW_ADMIN,
-    PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
-    
-    // Installations - Full access
-    PERMISSIONS.INSTALLATIONS.CREATE,
-    PERMISSIONS.INSTALLATIONS.VIEW,
-    PERMISSIONS.INSTALLATIONS.VIEW_ALL,
-    PERMISSIONS.INSTALLATIONS.MANAGE,
-    PERMISSIONS.INSTALLATIONS.COMPLETE,
-    
-    // Users - Full access
-    PERMISSIONS.USERS.VIEW,
-    PERMISSIONS.USERS.CREATE,
-    PERMISSIONS.USERS.UPDATE,
-    PERMISSIONS.USERS.DELETE,
-    PERMISSIONS.USERS.MANAGE,
-    
-    // Reports - Full access
-    PERMISSIONS.REPORTS.VIEW,
-    PERMISSIONS.REPORTS.EXPORT,
-    PERMISSIONS.REPORTS.GENERATE,
-    
-    // Schedule - Full access
-    PERMISSIONS.SCHEDULE.VIEW,
-    PERMISSIONS.SCHEDULE.MANAGE,
-    
-    // Settings - Full access
-    PERMISSIONS.SETTINGS.VIEW,
-    PERMISSIONS.SETTINGS.MANAGE,
-    
-    // Uploads - Full access
-    PERMISSIONS.UPLOADS.EXCEL,
-    PERMISSIONS.UPLOADS.FILES,
-    
-    // Complaints - Full access
-    PERMISSIONS.COMPLAINTS.CREATE,
-    PERMISSIONS.COMPLAINTS.VIEW,
-    PERMISSIONS.COMPLAINTS.MANAGE,
+  // SUPERADMIN and ADMIN share the same permission set at this granularity
+  // — the real distinction between them (who can create ADMIN/SUPERADMIN
+  // users, who can manage API keys/system config) is a narrower business
+  // rule enforced directly where it matters (UserManagement.jsx), not a
+  // separate permission tier here.
+  [ROLES.SUPERADMIN]: new Set(ADMIN_TIER_PERMISSIONS),
+  [ROLES.ADMIN]: new Set(ADMIN_TIER_PERMISSIONS),
 
-    // Payments - Full access
-    PERMISSIONS.PAYMENTS.VIEW,
-    PERMISSIONS.PAYMENTS.MANAGE
-  ]),
-  
   [ROLES.INSTALLER]: new Set([
     // Dashboard - Installer view only
     PERMISSIONS.DASHBOARD.VIEW,
@@ -155,10 +162,7 @@ const ROLE_PERMISSIONS = Object.freeze({
     // pattern as above — Navigation.jsx explicitly lists Uploads as
     // accessible to ['admin', 'installer'], but UPLOADS.EXCEL was never
     // in this Set. Added now.
-    PERMISSIONS.UPLOADS.EXCEL,
-    
-    // Complaints - Create only
-    PERMISSIONS.COMPLAINTS.CREATE
+    PERMISSIONS.UPLOADS.EXCEL
   ])
 });
 
@@ -171,7 +175,6 @@ const PAGE_ACCESS = Object.freeze({
   reports: [PERMISSIONS.REPORTS.VIEW],
   uploads: [PERMISSIONS.UPLOADS.EXCEL],
   settings: [PERMISSIONS.SETTINGS.VIEW],
-  complaint: [PERMISSIONS.COMPLAINTS.CREATE],
   // Admin-only by omission from the installer Set above — same pattern
   // already used for users/reports/settings, no special-casing needed.
   payments: [PERMISSIONS.PAYMENTS.VIEW]
@@ -180,28 +183,32 @@ const PAGE_ACCESS = Object.freeze({
 // Permission check with caching
 const permissionCache = new Map();
 
+// ADMIN and SUPERADMIN are both full-access "admin tier" roles for the
+// purposes of the coarse bypass checks below (see ADMIN_TIER_PERMISSIONS).
+const isAdminTier = (userRole) => userRole === ROLES.ADMIN || userRole === ROLES.SUPERADMIN;
+
 /**
  * Check if a role has a specific permission
  */
 export const hasPermission = (userRole, permission) => {
   if (!userRole || !permission) return false;
-  
-  // Admin has all permissions
-  if (userRole === ROLES.ADMIN) return true;
-  
+
+  // Admin/Superadmin have all permissions
+  if (isAdminTier(userRole)) return true;
+
   // Check cache
   const cacheKey = `${userRole}:${permission}`;
   if (permissionCache.has(cacheKey)) {
     return permissionCache.get(cacheKey);
   }
-  
+
   // Check permission
   const rolePermissions = ROLE_PERMISSIONS[userRole];
   const result = rolePermissions ? rolePermissions.has(permission) : false;
-  
+
   // Cache result
   permissionCache.set(cacheKey, result);
-  
+
   return result;
 };
 
@@ -211,10 +218,10 @@ export const hasPermission = (userRole, permission) => {
 export const hasPermissions = (userRole, permissions) => {
   if (!userRole || !Array.isArray(permissions)) return false;
   if (permissions.length === 0) return true;
-  
-  // Admin has all permissions
-  if (userRole === ROLES.ADMIN) return true;
-  
+
+  // Admin/Superadmin have all permissions
+  if (isAdminTier(userRole)) return true;
+
   return permissions.every(permission => hasPermission(userRole, permission));
 };
 
@@ -224,10 +231,10 @@ export const hasPermissions = (userRole, permissions) => {
 export const hasAnyPermission = (userRole, permissions) => {
   if (!userRole || !Array.isArray(permissions)) return false;
   if (permissions.length === 0) return false;
-  
-  // Admin has all permissions
-  if (userRole === ROLES.ADMIN) return true;
-  
+
+  // Admin/Superadmin have all permissions
+  if (isAdminTier(userRole)) return true;
+
   return permissions.some(permission => hasPermission(userRole, permission));
 };
 
@@ -236,13 +243,13 @@ export const hasAnyPermission = (userRole, permissions) => {
  */
 export const canAccessPage = (userRole, pageName) => {
   if (!userRole || !pageName) return false;
-  
-  // Admin can access all pages
-  if (userRole === ROLES.ADMIN) return true;
-  
+
+  // Admin/Superadmin can access all pages
+  if (isAdminTier(userRole)) return true;
+
   const requiredPermissions = PAGE_ACCESS[pageName];
   if (!requiredPermissions) return false;
-  
+
   return hasAnyPermission(userRole, requiredPermissions);
 };
 
@@ -261,6 +268,12 @@ export const getAllPermissionsForRole = (userRole) => {
  */
 export const getRoleMetadata = (role) => {
   const metadata = {
+    [ROLES.SUPERADMIN]: {
+      displayName: 'Super Administrator',
+      description: 'Full system access, including privileged user management',
+      level: 3,
+      color: 'red'
+    },
     [ROLES.ADMIN]: {
       displayName: 'Administrator',
       description: 'Full system access',
@@ -274,7 +287,7 @@ export const getRoleMetadata = (role) => {
       color: 'blue'
     }
   };
-  
+
   return metadata[role] || {};
 };
 
@@ -305,9 +318,6 @@ export const getPermissionDisplayName = (permission) => {
     [PERMISSIONS.SETTINGS.MANAGE]: 'Manage Settings',
     [PERMISSIONS.UPLOADS.EXCEL]: 'Upload Excel Files',
     [PERMISSIONS.UPLOADS.FILES]: 'Upload Files',
-    [PERMISSIONS.COMPLAINTS.CREATE]: 'Create Complaints',
-    [PERMISSIONS.COMPLAINTS.VIEW]: 'View Complaints',
-    [PERMISSIONS.COMPLAINTS.MANAGE]: 'Manage Complaints',
     [PERMISSIONS.PAYMENTS.VIEW]: 'View Payments',
     [PERMISSIONS.PAYMENTS.MANAGE]: 'Manage Payments'
   };
