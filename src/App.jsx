@@ -1,6 +1,6 @@
 // App.jsx - Final optimized version with admin full access
 import { useState, useEffect, useCallback } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './components/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './components/contexts/ThemeContext';
 import { DataRefreshProvider } from './components/contexts/DataRefreshContext';
@@ -72,6 +72,7 @@ function AppContent() {
   const permissions = usePermissions();
   const { isDark } = useTheme();
   const [globalError, setGlobalError] = useState(null);
+  const navigate = useNavigate();
 
   // 3-minute Admin/Super Admin inactivity logout — no-ops entirely for
   // Installer (permissions.isAdmin is false), and for a logged-out user.
@@ -103,13 +104,24 @@ function AppContent() {
       const userData = await jedApi.login(credentials);
       console.log('[App] Login successful:', { role: userData.role });
       login(userData);
+      // Always land on the role-appropriate dashboard after a fresh login.
+      // The browser's current URL can still point at a route left over
+      // from a previous session on this device/tab (e.g. an Admin's
+      // /schedule open before an Installer signs in) — since React Router
+      // doesn't reset location on its own, that stale URL would otherwise
+      // be re-evaluated against the new role's permissions immediately
+      // after login and render Access Denied instead of the dashboard.
+      // /dashboard itself already branches to AdminDashboard/
+      // InstallerDashboard per role, so this one redirect is role-aware
+      // for every role without needing separate landing routes.
+      navigate('/dashboard', { replace: true });
       return userData;
     } catch (error) {
       console.error('[App] Login failed:', error);
       setGlobalError(error.message || 'Failed to log in. Please check your credentials.');
       throw error;
     }
-  }, [login]);
+  }, [login, navigate]);
 
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;

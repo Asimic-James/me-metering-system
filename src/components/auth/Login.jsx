@@ -130,7 +130,7 @@ function Login({ onLogin }) {
     switch (name) {
       case 'phone':
         if (!value.trim()) return 'Phone number is required';
-        if (!VALIDATION.PHONE.test(value)) return 'Enter valid 11-digit phone (e.g., 08012345678)';
+        if (!VALIDATION.PHONE.test(value)) return 'Enter a valid 11-digit phone number';
         return '';
       case 'password':
         if (!value) return 'Password is required';
@@ -310,7 +310,7 @@ function Login({ onLogin }) {
               isTouched={touched.phone}
               isSubmitting={isSubmitting}
               icon={Phone}
-              placeholder="08012345678"
+              placeholder="Enter phone number"
               autoComplete="tel"
               required
               onChange={handleInputChange}
