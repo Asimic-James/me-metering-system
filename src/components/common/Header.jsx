@@ -1,4 +1,4 @@
-import { Power, User, LogOut, ChevronDown, Menu, X, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2, Sun, Moon, Pencil, KeyRound, Save } from 'lucide-react';
+import { Power, User, LogOut, ChevronDown, Menu, X, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2, Sun, Moon, Pencil, KeyRound, Save, Eye, EyeOff } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import JEDApiService from '../services/api';
@@ -138,15 +138,22 @@ const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
 
 const ChangePasswordForm = ({ onCancel, onSaved }) => {
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [visibility, setVisibility] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
 
   const update = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  const toggleVisibility = (field) => setVisibility((prev) => ({ ...prev, [field]: !prev[field] }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
     setFormError(null);
 
+    if (!form.currentPassword || !form.newPassword || !form.confirmPassword) {
+      setFormError('All fields are required');
+      return;
+    }
     if (form.newPassword !== form.confirmPassword) {
       setFormError('New password and confirmation do not match');
       return;
@@ -155,9 +162,16 @@ const ChangePasswordForm = ({ onCancel, onSaved }) => {
       setFormError('New password must be at least 6 characters and include an uppercase letter, a lowercase letter, and a number');
       return;
     }
+    if (form.newPassword === form.currentPassword) {
+      setFormError('New password must be different from your current password');
+      return;
+    }
 
     setSubmitting(true);
     try {
+      // Real PUT /auth/change-password schema is exactly
+      // { currentPassword, newPassword } — confirmPassword is a
+      // client-only check, never sent to the API.
       await JEDApiService.changePassword({
         currentPassword: form.currentPassword,
         newPassword: form.newPassword,
@@ -170,7 +184,33 @@ const ChangePasswordForm = ({ onCancel, onSaved }) => {
     }
   };
 
-  const inputClass = "form-input w-full px-3 py-2 text-sm";
+  const inputClass = "form-input w-full px-3 py-2 pr-10 text-sm";
+
+  const PasswordField = ({ field, label, autoComplete }) => (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <div className="relative">
+        <input
+          type={visibility[field] ? 'text' : 'password'}
+          className={inputClass}
+          value={form[field]}
+          onChange={update(field)}
+          required
+          minLength={field === 'currentPassword' ? undefined : 6}
+          autoComplete={autoComplete}
+        />
+        <button
+          type="button"
+          onClick={() => toggleVisibility(field)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-200"
+          tabIndex={-1}
+          aria-label={visibility[field] ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+        >
+          {visibility[field] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -180,18 +220,9 @@ const ChangePasswordForm = ({ onCancel, onSaved }) => {
           {formError}
         </div>
       )}
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Current Password</label>
-        <input type="password" className={inputClass} value={form.currentPassword} onChange={update('currentPassword')} required />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">New Password</label>
-        <input type="password" className={inputClass} value={form.newPassword} onChange={update('newPassword')} required minLength={6} />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Confirm New Password</label>
-        <input type="password" className={inputClass} value={form.confirmPassword} onChange={update('confirmPassword')} required minLength={6} />
-      </div>
+      <PasswordField field="currentPassword" label="Current Password" autoComplete="current-password" />
+      <PasswordField field="newPassword" label="New Password" autoComplete="new-password" />
+      <PasswordField field="confirmPassword" label="Confirm New Password" autoComplete="new-password" />
       <div className="flex gap-3 pt-2">
         <button type="button" onClick={onCancel} disabled={submitting} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
           Cancel

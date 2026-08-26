@@ -6,7 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
 import JEDApiService from '../services/api';
-import { getStatusBadgeClass, isCompletedStatus, isAwaitingInstallationStatus } from '../../utils/statusBadge';
+import { isCompletedStatus, isAwaitingInstallationStatus } from '../../utils/statusBadge';
+import StatusTabs from '../common/StatusTabs';
+import StatusBadge from '../common/StatusBadge';
 import {
   Wrench,
   Clock,
@@ -39,11 +41,11 @@ function JobRow({ job, onClick }) {
           <p className="font-medium text-gray-900 dark:text-white text-sm truncate">
             {job.custNames || job.applicantName || `Account ${job.accountNumber}`}
           </p>
-          <span
-            className={`inline-flex shrink-0 items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${getStatusBadgeClass(job.status)}`}
-          >
-            {isCompletedStatus(job.status) ? 'Paid & Completed' : job.status || 'pending'}
-          </span>
+          <StatusBadge
+            status={job.status}
+            label={isCompletedStatus(job.status) ? 'Paid & Completed' : job.status || 'pending'}
+            className="shrink-0 text-[11px]"
+          />
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
           Acct: {job.accountNumber} &middot; Meter: {job.meterNo || job.meterNumber || 'N/A'}
@@ -72,11 +74,7 @@ function JobTableRow({ job, onClick }) {
         {job.meterNo || job.meterNumber || 'N/A'}
       </td>
       <td className="px-4 py-3">
-        <span
-          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(job.status)}`}
-        >
-          {isCompletedStatus(job.status) ? 'Paid & Completed' : job.status || 'pending'}
-        </span>
+        <StatusBadge status={job.status} label={isCompletedStatus(job.status) ? 'Paid & Completed' : job.status || 'pending'} />
       </td>
       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
         {formatDateOnly(job.dateRequested)}
@@ -249,38 +247,14 @@ function InstallerDashboard() {
 
       {/* Tabs */}
       <div className="card overflow-hidden">
-        <div className="flex border-b border-gray-200 dark:border-gray-700">
-          <button
-            type="button"
-            onClick={() => setActiveTab('awaiting')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 sm:py-4 text-sm font-medium border-b-2 transition-all duration-150 ${
-              activeTab === 'awaiting'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 active:scale-[0.98]'
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            <span>Awaiting Installation</span>
-            <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded-full">
-              {awaitingJobs.length}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('completed')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 sm:py-4 text-sm font-medium border-b-2 transition-all duration-150 ${
-              activeTab === 'completed'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 active:scale-[0.98]'
-            }`}
-          >
-            <CheckCircle className="w-4 h-4" />
-            <span>Completed</span>
-            <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded-full">
-              {completedJobs.length}
-            </span>
-          </button>
-        </div>
+        <StatusTabs
+          tabs={[
+            { id: 'awaiting', label: 'Awaiting Installation', icon: Clock, count: awaitingJobs.length },
+            { id: 'completed', label: 'Completed', icon: CheckCircle, count: completedJobs.length },
+          ]}
+          activeTab={activeTab}
+          onChange={setActiveTab}
+        />
 
         {/* Search */}
         <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">

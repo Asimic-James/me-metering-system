@@ -9,8 +9,9 @@ import JEDApiService from '../services/api';
 import RequestInfoPanel from './RequestInfoPanel';
 import PaymentTimeline from '../common/PaymentTimeline';
 import GenerateRRRModal from '../common/GenerateRRRModal';
+import StatusBadge from '../common/StatusBadge';
 import { buildRrrPayload } from '../../utils/rrrPayload';
-import { getStatusBadgeClass, isCompletedStatus } from '../../utils/statusBadge';
+import { isCompletedStatus } from '../../utils/statusBadge';
 import {
   ArrowLeft,
   CheckCircle,
@@ -66,6 +67,38 @@ function InstallationDetail() {
   useEffect(() => {
     fetchDetail();
   }, [fetchDetail]);
+
+  // Live-ish background refresh while this specific job is still open
+  // (INITIATED/PAID) — silent (no `loading` spinner, and it never touches
+  // `formData`, so an installer mid-way through the completion form never
+  // gets it clobbered by a background tick). The real API has no
+  // websocket/webhook channel this frontend can subscribe to (see
+  // PROJECT_CONTEXT.md/API_GAP_REPORT.md) — a light poll is the closest
+  // honest approximation of "live" available here. 45s is comfortably
+  // past jedApi's own 30s response cache (so each tick is a real network
+  // call, not a cache hit) without being aggressive. Stops entirely once
+  // the job reaches COMPLETED, and is cleared on unmount/navigation like
+  // any other effect.
+  useEffect(() => {
+    if (!job || isCompletedStatus(job.status)) return undefined;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const response = await JEDApiService.getCustomerRequest(accountNumber);
+        setJob(response?.data || response);
+      } catch (err) {
+        // Silent — a background refresh failing shouldn't surface a
+        // page-level error over data that already loaded successfully.
+        console.error('[InstallationDetail] Background refresh failed:', err);
+      }
+    }, 45000);
+
+    return () => clearInterval(intervalId);
+    // job.status (not the whole `job` object) is the intentional dependency —
+    // restarting this interval on every tick's own setJob() would mean it
+    // never actually waits the full 45s between calls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.status, accountNumber]);
 
   // Built from the already-loaded request — every field POST
   // /external/jed/generate-ref needs is already on the record, so there's
@@ -195,11 +228,11 @@ function InstallationDetail() {
           <h1 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
             Account {job.accountNumber}
           </h1>
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-1 ${getStatusBadgeClass(job.status)}`}
-          >
-            {completed ? 'Paid & Completed' : job.status || 'Pending'}
-          </span>
+          <StatusBadge
+            status={job.status}
+            label={completed ? 'Paid & Completed' : job.status || 'Pending'}
+            className="mt-1"
+          />
         </div>
       </div>
 
@@ -253,6 +286,7 @@ function InstallationDetail() {
                 dateRequested={job.dateRequested}
                 datePaid={job.datePaid}
                 dateCompleted={job.dateCompleted}
+                status={job.status}
               />
             </div>
           )}

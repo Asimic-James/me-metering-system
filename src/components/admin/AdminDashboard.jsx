@@ -5,9 +5,9 @@ import JEDApiService from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrencyNGN } from '../../utils/currency';
 import { formatDateTime } from '../../utils/date';
-import { getStatusBadgeClass } from '../../utils/statusBadge';
 import { buildDailySeries } from '../../utils/trendAggregation';
 import TrendChart from './TrendChart';
+import StatusBadge from '../common/StatusBadge';
 import {
   BarChart,
   Users,
@@ -113,9 +113,7 @@ const RecentInstallations = ({ installations, totalCount, onViewAll, onItemClick
                   {install.custNames || install.applicantName || install.installer?.name || '-'}
                 </p>
               </div>
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(install.status)}`}>
-                {install.status}
-              </span>
+              <StatusBadge status={install.status} />
             </div>
             <div className="flex flex-col gap-2 mt-2">
               <div className="flex justify-between items-center">
@@ -180,9 +178,7 @@ const RecentInstallations = ({ installations, totalCount, onViewAll, onItemClick
                   {install.custNames || install.applicantName || install.installer?.name || '-'}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(install.status)}`}>
-                    {install.status}
-                  </span>
+                  <StatusBadge status={install.status} />
                 </td>
                 <td className="px-4 py-3 text-right font-semibold text-gray-900 dark:text-white text-sm">
                   {formatCurrencyNGN(install.amount)}

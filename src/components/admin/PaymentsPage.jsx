@@ -16,10 +16,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import jedApi from '../services/api';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
-import { getStatusBadgeClass } from '../../utils/statusBadge';
 import { formatCurrencyNGN } from '../../utils/currency';
 import ConfirmPaymentTab from './ConfirmPaymentTab';
 import BulkConfirmPaymentsTab from './BulkConfirmPaymentsTab';
+import StatusBadge from '../common/StatusBadge';
 import {
   CreditCard, RefreshCw, AlertCircle, Loader2, Calendar
 } from 'lucide-react';
@@ -63,14 +63,6 @@ const getAccount = (p) => p?.accountNumber || p?.account_number || 'N/A';
 const getMeterType = (p) => p?.meterType || null;
 const getPaymentStatus = (p) => p?.status || 'UNKNOWN';
 const getPaymentDate = (p) => p?.datePaid || p?.dateCompleted || null;
-
-function StatusBadge({ status }) {
-  return (
-    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(status)}`}>
-      {status}
-    </span>
-  );
-}
 
 // ---- Tab: Payments ----
 function PaymentsTab() {

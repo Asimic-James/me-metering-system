@@ -16,8 +16,9 @@ import {
 } from 'lucide-react';
 import { formatDateTime } from '../../utils/date';
 import { formatCurrencyNGN } from '../../utils/currency';
-import { getStatusBadgeClass, normalizeStatus } from '../../utils/statusBadge';
+import { normalizeStatus } from '../../utils/statusBadge';
 import InfoModal from '../common/InfoModal';
+import StatusBadge from '../common/StatusBadge';
 
 // Export fields — trimmed to only what the real JedCustomerRequest schema
 // actually returns (id, accountNumber, custNames, gsm, email, address,
@@ -440,9 +441,7 @@ function AdminReports() {
                   <td className="px-3 sm:px-4 py-3 text-gray-700 dark:text-gray-300">{r.customerName}</td>
                   <td className="px-3 sm:px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{r.area}</td>
                   <td className="px-3 sm:px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium uppercase ${getStatusBadgeClass(r.status)}`}>
-                      {formatStatusText(r.status)}
-                    </span>
+                    <StatusBadge status={r.status} label={formatStatusText(r.status)} className="uppercase" />
                   </td>
                   <td className="px-3 sm:px-4 py-3 text-right font-semibold text-gray-900 dark:text-white">{formatCurrencyNGN(r.amount)}</td>
                   <td className="px-3 sm:px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
@@ -493,9 +492,7 @@ function AdminReports() {
                   <p className="font-medium text-gray-900 dark:text-white text-sm truncate">{r.customerName}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Account: {r.accountNumber}</p>
                 </div>
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ml-2 uppercase ${getStatusBadgeClass(r.status)}`}>
-                  {formatStatusText(r.status)}
-                </span>
+                <StatusBadge status={r.status} label={formatStatusText(r.status)} className="ml-2 uppercase" />
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs">
