@@ -1,7 +1,9 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import JEDApiService from '../services/api';
 import { usePermissions } from '../auth/usePermissions';
+import { useDataRefresh } from '../contexts/DataRefreshContext';
 import ConfirmationModal from '../common/ConfirmationModal';
+import InfoModal from '../common/InfoModal';
 import {
   Calendar, MapPin, User, Phone, Clock, CheckCircle,
   AlertCircle, FileText, Search, // Navigation and Filter icons removed — confirmed unused
@@ -19,7 +21,8 @@ import {
   ChevronsRight,
   Database,
   Trash2,
-  Loader2
+  Loader2,
+  UserPlus
 } from 'lucide-react';
 import { formatDateOnly } from '../../utils/date';
 
@@ -131,6 +134,7 @@ const TABS = [
 //    is ever visible at a time. Now each instance only fetches once its
 //    tab is actually active.
 const useMeterData = (initialFilters = {}, enabled = true) => {
+  const { refreshSignal } = useDataRefresh();
   const [meters, setMeters] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -202,11 +206,19 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
         || metadata
         || {};
 
-      const totalCount = paginationData.total ?? paginationData.totalCount ?? paginationData.total_items ?? paginationData.count ?? paginationData.total_documents ?? paginationData.totalRecords ?? response?.total ?? response?.count ?? response?.totalCount ?? response?.count ?? response?.data?.total ?? response?.data?.count ?? response?.data?.totalCount ?? response?.data?.count ?? metersData.length;
-      const currentPage = paginationData.page ?? paginationData.currentPage ?? paginationData.current_page ?? paginationData.currentPageNo ?? paginationData.current_page_no ?? response?.page ?? response?.currentPage ?? response?.current_page ?? response?.pageNumber ?? response?.data?.page ?? response?.data?.currentPage ?? response?.data?.current_page ?? page;
-      const limitCount = paginationData.limit ?? paginationData.perPage ?? paginationData.pageSize ?? paginationData.per_page ?? paginationData.per_page_size ?? paginationData.pageSize ?? metadata.perPage ?? metadata.pageSize ?? metadata.per_page ?? metadata.per_page_size ?? response?.limit ?? response?.perPage ?? response?.pageSize ?? pageLimit ?? pagination.limit;
+      // NOTE: the real GET /meters endpoint returns pagination.currentPage as a
+      // STRING ("1", "2", ...) while every other paginated endpoint in this app
+      // (e.g. GET /external/jed/requests) returns it as a number. Every field
+      // extracted here is coerced with Number() so page/limit/total/pages are
+      // always numeric — without this, `pagination.page + 1` in the Next button
+      // handler does string concatenation ("1" + 1 = "11") instead of numeric
+      // addition, silently requesting a wildly out-of-range page that legitimately
+      // comes back empty (looked like a pagination bug, was actually this).
+      const totalCount = Number(paginationData.total ?? paginationData.totalCount ?? paginationData.total_items ?? paginationData.count ?? paginationData.total_documents ?? paginationData.totalRecords ?? response?.total ?? response?.count ?? response?.totalCount ?? response?.count ?? response?.data?.total ?? response?.data?.count ?? response?.data?.totalCount ?? response?.data?.count ?? metersData.length);
+      const currentPage = Number(paginationData.page ?? paginationData.currentPage ?? paginationData.current_page ?? paginationData.currentPageNo ?? paginationData.current_page_no ?? response?.page ?? response?.currentPage ?? response?.current_page ?? response?.pageNumber ?? response?.data?.page ?? response?.data?.currentPage ?? response?.data?.current_page ?? page);
+      const limitCount = Number(paginationData.limit ?? paginationData.perPage ?? paginationData.pageSize ?? paginationData.per_page ?? paginationData.per_page_size ?? paginationData.pageSize ?? metadata.perPage ?? metadata.pageSize ?? metadata.per_page ?? metadata.per_page_size ?? response?.limit ?? response?.perPage ?? response?.pageSize ?? pageLimit ?? pagination.limit);
       const inferredTotal = totalCount || metersData.length;
-      const totalPages = paginationData.pages ?? paginationData.totalPages ?? paginationData.total_pages ?? paginationData.pageCount ?? Math.max(1, Math.ceil(inferredTotal / (limitCount || pagination.limit || 1)), currentPage);
+      const totalPages = Number(paginationData.pages ?? paginationData.totalPages ?? paginationData.total_pages ?? paginationData.pageCount ?? Math.max(1, Math.ceil(inferredTotal / (limitCount || pagination.limit || 1)), currentPage));
 
       console.log('[MeterData] Meters received:', metersData.length, 'items', 'total:', inferredTotal, 'page:', currentPage, 'limit:', limitCount, 'pages:', totalPages);
       
@@ -274,7 +286,9 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
   useEffect(() => {
     if (!enabled) return;
     fetchMeters(1, filters);
-  }, [enabled, fetchMeters, filters]);
+    // refreshSignal: re-fetch after an app-wide data mutation elsewhere
+    // (e.g. a completed installation) — see DataRefreshContext.
+  }, [enabled, fetchMeters, filters, refreshSignal]);
 
   return {
     meters,
@@ -291,6 +305,7 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
 
 // Custom hook for meter statistics
 const useMeterStatistics = () => {
+  const { refreshSignal } = useDataRefresh();
   const [meterStats, setMeterStats] = useState({
     totalMeters: 0,
     available: 0,
@@ -371,7 +386,7 @@ const useMeterStatistics = () => {
 
   useEffect(() => {
     fetchMeterStatistics();
-  }, [fetchMeterStatistics]);
+  }, [fetchMeterStatistics, refreshSignal]);
 
   return {
     meterStats,
@@ -385,7 +400,7 @@ const useMeterStatistics = () => {
 // Stats Cards Component
  
 const StatsCard = ({ title, value, icon: Icon, bgColor, iconColor, loading = false, error = false }) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 hover:shadow-lg transition-shadow duration-200">
+  <div className="card p-4 sm:p-6 hover:shadow-lg transition-shadow duration-200">
     <div className="flex items-center justify-between">
       <div className="min-w-0">
         <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-1 truncate">{title}</p>
@@ -493,8 +508,11 @@ const PhaseTypeBadge = ({ phaseType }) => {
 
 
 // Meter Card Component
-const MeterCard = ({ meter, canDelete, deleting, onDeleteClick }) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 hover:shadow-lg transition-shadow duration-200">
+const MeterCard = ({ meter, canDelete, deleting, onDeleteClick, onAssignClick }) => {
+  const status = getMeterStatus(meter);
+  const canAssign = canDelete && status === 'AVAILABLE';
+  return (
+  <div className="card p-4 sm:p-6 hover:shadow-lg transition-shadow duration-200">
     <div className="flex items-start justify-between mb-3">
       <div className="flex-1 min-w-0">
         <h3 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate mb-1">
@@ -506,7 +524,16 @@ const MeterCard = ({ meter, canDelete, deleting, onDeleteClick }) => (
       </div>
       <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-1">
-          <MeterStatusBadge status={getMeterStatus(meter)} />
+          <MeterStatusBadge status={status} />
+          {canAssign && (
+            <button
+              onClick={() => onAssignClick(meter)}
+              className="p-1 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+              title="Assign this meter to an installer/job"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+            </button>
+          )}
           {canDelete && (
             <button
               onClick={() => onDeleteClick(meter)}
@@ -554,7 +581,8 @@ const MeterCard = ({ meter, canDelete, deleting, onDeleteClick }) => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // Meter Table Component for Query Tab
 const MeterTable = ({ meters, loading }) => {
@@ -568,7 +596,7 @@ const MeterTable = ({ meters, loading }) => {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+    <div className="card overflow-hidden">
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-900/50">
@@ -636,7 +664,7 @@ const MeterTable = ({ meters, loading }) => {
 const MeterLoadingSkeleton = () => (
   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
     {[...Array(6)].map((_, i) => (
-      <div key={i} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 animate-pulse">
+      <div key={i} className="card p-4 sm:p-6 animate-pulse">
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
             <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
@@ -659,7 +687,7 @@ const MeterLoadingSkeleton = () => (
 
 // Empty State Component
 const EmptyState = ({ hasFilters, searchTerm, type = 'meters' }) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8 sm:p-12 text-center">
+  <div className="card p-8 sm:p-12 text-center">
     <AlertCircle className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-2 sm:mb-3" />
     <p className="text-gray-600 dark:text-gray-400 text-sm sm:text-base mb-2">
       {hasFilters
@@ -702,7 +730,7 @@ const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
   }, [filters, onFilterChange]);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
+    <div className="card p-4">
       <div className="space-y-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Search</label>
@@ -713,7 +741,7 @@ const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
               value={localSearchTerm}
               onChange={(e) => setLocalSearchTerm(e.target.value)}
               placeholder="Search by Meter Number, SIM, SGC..."
-              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              className="form-input w-full pl-10 pr-3 py-2 text-sm"
               disabled={loading}
             />
           </div>
@@ -725,7 +753,7 @@ const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
               <select
                 value={filters.status}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                className="form-input w-full px-3 py-2 text-sm"
                 disabled={loading}
               >
                 {METER_STATUS_OPTIONS.map(option => (
@@ -741,7 +769,7 @@ const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
               <select
                 value={filters.phaseType}
                 onChange={(e) => handlePhaseChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                className="form-input w-full px-3 py-2 text-sm"
                 disabled={loading}
               >
                 {PHASE_TYPE_OPTIONS.map(option => (
@@ -802,7 +830,7 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
   }, [filters, onFilterChange]);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
+    <div className="card p-4">
       <div className="space-y-4">
         <div className="flex-1">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Search</label>
@@ -813,7 +841,7 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
               value={localSearchTerm}
               onChange={(e) => setLocalSearchTerm(e.target.value)}
               placeholder="Search by Meter Number, SIM, SGC..."
-              className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              className="form-input w-full pl-10 pr-3 py-2 text-sm"
               disabled={loading}
             />
           </div>
@@ -826,7 +854,7 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
               <select
                 value={filters.status}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                className="form-input w-full px-3 py-2 text-sm"
                 disabled={loading}
               >
                 {METER_STATUS_OPTIONS.map(option => (
@@ -842,7 +870,7 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
               <select
                 value={filters.phaseType}
                 onChange={(e) => handlePhaseChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                className="form-input w-full px-3 py-2 text-sm"
                 disabled={loading}
               >
                 {PHASE_TYPE_OPTIONS.map(option => (
@@ -919,7 +947,7 @@ const Pagination = ({ pagination, onPageChange, loading }) => {
   const endItem = Math.min(page * limit, total);
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 gap-4">
+    <div className="flex flex-col sm:flex-row items-center justify-between card p-4 gap-4">
       <div className="text-sm text-gray-700 dark:text-gray-300 order-2 sm:order-1">
         Showing <span className="font-medium">{startItem}</span> to{' '}
         <span className="font-medium">{endItem}</span> of{' '}
@@ -1000,7 +1028,7 @@ const Pagination = ({ pagination, onPageChange, loading }) => {
           value={limit}
           onChange={(e) => onPageChange(1, parseInt(e.target.value))}
           disabled={loading}
-          className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+          className="form-input px-2 py-1 disabled:opacity-50"
         >
           <option value="10">10</option>
           <option value="25">25</option>
@@ -1019,6 +1047,7 @@ const MeterInventory = ({ meterInventory, canManageSchedule }) => {
   const [meterToDelete, setMeterToDelete] = useState(null);
   const [deletingNumber, setDeletingNumber] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
+  const [meterToAssign, setMeterToAssign] = useState(null);
 
   const handleDelete = useCallback(async () => {
     if (!meterToDelete) return;
@@ -1066,6 +1095,25 @@ const MeterInventory = ({ meterInventory, canManageSchedule }) => {
         confirmText="Delete"
       />
 
+      <InfoModal
+        isOpen={!!meterToAssign}
+        onClose={() => setMeterToAssign(null)}
+        title="Meter Assignment Not Yet Available"
+      >
+        <p>
+          Assigning meter <strong className="font-mono">{meterToAssign?.meterNumber}</strong> to an
+          installer/job isn't possible yet — the real Pharez API has no field or endpoint linking a
+          meter record to an installation request or an installer.
+        </p>
+        <p className="mt-2">
+          This requires a backend change first (an endpoint to reserve a meter against a request,
+          and a field recording that reservation). See <span className="font-mono">API_GAP_REPORT.md</span>{' '}
+          for the exact endpoints needed. Meters are still linked to a completed installation today via
+          the existing <span className="font-mono">meterNo</span>/<span className="font-mono">sealNo</span>{' '}
+          fields submitted at completion time.
+        </p>
+      </InfoModal>
+
       {loading && <MeterLoadingSkeleton />}
 
       {!loading && meters.length > 0 && (
@@ -1078,6 +1126,7 @@ const MeterInventory = ({ meterInventory, canManageSchedule }) => {
                 canDelete={canManageSchedule}
                 deleting={deletingNumber === meter.meterNumber}
                 onDeleteClick={setMeterToDelete}
+                onAssignClick={setMeterToAssign}
               />
             ))}
           </div>
@@ -1309,7 +1358,7 @@ function MeterSchedule() {
         ))}
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-3 sm:p-4">
+      <div className="card p-3 sm:p-4">
         <div className="flex space-x-1 sm:space-x-2 overflow-x-auto">
           {TABS.map((tab) => (
             <button

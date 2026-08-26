@@ -125,10 +125,8 @@ const UserForm = ({ user, onSubmit, onCancel, loading, canAssignPrivilegedRoles 
             type="text"
             value={formData.firstName}
             onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-              errors.firstName 
-                ? 'border-red-300 dark:border-red-600' 
-                : 'border-gray-300 dark:border-gray-600'
+            className={`form-input w-full px-3 py-2 ${
+              errors.firstName ? 'border-red-400 dark:border-red-500 focus:ring-red-500' : ''
             }`}
             placeholder="John"
           />
@@ -146,10 +144,8 @@ const UserForm = ({ user, onSubmit, onCancel, loading, canAssignPrivilegedRoles 
             type="text"
             value={formData.lastName}
             onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-              errors.lastName 
-                ? 'border-red-300 dark:border-red-600' 
-                : 'border-gray-300 dark:border-gray-600'
+            className={`form-input w-full px-3 py-2 ${
+              errors.lastName ? 'border-red-400 dark:border-red-500 focus:ring-red-500' : ''
             }`}
             placeholder="Doe"
           />
@@ -167,10 +163,8 @@ const UserForm = ({ user, onSubmit, onCancel, loading, canAssignPrivilegedRoles 
             type="tel"
             value={formData.phone}
             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-              errors.phone 
-                ? 'border-red-300 dark:border-red-600' 
-                : 'border-gray-300 dark:border-gray-600'
+            className={`form-input w-full px-3 py-2 ${
+              errors.phone ? 'border-red-400 dark:border-red-500 focus:ring-red-500' : ''
             }`}
             placeholder="08012345678"
             maxLength={11}
@@ -189,10 +183,8 @@ const UserForm = ({ user, onSubmit, onCancel, loading, canAssignPrivilegedRoles 
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-              errors.email 
-                ? 'border-red-300 dark:border-red-600' 
-                : 'border-gray-300 dark:border-gray-600'
+            className={`form-input w-full px-3 py-2 ${
+              errors.email ? 'border-red-400 dark:border-red-500 focus:ring-red-500' : ''
             }`}
             placeholder="john@example.com"
           />
@@ -210,7 +202,7 @@ const UserForm = ({ user, onSubmit, onCancel, loading, canAssignPrivilegedRoles 
             value={formData.role}
             onChange={(e) => setFormData({ ...formData, role: e.target.value })}
             disabled={!canAssignPrivilegedRoles && formData.role !== ROLES.INSTALLER && !user}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            className="form-input w-full px-3 py-2 disabled:opacity-50"
           >
             <option value={ROLES.INSTALLER}>Installer</option>
             {canAssignPrivilegedRoles && <option value={ROLES.ADMIN}>Admin</option>}
@@ -232,10 +224,8 @@ const UserForm = ({ user, onSubmit, onCancel, loading, canAssignPrivilegedRoles 
             type="text"
             value={formData.nin}
             onChange={(e) => setFormData({ ...formData, nin: e.target.value })}
-            className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-              errors.nin
-                ? 'border-red-300 dark:border-red-600'
-                : 'border-gray-300 dark:border-gray-600'
+            className={`form-input w-full px-3 py-2 ${
+              errors.nin ? 'border-red-400 dark:border-red-500 focus:ring-red-500' : ''
             }`}
             placeholder="11-digit NIN"
             maxLength={11}
@@ -259,10 +249,8 @@ const UserForm = ({ user, onSubmit, onCancel, loading, canAssignPrivilegedRoles 
                   type={showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className={`w-full px-3 py-2 pr-10 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-                    errors.password
-                      ? 'border-red-300 dark:border-red-600'
-                      : 'border-gray-300 dark:border-gray-600'
+                  className={`form-input w-full px-3 py-2 pr-10 ${
+                    errors.password ? 'border-red-400 dark:border-red-500 focus:ring-red-500' : ''
                   }`}
                   placeholder="At least 6 characters"
                   autoComplete="new-password"
@@ -291,10 +279,8 @@ const UserForm = ({ user, onSubmit, onCancel, loading, canAssignPrivilegedRoles 
                   type={showConfirmPassword ? 'text' : 'password'}
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className={`w-full px-3 py-2 pr-10 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 ${
-                    errors.confirmPassword
-                      ? 'border-red-300 dark:border-red-600'
-                      : 'border-gray-300 dark:border-gray-600'
+                  className={`form-input w-full px-3 py-2 pr-10 ${
+                    errors.confirmPassword ? 'border-red-400 dark:border-red-500 focus:ring-red-500' : ''
                   }`}
                   placeholder="Re-enter password"
                   autoComplete="new-password"
@@ -647,7 +633,7 @@ function UserManagement() {
       {/* User Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -710,14 +696,14 @@ function UserManagement() {
             placeholder="Search by name, email, or phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            className="form-input w-full pl-10 pr-4 py-2"
           />
         </div>
         <div>
           <select
             value={filterRole}
             onChange={(e) => setFilterRole(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+            className="form-input w-full px-3 py-2"
           >
             <option value="all">All Roles</option>
             {permissions.isSuperAdmin && <option value={ROLES.SUPERADMIN}>Super Admin</option>}
@@ -736,7 +722,7 @@ function UserManagement() {
           </div>
         </div>
       ) : filteredUsers.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+        <div className="card p-12 text-center">
           <Users className="w-12 h-12 text-gray-400 dark:text-gray-600 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
             {searchQuery || filterRole !== 'all' ? 'No users found' : 'No users yet'}
@@ -748,7 +734,7 @@ function UserManagement() {
           </p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700">
@@ -772,7 +758,7 @@ function UserManagement() {
                   <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center flex-shrink-0">
                           <span className="text-white font-semibold text-sm">
                             {((user?.firstName || 'U')[0] + (user?.lastName || ''))[0].toUpperCase()}
                           </span>

@@ -13,8 +13,9 @@
 // since there's no room pressure to save there the way there is on a
 // permanently-docked desktop rail.
 import {
-  LayoutDashboard, Database, Wrench, Users, BarChart3,
-  Upload, Settings, X, Layers2, CreditCard, ChevronsLeft, ChevronsRight
+  LayoutDashboard, Database, Users, BarChart3,
+  Upload, Settings, X, Layers2, CreditCard, ChevronsLeft, ChevronsRight,
+  ClipboardList
 } from 'lucide-react';
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
@@ -42,19 +43,19 @@ const NAVIGATION_CONFIG = {
       accessible: () => true,
     },
     {
+      id: 'installations',
+      label: 'Installations',
+      path: '/installations',
+      icon: ClipboardList,
+      description: 'Awaiting installation & completed, assign installers',
+      accessible: (userRole) => isAdminTierRole(userRole),
+    },
+    {
       id: 'schedule',
       label: 'Meter Schedule',
       path: '/schedule',
       icon: Database,
       description: 'View and query meter inventory',
-      accessible: () => true,
-    },
-    {
-      id: 'submit',
-      label: 'Complete Installation',
-      path: '/submit',
-      icon: Wrench,
-      description: 'Look up a paid account and record the install',
       accessible: () => true,
     },
     {
@@ -117,30 +118,30 @@ function NavItem({ item, onClick, collapsed }) {
     <NavLink to={item.path} onClick={onClick} end title={collapsed ? item.label : undefined}>
       {({ isActive }) => (
         <div
-          className={`w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-3.5 rounded-xl transition-all duration-200 ${
+          className={`w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-3.5 rounded-lg transition-colors duration-150 ${
             collapsed ? 'lg:justify-center lg:gap-0 lg:px-2.5' : ''
           } ${
             isActive
-              ? 'bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/20 border border-indigo-200 dark:border-indigo-800 shadow-sm'
+              ? 'bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800'
               : 'hover:bg-gray-50 dark:hover:bg-white/5 border border-transparent hover:border-gray-200 dark:hover:border-white/10'
           }`}
         >
           <div className={`p-2 rounded-lg flex-shrink-0 ${
             isActive
-              ? 'bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-md'
+              ? 'bg-brand-600 text-white'
               : 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400'
           }`}>
             <Icon className="w-4 h-4" />
           </div>
           <div className={`flex-1 text-left min-w-0 ${collapsed ? 'lg:hidden' : ''}`}>
-            <p className={`font-semibold text-sm truncate ${isActive ? 'text-indigo-900 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-200'}`}>
+            <p className={`font-semibold text-sm truncate ${isActive ? 'text-brand-900 dark:text-brand-300' : 'text-gray-800 dark:text-gray-200'}`}>
               {item.label}
             </p>
-            <p className={`text-xs mt-0.5 truncate ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-500'}`}>
+            <p className={`text-xs mt-0.5 truncate ${isActive ? 'text-brand-600 dark:text-brand-400' : 'text-gray-500 dark:text-gray-500'}`}>
               {item.description}
             </p>
           </div>
-          {isActive && <div className={`w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0 ${collapsed ? 'lg:hidden' : ''}`} />}
+          {isActive && <div className={`w-1.5 h-1.5 rounded-full bg-brand-600 flex-shrink-0 ${collapsed ? 'lg:hidden' : ''}`} />}
         </div>
       )}
     </NavLink>
@@ -191,8 +192,8 @@ function Navigation({ userRole, isOpen, onClose, collapsed = false, onToggleColl
       <aside
         className={`
           fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] z-50 flex flex-col
-          bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl
-          border-r border-white/40 dark:border-white/10
+          bg-white dark:bg-gray-900 shadow-lg
+          border-r border-gray-200 dark:border-white/10
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0 lg:z-30 lg:shadow-none lg:max-w-none lg:transition-[width] lg:duration-200
@@ -200,7 +201,7 @@ function Navigation({ userRole, isOpen, onClose, collapsed = false, onToggleColl
         `}
       >
         {/* Sidebar header / branding */}
-        <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 text-white p-5 flex-shrink-0">
+        <div className="bg-brand-600 text-white p-5 flex-shrink-0">
           <div className={`flex items-center ${collapsed ? 'lg:justify-center' : 'justify-between'}`}>
             <div className={`flex items-center gap-3 min-w-0 ${collapsed ? 'lg:gap-0' : ''}`}>
               <div className="w-9 h-9 bg-white/15 backdrop-blur-sm rounded-lg flex items-center justify-center flex-shrink-0">
@@ -245,11 +246,11 @@ function Navigation({ userRole, isOpen, onClose, collapsed = false, onToggleColl
         {/* Support box — hidden in the collapsed rail; not enough room to
             say anything useful at icon-only width. */}
         <div className={`p-4 border-t border-gray-100 dark:border-white/10 flex-shrink-0 ${collapsed ? 'lg:hidden' : ''}`}>
-          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3">
-            <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-300 mb-1">Need Help?</p>
-            <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-2.5">Contact the support team</p>
+          <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg p-3">
+            <p className="text-xs font-semibold text-brand-900 dark:text-brand-300 mb-1">Need Help?</p>
+            <p className="text-xs text-brand-700 dark:text-brand-400 mb-2.5">Contact the support team</p>
             <button
-              className="w-full px-3 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xs font-semibold rounded-lg hover:from-indigo-700 hover:to-blue-700 transition-all shadow-md"
+              className="w-full px-3 py-2 bg-brand-600 text-white text-xs font-semibold rounded-lg hover:bg-brand-700 transition-colors"
               onClick={handleOpenSupportModal}
             >
               Get Support

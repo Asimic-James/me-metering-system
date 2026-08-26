@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataRefresh } from '../contexts/DataRefreshContext';
 import { PERMISSIONS, hasPermission } from '../auth/permissions';
 import JEDApiService from '../services/api';
 import { 
@@ -46,6 +47,7 @@ const formatStatusText = (status) => normalizeStatus(status).replace(/_/g, ' ');
 
 function AdminReports() {
   const { user } = useAuth();
+  const { refreshSignal } = useDataRefresh();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -118,7 +120,10 @@ function AdminReports() {
     };
 
     if (hasPermission(user?.role, PERMISSIONS.REPORTS.VIEW)) load();
-  }, [user, pagination.currentPage, pagination.limit]);
+    // refreshSignal: re-run after an app-wide data mutation elsewhere (e.g.
+    // a bulk payment import) so newly-paid/completed requests show up here
+    // without the user needing to manually reload — see DataRefreshContext.
+  }, [user, pagination.currentPage, pagination.limit, refreshSignal]);
 
     const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -245,7 +250,7 @@ function AdminReports() {
     return { baseFields, rawEntries };
   }, [selectedRecord]);
 
-  const inputClass = "w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all";
+  const inputClass = "form-input w-full px-4 py-2.5 text-sm";
 
   if (!user || !hasPermission(user.role, PERMISSIONS.REPORTS.VIEW)) {
     return (
@@ -292,7 +297,7 @@ function AdminReports() {
           { label: 'Avg. Transaction', value: formatCurrencyNGN(stats.avgTicket) },
           { label: 'Total Records', value: pagination.totalCount || rows.length },
         ].map(({ label, value }) => (
-          <div key={label} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-5 border border-gray-100 dark:border-gray-700">
+          <div key={label} className="card p-4 sm:p-5">
             <h4 className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-medium">{label}</h4>
             <p className="text-xl sm:text-2xl font-bold mt-2 text-gray-900 dark:text-white">{value}</p>
           </div>
@@ -300,7 +305,7 @@ function AdminReports() {
       </div>
 
       {/* Filters Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <div className="card overflow-hidden">
         {/* Mobile Toggle */}
         <button
           onClick={() => setShowFilters(!showFilters)}
@@ -367,7 +372,7 @@ function AdminReports() {
       </div>
 
       {/* Pagination */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 p-4">
+      <div className="card p-4">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
             Page <strong className="text-gray-900 dark:text-white">{pagination.currentPage}</strong> of <strong className="text-gray-900 dark:text-white">{pagination.totalPages}</strong>{' '}
@@ -384,7 +389,7 @@ function AdminReports() {
             <select
               value={pagination.currentPage}
               onChange={(e) => setPagination(p => ({ ...p, currentPage: parseInt(e.target.value) }))}
-              className="px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-xs sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              className="form-input px-2 sm:px-3 py-2 text-xs sm:text-sm"
             >
               {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(p => (
                 <option key={p} value={p}>Page {p}</option>
@@ -402,7 +407,7 @@ function AdminReports() {
       </div>
 
       {/* Desktop Table */}
-      <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 overflow-x-auto">
+      <div className="hidden md:block card overflow-x-auto">
         <table className="w-full min-w-[1000px] text-xs sm:text-sm">
           <thead>
             <tr className="text-left text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/60 border-b border-gray-200 dark:border-gray-700">
@@ -466,23 +471,23 @@ function AdminReports() {
       {/* Mobile Cards */}
       <div className="md:hidden space-y-3">
         {loading ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center border border-gray-100 dark:border-gray-700">
+          <div className="card p-8 text-center">
             <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-600" />
             <p className="text-sm text-gray-500 dark:text-gray-400">Loading reports...</p>
           </div>
         ) : error ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center border border-gray-100 dark:border-gray-700">
+          <div className="card p-8 text-center">
             <AlertCircle className="w-6 h-6 mx-auto mb-2 text-red-500" />
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center border border-gray-100 dark:border-gray-700">
+          <div className="card p-8 text-center">
             <FileText className="w-8 h-8 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
             <p className="text-sm text-gray-500 dark:text-gray-400">No records found</p>
           </div>
         ) : (
           filtered.map(r => (
-            <div key={r.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 p-4 space-y-3">
+            <div key={r.id} className="card p-4 space-y-3">
               <div className="flex justify-between items-start">
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-900 dark:text-white text-sm truncate">{r.customerName}</p>

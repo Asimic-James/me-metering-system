@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './components/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './components/contexts/ThemeContext';
+import { DataRefreshProvider } from './components/contexts/DataRefreshContext';
 import Login from './components/auth/Login';
 import Header from './components/common/Header';
 import Footer from './components/common/Footer';
@@ -15,6 +16,7 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 import { Loader2, Lock } from 'lucide-react';
 import ErrorNotification from './components/common/ErrorNotification';
 import { usePermissions } from './components/auth/usePermissions';
+import { useAdminIdleTimeout } from './hooks/useAdminIdleTimeout';
 import jedApi from './components/services/api';
 
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
@@ -23,11 +25,15 @@ const InstallerDashboard = lazy(() => import('./components/dashboard/InstallerDa
 // Click-through detail view reached from either dashboard's rows — added this project.
 const InstallationDetail = lazy(() => import('./components/installation/InstallationDetail'));
 const AdminReports = lazy(() => import('./components/admin/AdminReports'));
-// Payments & Remita reconciliation — activates previously dormant api.js
-// methods (getPayments, checkRemitaStatusByRRR/OrderId,
-// confirmPaymentManually, verifyPaymentByRRR) plus getCustomerRequestsByStatus.
+// Admin/Super Admin installation workflow (Awaiting Installation / Completed
+// + selection-based assignment, currently blocked pending backend support —
+// see API_GAP_REPORT.md). Replaces Payments' old "Requests by Status" tab.
+const AdminInstallations = lazy(() => import('./components/admin/AdminInstallations'));
+// Simple operational Payments experience: real payment records, Confirm
+// Payment, and bulk-import. The old diagnostic "RRR / Order Lookup" and
+// "Webhook Replay" tabs were removed — see PaymentsPage.jsx's own header
+// comment and API_GAP_REPORT.md.
 const PaymentsPage = lazy(() => import('./components/admin/PaymentsPage'));
-const InstallationForm = lazy(() => import('./components/installation/InstallationForm'));
 // Meter Schedule is the single entry point for meter inventory (list,
 // filter, search, export, statistics, delete via the real GET /meters,
 // GET /meters/statistics, DELETE /meters/{meterNumber} endpoints) — a
@@ -35,7 +41,6 @@ const InstallationForm = lazy(() => import('./components/installation/Installati
 const MeterSchedule = lazy(() => import('./components/schedule/MeterSchedule'));
 const UserManagement = lazy(() => import('./components/admin/UserManagement'));
 const ExcelUpload = lazy(() => import('./components/uploads/ExcelUpload'));
-const SubmissionPage = lazy(() => import('./components/SubmissionPage'));
 // Tabbed Settings page (Meter Types + API Keys) — replaces direct
 // MeterTypeSettings mount so both settings resources live under one route.
 const SettingsPage = lazy(() => import('./components/settings/SettingsPage'));
@@ -67,7 +72,11 @@ function AppContent() {
   const permissions = usePermissions();
   const { isDark } = useTheme();
   const [globalError, setGlobalError] = useState(null);
-  
+
+  // 3-minute Admin/Super Admin inactivity logout — no-ops entirely for
+  // Installer (permissions.isAdmin is false), and for a logged-out user.
+  useAdminIdleTimeout(isAuthenticated && permissions.isAdmin);
+
   // Validate API integration on mount
   useEffect(() => {
     jedApi.validateApiIntegration();
@@ -150,22 +159,29 @@ function AppContent() {
                   path="/dashboard"
                   element={permissions.isAdmin ? <AdminDashboard /> : <InstallerDashboard />}
                 />
-                {/* Click-through detail view from either dashboard's rows.
-                    Pending jobs show the complete-installation form here;
-                    completed jobs show a read-only "Paid & Completed" summary. */}
+                {/* Admin/Super Admin installation workflow: PAID ("Awaiting
+                    Installation") and COMPLETED, in one place — supersedes
+                    Payments' old "Requests by Status" tab. Installers use
+                    their own /dashboard (InstallerDashboard) for the same
+                    two-status view, scoped to what the shared queue
+                    endpoint returns for their role. */}
+                <Route
+                  path="/installations"
+                  element={permissions.isAdmin ? <AdminInstallations /> : <AccessDenied />}
+                />
+                {/* Click-through detail view from either dashboard's rows —
+                    the completion action lives here directly (a PAID job
+                    shows the complete-installation form; a COMPLETED job
+                    shows a read-only summary). There is no separate
+                    "Complete Installation" tab/route anymore — completing
+                    a job always happens from within the job you opened
+                    from Awaiting Installation, not a standalone
+                    account-number lookup form. */}
                 <Route
                   path="/installations/:accountNumber"
                   element={
                     permissions.isAdmin || permissions.canViewInstallations
                       ? <InstallationDetail />
-                      : <AccessDenied />
-                  }
-                />
-                <Route
-                  path="/submit"
-                  element={
-                    permissions.isAdmin || permissions.canCreateInstallation
-                      ? <SubmissionPage />
                       : <AccessDenied />
                   }
                 />
@@ -191,9 +207,11 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Router>
-          <AppContent />
-        </Router>
+        <DataRefreshProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </DataRefreshProvider>
       </AuthProvider>
     </ThemeProvider>
   );

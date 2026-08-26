@@ -48,7 +48,7 @@ function SettingsPage() {
       </div>
 
       {tabs.length > 1 && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-3 sm:p-4">
+        <div className="card p-3 sm:p-4">
           <div className="flex space-x-1 sm:space-x-2 overflow-x-auto">
             {tabs.map((tab) => {
               const Icon = tab.icon;

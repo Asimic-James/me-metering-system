@@ -326,7 +326,7 @@ const MeterTypeSettings = () => {
           placeholder="Search meter types..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+          className="form-input w-full pl-10 pr-4 py-2"
         />
       </div>
 
@@ -342,7 +342,7 @@ const MeterTypeSettings = () => {
 
       {/* Create Form */}
       {isCreating && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+        <div className="card p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Create New Meter Type
           </h3>
@@ -357,7 +357,7 @@ const MeterTypeSettings = () => {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., Single Phase, Three Phase"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  className="form-input w-full px-3 py-2"
                 />
               </div>
               <div>
@@ -375,7 +375,7 @@ const MeterTypeSettings = () => {
                     placeholder="50000"
                     min="1"
                     step="1"
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                    className="form-input w-full pl-10 pr-3 py-2"
                   />
                 </div>
               </div>
@@ -389,7 +389,7 @@ const MeterTypeSettings = () => {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Optional description"
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                className="form-input w-full px-3 py-2"
               />
             </div>
             <div className="flex gap-2 justify-end">
@@ -423,7 +423,7 @@ const MeterTypeSettings = () => {
       )}
 
       {/* Meter Types List */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700">
@@ -462,7 +462,7 @@ const MeterTypeSettings = () => {
                             type="text"
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                            className="form-input w-full px-3 py-1 text-sm"
                           />
                         </td>
                         <td className="px-6 py-4">
@@ -472,7 +472,7 @@ const MeterTypeSettings = () => {
                             onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                             min="1"
                             step="1"
-                            className="w-full px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                            className="form-input w-full px-3 py-1 text-sm"
                           />
                         </td>
                         <td className="px-6 py-4">
@@ -480,7 +480,7 @@ const MeterTypeSettings = () => {
                             type="text"
                             value={formData.description}
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                            className="w-full px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                            className="form-input w-full px-3 py-1 text-sm"
                           />
                         </td>
                         <td className="px-6 py-4">

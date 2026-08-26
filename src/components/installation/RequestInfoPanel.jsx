@@ -1,8 +1,8 @@
 // src/components/installation/RequestInfoPanel.jsx
-// Shared, presentation-only panel for displaying a customer request's
-// details. Extracted out of InstallationDetail.jsx so it can be reused
-// inline inside InstallationForm.jsx (lookup-by-account-number) without
-// duplicating markup, and so both surfaces always render identically.
+// Presentation-only panel for displaying a customer request's details,
+// used by InstallationDetail.jsx (the single installation-workflow view —
+// the standalone "Complete Installation" account-lookup tab that used to
+// also reuse this panel was removed; see PROJECT_CONTEXT.md).
 import {
   User,
   Hash,
@@ -34,21 +34,12 @@ function InfoRow({ icon: Icon, label, value }) {
  *   applicantName, phone, phoneNumber, address, accountNumber, meterNo,
  *   meterNumber, sealNo, paymentReference, paymentRef, submittedAt)
  * @param {string} [props.title] - optional section heading
- * @param {boolean} [props.compact] - tighter padding when embedded inline
- *   inside another card (e.g. InstallationForm's lookup panel) instead of
- *   as its own full-width page section
  */
-function RequestInfoPanel({ data, title = 'Request Details', compact = false }) {
+function RequestInfoPanel({ data, title = 'Request Details' }) {
   if (!data) return null;
 
   return (
-    <div
-      className={
-        compact
-          ? 'bg-gray-50 dark:bg-gray-900/40 rounded-lg p-4 border border-gray-200 dark:border-gray-700'
-          : 'bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6'
-      }
-    >
+    <div className="card p-4 sm:p-6">
       {title && (
         <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
           {title}

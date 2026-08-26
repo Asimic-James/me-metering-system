@@ -94,7 +94,7 @@ function ConfirmPaymentTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 space-y-4">
+      <div className="card p-4 sm:p-6 space-y-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Confirm Payment</h2>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
@@ -110,7 +110,7 @@ function ConfirmPaymentTab() {
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value)}
               placeholder="Enter account number"
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              className="form-input w-full px-4 py-2"
             />
           </div>
 
@@ -180,7 +180,7 @@ function ConfirmPaymentTab() {
                   value={rrrQuery}
                   onChange={(e) => { setRrrQuery(e.target.value); setRrrResult(null); setRrrError(null); }}
                   placeholder="e.g., 120799142825"
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                  className="form-input w-full pl-9 pr-3 py-2 text-sm font-mono"
                 />
               </div>
               <button

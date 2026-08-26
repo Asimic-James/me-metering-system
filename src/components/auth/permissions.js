@@ -28,9 +28,12 @@ export const PERMISSIONS = Object.freeze({
     VIEW_INSTALLER: 'dashboard:view_installer'
   },
   
-  // Installation permissions
+  // Installation permissions. There is no CREATE here — customer requests
+  // are created by JED server-to-server (POST /external/jed/generate-ref),
+  // never by this app; the standalone "Complete Installation" tab that
+  // used to model a CREATE-shaped permission was removed (completion now
+  // only happens from within a job opened from Awaiting Installation).
   INSTALLATIONS: {
-    CREATE: 'installations:create',
     VIEW: 'installations:view',
     VIEW_ALL: 'installations:view_all',
     MANAGE: 'installations:manage',
@@ -92,7 +95,6 @@ const ADMIN_TIER_PERMISSIONS = [
   PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
 
   // Installations - Full access
-  PERMISSIONS.INSTALLATIONS.CREATE,
   PERMISSIONS.INSTALLATIONS.VIEW,
   PERMISSIONS.INSTALLATIONS.VIEW_ALL,
   PERMISSIONS.INSTALLATIONS.MANAGE,
@@ -147,7 +149,6 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.DASHBOARD.VIEW_INSTALLER,
     
     // Installations - Limited access
-    PERMISSIONS.INSTALLATIONS.CREATE,
     PERMISSIONS.INSTALLATIONS.VIEW,
     PERMISSIONS.INSTALLATIONS.COMPLETE,
 
@@ -170,7 +171,6 @@ const ROLE_PERMISSIONS = Object.freeze({
 const PAGE_ACCESS = Object.freeze({
   dashboard: [PERMISSIONS.DASHBOARD.VIEW],
   schedule: [PERMISSIONS.SCHEDULE.VIEW],
-  submit: [PERMISSIONS.INSTALLATIONS.CREATE],
   users: [PERMISSIONS.USERS.VIEW],
   reports: [PERMISSIONS.REPORTS.VIEW],
   uploads: [PERMISSIONS.UPLOADS.EXCEL],
@@ -299,7 +299,6 @@ export const getPermissionDisplayName = (permission) => {
     [PERMISSIONS.DASHBOARD.VIEW]: 'View Dashboard',
     [PERMISSIONS.DASHBOARD.VIEW_ADMIN]: 'View Admin Dashboard',
     [PERMISSIONS.DASHBOARD.VIEW_INSTALLER]: 'View Installer Dashboard',
-    [PERMISSIONS.INSTALLATIONS.CREATE]: 'Create Installation',
     [PERMISSIONS.INSTALLATIONS.VIEW]: 'View Installations',
     [PERMISSIONS.INSTALLATIONS.VIEW_ALL]: 'View All Installations',
     [PERMISSIONS.INSTALLATIONS.MANAGE]: 'Manage Installations',

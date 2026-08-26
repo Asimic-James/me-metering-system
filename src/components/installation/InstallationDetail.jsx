@@ -203,17 +203,23 @@ function InstallationDetail() {
         </div>
       </div>
 
-      {/* Customer / request info — shared panel, also used inline in InstallationForm */}
+      {/* Customer / request info — shared panel */}
       <RequestInfoPanel data={job} />
 
-          {/* Generate payment reference (RRR) action for pending requests */}
-          {!completed && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6">
+          {/* Generate payment reference (RRR) — only offered when this
+              request genuinely has none yet (an INITIATED record that
+              somehow never got one). "Regenerate Reference" was removed:
+              once a reference exists, the customer may already have paid
+              against it, so silently replacing it here was a real risk —
+              see the completed-installation workflow instead for the
+              normal path once a request has actually been paid. */}
+          {!completed && !(job.rrr || job.paymentReference || job.paymentRef) && (
+            <div className="card p-4 sm:p-6">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Payment Reference</h3>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Reference</p>
-                  <p className="font-mono text-sm text-gray-900 dark:text-white">{job.rrr || job.paymentReference || job.paymentRef || 'No reference generated'}</p>
+                  <p className="font-mono text-sm text-gray-900 dark:text-white">No reference generated</p>
                 </div>
 
                 <div className="flex-shrink-0">
@@ -222,17 +228,26 @@ function InstallationDetail() {
                     onClick={openGenerateModal}
                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
                   >
-                    {job.rrr || job.paymentReference ? 'Regenerate Reference' : 'Generate Reference'}
+                    Generate Reference
                   </button>
                 </div>
               </div>
             </div>
           )}
 
+          {/* Reference already exists — shown read-only, no regenerate action. */}
+          {!completed && (job.rrr || job.paymentReference || job.paymentRef) && (
+            <div className="card p-4 sm:p-6">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Payment Reference</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Reference</p>
+              <p className="font-mono text-sm text-gray-900 dark:text-white">{job.rrr || job.paymentReference || job.paymentRef}</p>
+            </div>
+          )}
+
           {/* Payment timeline — built only from real timestamps the API
               returns on this request (dateRequested/datePaid/dateCompleted) */}
           {(job.dateRequested || job.datePaid || job.dateCompleted) && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6">
+            <div className="card p-4 sm:p-6">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Payment Timeline</h3>
               <PaymentTimeline
                 dateRequested={job.dateRequested}
@@ -259,7 +274,7 @@ function InstallationDetail() {
         </div>
       ) : (
         // ---- Pending: the actual "execute and mark complete" form ----
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6">
+        <div className="card p-4 sm:p-6">
           <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Complete Installation
           </h2>
@@ -282,8 +297,8 @@ function InstallationDetail() {
                 onChange={handleChange}
                 maxLength={13}
                 disabled={submitting}
-                className={`w-full px-3 py-2.5 border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:bg-gray-900 ${
-                  formErrors.actualMeterNo ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                className={`form-input w-full px-3 py-2.5 font-mono text-sm ${
+                  formErrors.actualMeterNo ? 'border-red-400 dark:border-red-500 focus:ring-red-500' : ''
                 }`}
                 placeholder="13 digits"
               />
@@ -305,8 +320,8 @@ function InstallationDetail() {
                 value={formData.actualSealNo}
                 onChange={handleChange}
                 disabled={submitting}
-                className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 dark:bg-gray-900 ${
-                  formErrors.actualSealNo ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                className={`form-input w-full px-3 py-2.5 text-sm ${
+                  formErrors.actualSealNo ? 'border-red-400 dark:border-red-500 focus:ring-red-500' : ''
                 }`}
               />
               {formErrors.actualSealNo && (
@@ -324,7 +339,7 @@ function InstallationDetail() {
                 onChange={handleChange}
                 disabled={submitting}
                 rows={3}
-                className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-900 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                className="form-input w-full px-3 py-2.5 text-sm"
                 placeholder="Any observations from the field..."
               />
             </div>

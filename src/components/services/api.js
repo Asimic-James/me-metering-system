@@ -15,6 +15,40 @@ if (typeof window !== 'undefined' && window.DEBUG_API) {
   console.log('[API] Debug mode enabled - all API calls will be logged');
 }
 
+// Field names that must never reach the console, even in dev-only verbose
+// logging — a real (now-fixed) bug had the raw JSON request body logged
+// unconditionally, which meant a login attempt's plaintext password was
+// printed to devtools on every call. Checked case-insensitively against
+// every key in the body, however deeply nested.
+const SENSITIVE_BODY_KEYS = new Set([
+  'password', 'oldpassword', 'newpassword', 'currentpassword', 'confirmpassword',
+  'token', 'apikey', 'secret',
+]);
+
+function redactSensitiveFields(value) {
+  if (Array.isArray(value)) return value.map(redactSensitiveFields);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [key, val] of Object.entries(value)) {
+      out[key] = SENSITIVE_BODY_KEYS.has(key.toLowerCase()) ? '[REDACTED]' : redactSensitiveFields(val);
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * Best-effort redaction for logging a request body that may or may not be
+ * JSON (FormData bodies are passed through as a plain string tag instead).
+ */
+function redactBodyForLogging(rawBody) {
+  try {
+    return JSON.stringify(redactSensitiveFields(JSON.parse(rawBody)));
+  } catch {
+    return '[non-JSON body]';
+  }
+}
+
 class JEDApiService {
   constructor() {
     this.config = API_CONFIG;
@@ -54,10 +88,12 @@ class JEDApiService {
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[API] Request to ${url} (attempt ${attempt + 1})`, { 
-          method: requestOptions.method,
-          cache: useCache ? 'enabled' : 'disabled'
-        });
+        if (this.config.FEATURES.LOG_REQUESTS) {
+          console.log(`[API] Request to ${url} (attempt ${attempt + 1})`, {
+            method: requestOptions.method,
+            cache: useCache ? 'enabled' : 'disabled'
+          });
+        }
 
         // Build headers with FormData support
         const isFormData = typeof FormData !== 'undefined' && requestOptions.body instanceof FormData;
@@ -67,11 +103,13 @@ class JEDApiService {
           delete headers['Content-Type'];
         }
 
-        // Log request body (truncate for large payloads)
-        if (requestOptions.body && typeof requestOptions.body === 'string') {
-          const bodyTrunc = requestOptions.body.length > 200 ? 
-            requestOptions.body.substring(0, 200) + '...' : requestOptions.body;
-          console.log('[API] Request body:', bodyTrunc);
+        // Dev-only, and always redacted — this used to log the raw request
+        // body unconditionally (including a login attempt's plaintext
+        // password) in every environment. See SENSITIVE_BODY_KEYS above.
+        if (this.config.FEATURES.LOG_REQUESTS && requestOptions.body && typeof requestOptions.body === 'string') {
+          const redacted = redactBodyForLogging(requestOptions.body);
+          const bodyTrunc = redacted.length > 200 ? redacted.substring(0, 200) + '...' : redacted;
+          console.log('[API] Request body (redacted):', bodyTrunc);
         }
 
         // Add timeout support
@@ -136,7 +174,9 @@ class JEDApiService {
 
   // Handle API response with consistent error formatting
   async handleResponse(response) {
-    console.log(`[API] Response: ${response.status} ${response.statusText}`);
+    if (this.config.FEATURES.LOG_REQUESTS) {
+      console.log(`[API] Response: ${response.status} ${response.statusText}`);
+    }
 
     const contentType = response.headers.get('content-type') || '';
     let data;
@@ -166,7 +206,12 @@ class JEDApiService {
       this.handleErrorResponse(response, data);
     }
 
-    console.log('[API] Success Response:', data);
+    // Redacted for the same reason as the request-body log above — a
+    // successful response can legitimately contain a secret (e.g. a
+    // freshly-created API key's one-time plaintext value).
+    if (this.config.FEATURES.LOG_REQUESTS) {
+      console.log('[API] Success Response:', redactSensitiveFields(data));
+    }
     return data;
   }
 
@@ -568,64 +613,6 @@ class JEDApiService {
     return await this.makeRequest(url, { method: 'GET', apiKey });
   }
 
-  /**
-   * NEW: Check a Remita transaction's status by orderId.
-   * GET /external/jed/status/order/{orderId} (admin-locked per API docs).
-   */
-  async checkRemitaStatusByOrderId(orderId) {
-    if (!orderId) throw new Error('checkRemitaStatusByOrderId requires an orderId');
-    const apiKey = this.getActiveApiKey();
-    if (!apiKey) {
-      throw new Error(
-        `${this.errorTypes.AUTH}:No active API key configured — set one in Settings → API Keys ` +
-        `before checking Remita status (this endpoint authenticates via a real API key, not your login session).`
-      );
-    }
-    const url = this.buildUrl(this.endpoints.JED.CHECK_STATUS_BY_ORDER_ID(orderId));
-    return await this.makeRequest(url, { method: 'GET', apiKey });
-  }
-
-  /**
-   * NEW: Verify payment status by RRR via the public webhooks group.
-   * GET /webhooks/verify-payment/{rrr} — no auth required per API docs.
-   * Useful as a lighter-weight check than checkRemitaStatusByRRR when the
-   * caller isn't necessarily an admin (e.g. an installer double-checking
-   * before starting a job).
-   */
-  async verifyPaymentByRRR(rrr) {
-    if (!rrr) throw new Error('verifyPaymentByRRR requires an rrr');
-    const url = this.utils.buildUrl(this.endpoints.WEBHOOKS.VERIFY_PAYMENT(rrr), 'WEBHOOKS');
-    return await this.makeRequest(url, { method: 'GET' });
-  }
-
-  /**
-   * Manually submit/replay a Remita payment notification — the same
-   * payload shape and endpoint Remita's own webhook uses
-   * (POST /webhooks/remita/payment, array of notification objects).
-   *
-   * Two legitimate uses:
-   * 1. Admin recovery — Remita's automatic webhook never fired for a
-   *    transaction, so an admin manually resubmits the notification with
-   *    details pulled from Remita's own dashboard/logs.
-   * 2. Possible fix path for confirm-payment failures — POST
-   *    /confirm-payment with only an accountNumber can fail with
-   *    "Failed to send installation details to JED" if the backend needs
-   *    richer transaction detail to complete the handoff. This endpoint's
-   *    full payload (rrr, amount, payer info, dates, etc.) may succeed
-   *    where the minimal call doesn't.
-   *
-   * @param {Object|Object[]} notifications - one notification object or
-   *   an array of them; always sent as an array per the documented schema.
-   */
-  async submitRemitaWebhook(notifications) {
-    const payload = Array.isArray(notifications) ? notifications : [notifications];
-    const url = this.utils.buildUrl(this.endpoints.WEBHOOKS.REMITA_PAYMENT, 'WEBHOOKS');
-    return await this.makeRequest(url, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  }
-
   async getCustomerRequestsByStatus(status) {
     const url = this.buildUrl(this.endpoints.JED.GET_REQUESTS_BY_STATUS(status));
     return await this.makeRequest(url, {
@@ -1018,6 +1005,29 @@ class JEDApiService {
   clearTokens() {
     localStorage.removeItem('jedAuthToken');
     localStorage.removeItem('jedUser');
+    this.clearSessionDeadline();
+  }
+
+  // ==================== ADMIN IDLE-TIMEOUT DEADLINE ====================
+  // Absolute epoch-ms timestamp for the 3-minute Admin/Super Admin
+  // inactivity timeout (see src/hooks/useAdminIdleTimeout.js). Stored in
+  // localStorage alongside jedAuthToken/jedUser (this app's existing
+  // session-persistence mechanism — see AuthContext.jsx) specifically so
+  // a page refresh resumes the same countdown instead of granting a fresh
+  // 3 minutes; cleared by clearTokens() so it can never outlive the
+  // session it belongs to.
+  getSessionDeadline() {
+    const raw = localStorage.getItem('jedAdminSessionDeadline');
+    const value = raw ? Number(raw) : null;
+    return Number.isFinite(value) ? value : null;
+  }
+
+  setSessionDeadline(timestampMs) {
+    localStorage.setItem('jedAdminSessionDeadline', String(timestampMs));
+  }
+
+  clearSessionDeadline() {
+    localStorage.removeItem('jedAdminSessionDeadline');
   }
 
   getStoredUser() {
@@ -1088,7 +1098,6 @@ class JEDApiService {
       baseUrl: !!this.config.BASE_URL,
       authEndpoint: !!this.config.ENDPOINT_GROUPS.AUTH,
       jedEndpoint: !!this.config.ENDPOINT_GROUPS.JED,
-      webhooksEndpoint: !!this.config.ENDPOINT_GROUPS.WEBHOOKS,
       hasTokenStorage: !!localStorage,
       methods: {
         login: typeof this.login === 'function',
@@ -1097,7 +1106,6 @@ class JEDApiService {
         getDashboardStats: typeof this.getDashboardStats === 'function',
         getMyInstallations: typeof this.getMyInstallations === 'function',
         getPayments: typeof this.getPayments === 'function',
-        verifyPaymentByRRR: typeof this.verifyPaymentByRRR === 'function',
         resetPassword: typeof this.resetPassword === 'function',
       }
     };

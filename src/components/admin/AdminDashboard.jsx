@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataRefresh } from '../contexts/DataRefreshContext';
 import JEDApiService from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrencyNGN } from '../../utils/currency';
@@ -41,12 +42,12 @@ const TREND_RANGE_PRESETS = [
 // Stat Card Component - Mobile First
  
 const StatCard = ({ title, value, icon: Icon, change, changeType = 'neutral' }) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6 flex flex-col transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 dark:hover:shadow-black/30">
+  <div className="card p-4 sm:p-6 flex flex-col transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 dark:hover:shadow-black/30">
     <div className="flex items-center justify-between mb-3">
       <div className={`p-2 rounded-lg ${
         changeType === 'positive' ? 'bg-green-100 text-green-600' :
         changeType === 'negative' ? 'bg-red-100 text-red-600' :
-        'bg-blue-100 text-blue-600'
+        'bg-brand-100 text-brand-600'
       }`}>
         <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
       </div>
@@ -80,8 +81,8 @@ const getInstallDate = (install) => {
 
 // Recent Installations Table - Mobile Optimized
 const RecentInstallations = ({ installations, totalCount, onViewAll, onItemClick }) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
-    <div className="flex items-center justify-between p-4 sm:p-6 border-b">
+  <div className="card overflow-hidden">
+    <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
       <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Recent Installations</h3>
       <button 
         onClick={onViewAll} 
@@ -145,7 +146,7 @@ const RecentInstallations = ({ installations, totalCount, onViewAll, onItemClick
     <div className="hidden sm:block overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="text-left text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border-b text-xs sm:text-sm">
+          <tr className="text-left text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 text-xs sm:text-sm">
             <th className="px-4 py-3 font-semibold">Account</th>
             <th className="px-4 py-3 font-semibold">Customer</th>
             <th className="px-4 py-3 font-semibold">Status</th>
@@ -221,8 +222,8 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-auto">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b px-4 sm:px-6 py-4 flex items-center justify-between">
+      <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-auto">
+        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Export Data</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:text-gray-400">
             <X className="w-5 h-5" />
@@ -237,7 +238,7 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
             <select
               value={exportType}
               onChange={(e) => setExportType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="form-input w-full px-3 py-2"
             >
               <option value="all">All Data</option>
               <option value="pending">Pending Requests</option>
@@ -258,7 +259,7 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="form-input w-full px-3 py-2"
             >
               <option value="excel">Excel (.xlsx)</option>
               <option value="csv">CSV (.csv)</option>
@@ -298,46 +299,54 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
 };
 
 // Quick Actions Component - Mobile First
-// FIX: labels previously used `text-gray-900 dark:text-white`, but the
-// gradient button backgrounds (from-blue-50/green-50/purple-50) are NOT
-// dark-mode aware — they stay light even in dark mode. That meant in dark
-// mode the text flipped to white while sitting on a light pastel
-// background, producing low-contrast, hard-to-read buttons (confirmed in
-// the reported screenshot). Text is now always dark (`text-gray-900`),
-// matching the backgrounds' actual (always-light) appearance.
+// Each action has its own accent colour (tinted surface + border + icon
+// chip) so the three are distinguishable at a glance — a previous pass
+// flattened these to one neutral surface for every action, which was
+// dark-mode-safe but visually undifferentiated. A pass before *that* used
+// full pastel gradients, which weren't dark-mode aware (stayed light in
+// dark mode while label text flipped to white — low-contrast, hard to
+// read) — this restores per-action colour without reintroducing gradients.
 // AdminDashboard (the only caller) is admin-tier only, so these actions
 // are always shown — no per-button role gating needed here.
+const QUICK_ACTION_STYLES = {
+  brand: {
+    surface: 'bg-brand-50 dark:bg-brand-900/20 border-brand-200 dark:border-brand-800/60 hover:bg-brand-100 dark:hover:bg-brand-900/30',
+    iconWrap: 'bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400',
+  },
+  emerald: {
+    surface: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/30',
+    iconWrap: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400',
+  },
+  violet: {
+    surface: 'bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-800/60 hover:bg-violet-100 dark:hover:bg-violet-900/30',
+    iconWrap: 'bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400',
+  },
+};
+
+const QuickActionButton = ({ icon: Icon, label, onClick, accent, span2 = false }) => {
+  const styles = QUICK_ACTION_STYLES[accent];
+  return (
+    <button
+      onClick={onClick}
+      className={`p-3 sm:p-4 rounded-lg transition-colors border ${styles.surface} ${span2 ? 'col-span-2' : ''}`}
+    >
+      <span className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center mx-auto mb-2 ${styles.iconWrap}`}>
+        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+      </span>
+      <span className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white block text-center">
+        {label}
+      </span>
+    </button>
+  );
+};
+
 const QuickActions = ({ onManageUsers, onGoToSettings, onExportData }) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6">
+  <div className="card p-4 sm:p-6">
     <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h3>
     <div className="grid grid-cols-2 gap-3">
-      <button
-        onClick={onManageUsers}
-        className="p-3 sm:p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg hover:shadow-md transition-all border border-blue-200"
-      >
-        <Users className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600 mb-2 mx-auto" />
-        <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
-          Manage Users
-        </span>
-      </button>
-      <button
-        onClick={onExportData}
-        className="p-3 sm:p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg hover:shadow-md transition-all border border-green-200"
-      >
-        <Download className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 mb-2 mx-auto" />
-        <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
-          Export Data
-        </span>
-      </button>
-      <button
-        onClick={onGoToSettings}
-        className="p-3 sm:p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg hover:shadow-md transition-all border border-purple-200 col-span-2"
-      >
-        <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 mb-2 mx-auto" />
-        <span className="text-xs sm:text-sm font-medium text-gray-900 block text-center">
-          System Settings
-        </span>
-      </button>
+      <QuickActionButton icon={Users} label="Manage Users" onClick={onManageUsers} accent="brand" />
+      <QuickActionButton icon={Download} label="Export Data" onClick={onExportData} accent="emerald" />
+      <QuickActionButton icon={Settings} label="System Settings" onClick={onGoToSettings} accent="violet" span2 />
     </div>
   </div>
 );
@@ -350,6 +359,7 @@ const QuickActions = ({ onManageUsers, onGoToSettings, onExportData }) => (
 function AdminDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refreshSignal } = useDataRefresh();
   const [stats, setStats] = useState({
     pendingRequests: 0,
     completedRequests: 0,
@@ -428,7 +438,10 @@ function AdminDashboard() {
     }
     // NOTE: `recentInstallations` intentionally excluded — it's set inside
     // this effect, so including it as a dependency caused a refetch loop.
-  }, [user]);
+    // `refreshSignal` re-runs this on any app-wide data mutation (e.g. a
+    // bulk payment import) so stats/recent installations stay live without
+    // a full page reload — see DataRefreshContext.
+  }, [user, refreshSignal]);
 
   // Revenue / Installations trend — admin-only, mirrors the KPI section's
   // admin-vs-installer scoping above. Fetches real payment records for the
@@ -475,7 +488,7 @@ function AdminDashboard() {
     if (user) {
       fetchTrendData(trendDays);
     }
-  }, [user, trendDays, fetchTrendData]);
+  }, [user, trendDays, fetchTrendData, refreshSignal]);
 
   const handleExportData = async (exportType, format) => {
     try {

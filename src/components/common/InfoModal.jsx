@@ -9,7 +9,7 @@ const InfoModal = ({ isOpen, onClose, title, children }) => {
       onClick={onClose}
     >
       <div 
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-md w-full"
+        className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-2xl max-w-md w-full"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6">

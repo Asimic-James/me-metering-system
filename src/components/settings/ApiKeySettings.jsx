@@ -411,7 +411,7 @@ const ApiKeySettings = () => {
           placeholder="Search API keys..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+          className="form-input w-full pl-10 pr-4 py-2"
         />
       </div>
 
@@ -438,8 +438,8 @@ const ApiKeySettings = () => {
       {/* Usage modal */}
       {usageModal.open && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-auto">
-            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b dark:border-gray-700 px-4 sm:px-6 py-4 flex items-center justify-between">
+          <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -511,7 +511,7 @@ const ApiKeySettings = () => {
 
       {/* Create Form */}
       {isCreating && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+        <div className="card p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Create New API Key</h3>
           <div className="space-y-4">
             <div>
@@ -521,7 +521,7 @@ const ApiKeySettings = () => {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="e.g., Mobile App Integration"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                className="form-input w-full px-3 py-2"
               />
             </div>
             <div>
@@ -531,7 +531,7 @@ const ApiKeySettings = () => {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Optional description of what this key is used for"
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                className="form-input w-full px-3 py-2"
               />
             </div>
             <div className="flex gap-2 justify-end">
@@ -560,7 +560,7 @@ const ApiKeySettings = () => {
 
       {/* Keys List — mobile card / desktop table, matching the app's
           established mobile-first pattern */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <div className="card overflow-hidden">
         {/* Mobile cards */}
         <div className="sm:hidden divide-y divide-gray-200 dark:divide-gray-700">
           {filteredKeys.length === 0 ? (

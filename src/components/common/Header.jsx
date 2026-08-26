@@ -9,10 +9,10 @@ import { getRoleMetadata } from '../auth/permissions';
 
 // Header-specific constants
 const HEADER_STYLES = {
-  gradient: 'bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500',
+  headerBg: 'bg-brand-600',
   mobile: {
     menuButton: 'lg:hidden p-2 -ml-2 hover:bg-white/10 rounded-lg transition-colors',
-    avatar: 'w-9 h-9 bg-gradient-to-br from-cyan-400 to-indigo-500',
+    avatar: 'w-9 h-9 bg-brand-500',
     title: 'text-base font-bold truncate',
     subtitle: 'text-blue-100 text-xs'
   },
@@ -85,7 +85,7 @@ const EditProfileForm = ({ profileData, onCancel, onSaved }) => {
     }
   };
 
-  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent";
+  const inputClass = "form-input w-full px-3 py-2 text-sm";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -170,7 +170,7 @@ const ChangePasswordForm = ({ onCancel, onSaved }) => {
     }
   };
 
-  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent";
+  const inputClass = "form-input w-full px-3 py-2 text-sm";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -238,8 +238,8 @@ const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVer
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-        <div className="p-4 sm:p-6 border-b flex items-center justify-between">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">{titles[mode]}</h2>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
             <X className="w-5 h-5" />
@@ -292,7 +292,7 @@ const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVer
               )}
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center font-bold text-white text-2xl shadow-lg">
+                  <div className="w-16 h-16 bg-brand-600 rounded-full flex items-center justify-center font-bold text-white text-2xl">
                     {getUserInitials(profileData)}
                   </div>
                   <div>
@@ -403,7 +403,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   const UserInfo = useCallback(() => (
     <div className="px-4 py-3 border-b border-gray-100">
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center font-bold text-white text-lg shadow-md">
+        <div className="w-12 h-12 bg-brand-600 rounded-full flex items-center justify-center font-bold text-white text-lg">
           {getUserInitials(user)}
         </div>
         <div className="flex-1 min-w-0">
@@ -463,54 +463,56 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
 
   const { isDark, toggleTheme } = useTheme();
 
+  // A real <button> handles Enter/Space activation natively — no manual
+  // keydown handler needed (see UserAvatar below for why this used to
+  // need one).
   const handleThemeToggleClick = useCallback((e) => {
     e.stopPropagation();
     toggleTheme();
   }, [toggleTheme]);
 
-  const handleThemeToggleKeyDown = useCallback((e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleTheme();
-    }
-  }, [toggleTheme]);
-
+  // Two real, sibling <button>s — not a `role="button"` span nested
+  // inside the avatar's own <button>. Nesting interactive elements is an
+  // ARIA/HTML violation (also confused accessibility-tree tooling into
+  // reporting two "Toggle Theme" matches for one actual control) even
+  // though it happened to still work for a plain mouse click.
   const UserAvatar = useCallback(() => (
-    <button
-      onClick={handleDropdownToggle}
-      className="flex items-center gap-1.5 sm:gap-2 bg-white/10 hover:bg-white/20 rounded-lg sm:pl-1 sm:pr-4 sm:py-2 p-1.5 transition-all duration-200 hover:shadow-lg"
-      aria-expanded={showDropdown}
-      aria-haspopup="true"
-    >
-      <span
-        role="button"
-        tabIndex={0}
+    <div className="flex items-center gap-1.5 sm:gap-2 bg-white/10 hover:bg-white/20 rounded-lg sm:pr-1 p-1 transition-colors">
+      <button
+        type="button"
         onClick={handleThemeToggleClick}
-        onKeyDown={handleThemeToggleKeyDown}
         className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
         aria-label="Toggle Theme"
       >
         {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-100" />}
-      </span>
+      </button>
 
       <div className="w-px h-5 bg-white/20 hidden sm:block" />
 
-      <div className={`${HEADER_STYLES.mobile.avatar} ${HEADER_STYLES.desktop.avatar} rounded-full flex items-center justify-center font-semibold text-sm shadow-md`}>
-        {getUserInitials(user)}
-      </div>
-      <div className="text-left hidden md:block">
-        <p className="text-sm font-semibold leading-tight">{user.name}</p>
-        <p className="text-xs text-blue-200 leading-tight">{getRoleMetadata(user.role).displayName || user.role}</p>
-      </div>
+      <button
+        type="button"
+        onClick={handleDropdownToggle}
+        className="flex items-center gap-1.5 sm:gap-2 rounded-lg sm:pl-1 sm:pr-3 sm:py-1.5 p-1.5 hover:bg-white/10 transition-colors"
+        aria-expanded={showDropdown}
+        aria-haspopup="true"
+        aria-label="User menu"
+      >
+        <div className={`${HEADER_STYLES.mobile.avatar} ${HEADER_STYLES.desktop.avatar} rounded-full flex items-center justify-center font-semibold text-sm`}>
+          {getUserInitials(user)}
+        </div>
+        <div className="text-left hidden md:block">
+          <p className="text-sm font-semibold leading-tight">{user.name}</p>
+          <p className="text-xs text-blue-200 leading-tight">{getRoleMetadata(user.role).displayName || user.role}</p>
+        </div>
 
-      <ChevronDown
-        className={`w-4 h-4 transition-transform duration-200 hidden sm:block ${
-          showDropdown ? 'rotate-180' : ''
-        }`}
-      />
-    </button>
-  ), [user, showDropdown, handleDropdownToggle, isDark, handleThemeToggleClick, handleThemeToggleKeyDown]);
+        <ChevronDown
+          className={`w-4 h-4 transition-transform duration-200 hidden sm:block ${
+            showDropdown ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+    </div>
+  ), [user, showDropdown, handleDropdownToggle, isDark, handleThemeToggleClick]);
 
   const DropdownContent = useCallback(() =>
     showDropdown ? (
@@ -533,7 +535,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   , [showDropdown, handleLogout]);
 
   return (
-    <header className={`${HEADER_STYLES.gradient} text-white shadow-xl sticky top-0 z-40 border-b border-white/10`}>
+    <header className={`${HEADER_STYLES.headerBg} text-white shadow-sm sticky top-0 z-40 border-b border-white/10`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
           <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0 mr-2 sm:mr-4">

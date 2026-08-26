@@ -46,7 +46,6 @@ export function usePermissions() {
     canViewInstallerDashboard: hasPermission(userRole, PERMISSIONS.DASHBOARD.VIEW_INSTALLER),
     
     // Installation permissions
-    canCreateInstallation: hasPermission(userRole, PERMISSIONS.INSTALLATIONS.CREATE),
     canViewInstallations: hasPermission(userRole, PERMISSIONS.INSTALLATIONS.VIEW),
     canViewAllInstallations: isAdmin || hasPermission(userRole, PERMISSIONS.INSTALLATIONS.VIEW_ALL),
     canManageInstallations: isAdmin || hasPermission(userRole, PERMISSIONS.INSTALLATIONS.MANAGE),

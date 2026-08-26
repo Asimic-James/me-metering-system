@@ -45,11 +45,6 @@ export const API_CONFIG = {
     USERS: '', // User endpoints are at the root level
     SETTINGS: '',  // Empty prefix for root-level settings endpoints
     UPLOADS: '/uploads',
-    // Root-level webhook group. Distinct from /external/jed/remita/webhook —
-    // this is the live Remita webhook receiver per the API docs (no auth
-    // required). The frontend never POSTs here directly (Remita calls it
-    // server-to-server); only the GET verify-payment endpoint is FE-usable.
-    WEBHOOKS: '/webhooks',
     // Root-level API key management group. All endpoints require auth
     // (locked in the API docs) — Bearer token is already attached
     // automatically by buildHeaders(), no special handling needed.
@@ -117,7 +112,6 @@ export const ENDPOINTS = {
     GENERATE_REF: '/generate-ref',
     CONFIRM_PAYMENT: '/confirm-payment',
     COMPLETE_INSTALLATION: '/complete-installation',
-    REMITA_WEBHOOK: '/remita/webhook',
     // Admin fallback — manually confirm a payment by RRR if the Remita
     // webhook was missed.
     CONFIRM_PAYMENT_MANUAL: (rrr) => `/confirm-payment/manual/${rrr}`,
@@ -138,25 +132,16 @@ export const ENDPOINTS = {
     GET_REQUESTS_BY_DATE_RANGE: (startDate, endDate) =>
       `/requests?startDate=${startDate}&endDate=${endDate}`,
 
-    // Payments & Remita status checks — confirmed real endpoints.
-    // GET_PAYMENTS uses bearerAuth; CHECK_STATUS_BY_RRR/ORDER_ID require
-    // ApiKeyAuth (a real X-API-Key, not the user's JWT — see the "active
-    // API key" mechanism in ApiKeySettings.jsx / buildHeaders below).
+    // Payment status check by RRR — confirmed real endpoint, used by
+    // ConfirmPaymentTab.jsx's optional RRR lookup. Requires ApiKeyAuth (a
+    // real X-API-Key, not the user's JWT — see the "active API key"
+    // mechanism in ApiKeySettings.jsx / buildHeaders below). The
+    // order-ID variant and the /webhooks/* group (verify-payment,
+    // manual webhook replay) were removed along with the standalone
+    // "RRR / Order Lookup" and "Webhook Replay" diagnostic tabs they
+    // exclusively supported — see API_GAP_REPORT.md.
     GET_PAYMENTS: '/payments',
     CHECK_STATUS_BY_RRR: (rrr) => `/status/rrr/${rrr}`,
-    CHECK_STATUS_BY_ORDER_ID: (orderId) => `/status/order/${orderId}`,
-  },
-
-  // ==================== WEBHOOKS ENDPOINTS (root-level, no auth) ====================
-  WEBHOOKS: {
-    // Documented as "server-to-server only" (Remita calls this
-    // automatically per the merchant dashboard config), but the admin UI
-    // now also calls this directly as a manual replay/recovery tool —
-    // see JEDApiService.submitRemitaWebhook(). Accepts an array of
-    // payment notification objects; see ReplayWebhookTab.jsx for the
-    // full documented payload schema.
-    REMITA_PAYMENT: '/remita/payment',
-    VERIFY_PAYMENT: (rrr) => `/verify-payment/${rrr}`, // FE-usable: check payment status by RRR
   },
 
   // ==================== API KEYS ENDPOINTS (root-level, auth required) ====================

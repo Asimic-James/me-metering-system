@@ -1,0 +1,138 @@
+# CodeBaseAudit.md
+
+An audit of the actual jedc-meter-management repository as it exists today, not a generic template. Every finding below was verified by reading the file(s) in question or by a repo-wide search — none are speculative. Severity: **CRITICAL / HIGH / MEDIUM / LOW**.
+
+## Architecture Assessment
+
+**Current architecture:** a frontend-only React SPA with no backend in-repo, a hand-rolled `fetch` client as the sole API boundary, React Context for the three genuinely cross-cutting concerns (auth, theme, cross-page refresh), and otherwise local component state. See `Architecture.md` for the full breakdown.
+
+**Strengths:**
+- The API layer is genuinely centralized — every network call goes through `jedApi`, making it realistic to audit "does this app call any invented endpoint" (it doesn't, as of this writing — see `API_GAP_REPORT.md`).
+- Role gating is consistent: every protected route and nav item goes through `usePermissions()`, not a re-derived `user.role === 'X'` check. No instance of a bypassed or duplicated permission check was found.
+- The team has a demonstrated discipline of *removing* dead/duplicate features rather than layering new ones on top (see the several consolidation passes documented in `API_GAP_REPORT.md` and `PROJECT_CONTEXT.md` — Requests-by-Status → Installations page, RRR/Order Lookup + Webhook Replay removal, Complete Installation tab removal). This is unusual and worth preserving as a working norm.
+- `DataRefreshContext` is a pragmatic, low-ceremony solution to cross-page staleness that doesn't require adopting a query-cache library.
+
+**Weaknesses:**
+- **No test suite at all** (see "Testing" below) — every one of the consolidation passes above was validated by manual/scripted browser testing in the moment, not by a regression suite. The next change to any of these areas has no automated safety net beyond lint + build.
+- Several large, multi-responsibility files (see "Large components" below) make targeted changes riskier than they need to be, purely because of file size and mixed concerns.
+- Response-shape normalization is duplicated ad hoc per-file rather than centralized (see "Repeated API logic" below), so the same defensive-fallback logic has to be kept in sync in multiple places.
+
+**Coupling / separation of concerns:** generally healthy — `services/` never imports a component, components never call `fetch` directly, and `permissions.js`/`usePermissions.jsx` cleanly separate the permission *model* from its *consumption*. The main coupling smell is presentational logic and data-fetching logic living in the same file for the larger pages (acceptable at this app's size, but a decision to watch as any single page grows further).
+
+## Code Quality
+
+### Dead code
+
+| Finding | Location | Severity |
+|---|---|---|
+| `useNavigation.js` hook (and its `PAGE_NAMES` export) is entirely unused — zero imports anywhere in the app. The app navigates via `react-router-dom` directly, not this hook. | `src/hooks/useNavigation.js` | LOW |
+| `canAccessPage()` is exported from `permissions.js`, bound as `permissions.canAccessPage` in `usePermissions.jsx`, but never called anywhere. `PAGE_ACCESS` (the map it reads) is therefore also effectively unused outside its own definition. | `src/components/auth/permissions.js`, `usePermissions.jsx` | LOW |
+| `getPermissionDisplayName()` is exported but has zero call sites — there's no permission-matrix/role-management UI in this app that would render it. | `src/components/auth/permissions.js` | LOW |
+| Three generated lint-output files are committed to the repo root (`lint_json.json` — 417 KB, `lint_results.txt`, `lint_results_utf8.txt`), dated well before the current work and clearly a one-off local artifact, not build output anything depends on. | repo root | LOW |
+
+None of these affect runtime behavior; they're safe to remove independently whenever someone wants to, but weren't in scope for the specific feature-removal passes already completed (which only removed code *exclusively* tied to the feature being removed).
+
+### Duplicate / repeated logic
+
+| Finding | Location | Severity |
+|---|---|---|
+| The same "unwrap a list out of an inconsistently-shaped response" logic is hand-written 3+ times with slightly different variable names (`Array.isArray(x) ? x : (x?.data ?? [])`), plus a separate, more elaborate bespoke version in `PaymentsPage.jsx` (`unwrapPaymentsPayload`, ~10 fallback branches) and an even more elaborate one in `MeterSchedule.jsx`'s `useMeterData` (~15 fallback branches covering `data.data`, `data.results`, `data.items`, `data.records`, pagination-field aliasing, etc.). A single shared `utils/unwrapListResponse(response)` (with an optional list of extra field-name aliases) would consolidate all of these and reduce the risk of one call site's fallback list silently drifting out of sync with another's. | `InstallerDashboard.jsx`, `AdminInstallations.jsx`, `PaymentsPage.jsx`, `MeterSchedule.jsx` | MEDIUM |
+| Status→badge-color mapping is already centralized (`src/utils/statusBadge.js`) and consistently reused — called out here as a **positive** counter-example to the finding above, showing the pattern this app should extend to response-unwrapping too. | n/a | — |
+
+### Large / complex components
+
+Line counts (verified via `wc -l`), largest first:
+
+| File | Lines | Note |
+|---|---|---|
+| `src/components/schedule/MeterSchedule.jsx` | 1381 | Two custom hooks (`useMeterData`, `useMeterStatistics`) + ~10 sub-components (cards, tables, filters, pagination, empty/loading states) + the page shell, all in one file. Functions correctly, but any change here has to be understood against the whole file — there's no natural seam to review just "the pagination component" in isolation. |
+| `src/components/services/api.js` | 1078 | Expected size for "every real API call in one class" — appropriately large given its role, not flagged as a quality problem on its own, but see "Repeated API logic" above for a concrete extraction opportunity. |
+| `src/components/admin/UserManagement.jsx` | 896 | CRUD table + create/edit modal + role-assignment logic + password-reset flow in one file. |
+| `src/components/settings/ApiKeySettings.jsx` | 717 | Full key lifecycle (create/list/deactivate/usage) plus the defensive id/name/prefix coercion helpers, in one file. |
+| `src/components/admin/AdminDashboard.jsx` | 710 | Stat cards + trend charts + recent-installations table + quick actions + export modal, in one file. |
+| `src/components/common/Header.jsx` | 595 | Top bar + user-menu dropdown + theme toggle + profile-edit modal + password-change flow + phone/email re-verification modal trigger, in one file. |
+
+None of these are "broken" — they were all read start-to-finish during this audit and are internally consistent — but `MeterSchedule.jsx` and `Header.jsx` in particular mix enough unrelated concerns (inventory CRUD vs. query/search vs. statistics; navigation chrome vs. profile management vs. theming) that splitting each into 2-3 files would meaningfully reduce the blast radius of a future change. Not urgent; worth doing opportunistically the next time either file needs a substantial edit anyway.
+
+### Hardcoded values
+
+- Meter number validation (`/^\d{13}$/`) is defined once, in `InstallationDetail.jsx` (a second copy in the now-deleted `InstallationForm.jsx` was removed along with that file this pass — worth checking `MeterSchedule.jsx`'s bulk-upload path doesn't quietly reintroduce a third copy if a client-side pre-validation step is ever added there).
+- Currency formatting is centralized (`utils/currency.js`, NGN-only) — a positive example, not a finding.
+- The idle-timeout duration (`3 * 60 * 1000`) and its check/throttle intervals are named constants in one file (`useAdminIdleTimeout.js`) — correctly not duplicated.
+
+### Inconsistent patterns
+
+- The same default export from `api.js` is imported under two different local names across the codebase — `jedApi` in some files, `JEDApiService` in others (both refer to the identical singleton instance, not the class). Purely cosmetic, but grep-ing for "every API call site" requires knowing both aliases. LOW priority; a mechanical rename to one convention would be a safe, zero-risk cleanup.
+
+## API Integration
+
+- **Structure:** one service class, one config file — see `Architecture.md`. Consistent across every endpoint group.
+- **Error handling:** centralized and reasonably thorough (`handleErrorResponse`/`enhanceError` in `api.js`) — typed, prefixed error strings; per-field validation messages surfaced when the API returns them; HTML-error-page detection (catches CORS/proxy misconfiguration masquerading as a JSON error). No finding here beyond what's already noted in "Repeated API logic."
+- **Authentication:** Bearer JWT by default, real `X-API-Key` for the two endpoints that need it, correctly not conflated (a JWT is never sent where an API key is required, or vice versa).
+- **Request handling:** retry/backoff and per-endpoint timeout policy are centralized and applied uniformly.
+- **Response normalization:** see "Repeated API logic" above — the one structural gap in an otherwise consistent layer.
+- **Loading states:** every page implements its own `loading`/`error` `useState` pair rather than a shared hook (e.g. `useApiRequest()`). Functionally fine at current scale; would be worth extracting if a fourth or fifth page starts repeating the same three-state (`idle`/`loading`/`error`) pattern verbatim.
+- **Mutation handling:** no optimistic updates anywhere (every mutation waits for the real response before updating UI) — a deliberately conservative, correctness-favoring choice given this app handles payment/installation state.
+- **Data refresh/invalidation:** `DataRefreshContext`'s `refreshSignal` is the one cross-page invalidation mechanism, and it's used consistently by every page that needs to react to another page's mutation (Dashboard, Reports, Installer Dashboard, Meter Schedule, Payments, Installations). No page was found that *should* subscribe to it but doesn't.
+
+## State Management
+
+- **Global:** `AuthContext` (session), `ThemeContext` (light/dark), `DataRefreshContext` (refresh signal). No overlap or competing source of truth between them.
+- **Local:** everything else — form state, tab state, per-page fetched lists. Appropriately scoped; no evidence of local state that should have been lifted or vice versa.
+- **Derived state:** computed inline via `useMemo` where it matters (e.g. `MeterSchedule`'s stats cards, `AdminInstallations`'s filtered/searched job lists) — no unnecessary derived-state duplication found.
+- **Persisted state:** `localStorage` keys in active use: `jedAuthToken`, `jedUser`, `jedActiveApiKey`, `jedActiveApiKeyName`, `jedAdminSessionDeadline`, `jedSidebarCollapsed`, `theme`. Each has a single, clear owner (`api.js` for the first four, `App.jsx`/`ThemeContext.jsx` for the last two) — no evidence of two different pieces of code writing the same key with different assumptions.
+- **Potential stale-state problems:** `jedApi`'s in-memory response cache (30s TTL) is per-browser-tab and cleared on most mutations (`clearCache()`), but a handful of GET-only flows rely on the TTL expiring naturally rather than an explicit clear. In practice this is masked by `DataRefreshContext` forcing a fresh fetch after any mutation that matters — no concrete instance of a user-visible staleness bug was found, but it's worth knowing the two mechanisms (cache TTL vs. refresh signal) exist somewhat independently rather than being unified.
+
+## Routing
+
+- **Protected routes:** every route beyond `/` is gated; verified each of the 10 routes in `App.jsx` individually against `permissions.*`.
+- **Role restrictions:** consistent — admin-tier-only routes (`/installations`, `/users`, `/reports`, `/payments`, `/settings`) all use the identical `permissions.isAdmin ? <X/> : <AccessDenied/>` shape.
+- **Duplicate routes:** none found. (Historically there were duplicates — a standalone "Meters" page, a "Requests by Status" tab, a "Complete Installation" tab — all since removed; see `API_GAP_REPORT.md`/`PROJECT_CONTEXT.md` for that history.)
+- **Dead routes:** none found as of this audit — the `/submit` route was removed in the same pass that removed the "Complete Installation" tab, along with its nav item and lazy import.
+- **Navigation consistency:** one nav config (`Navigation.jsx`'s `NAVIGATION_CONFIG.ITEMS`), one `accessible(userRole)` predicate per item, consumed by both the mobile drawer and desktop rail from the same array — no risk of the two surfaces drifting apart.
+
+## UI/UX
+
+- **Responsiveness:** mobile-first Tailwind classes throughout (`sm:`/`lg:` breakpoints); the sidebar's off-canvas-drawer-vs-persistent-column split was spot-checked at 390px and 1280px viewports during this session's redesign work and holds up at both.
+- **Accessibility:** one concrete, now-fixed defect was found and corrected during this pass — the theme-toggle control was a `role="button"` `<span>` nested inside a real `<button>` (an ARIA/HTML violation: interactive content must not be nested inside other interactive content), which also caused accessibility-tree tooling to report two matches for one actual control. Fixed by making it a real sibling `<button>`. No other instance of this specific pattern (interactive-inside-interactive) was found elsewhere in the app, but it's worth a targeted look if similar "icon overlaid on a bigger clickable area" UI is added in future.
+- **Consistency:** as of this pass, one modal pattern (`ConfirmationModal`/`InfoModal`), one design-token source (`tailwind.config.js`'s `brand` scale), no gradients in the app's chrome. Prior to this pass, five files used ad hoc gradients with no shared token — see the redesign work for what changed.
+- **Component reuse:** high for modals, status badges, currency/date formatting; lower for response-unwrapping (see above) and for the loading/error `useState` triad repeated per-page.
+- **Visual hierarchy:** consistent heading/subtext pattern across pages (icon chip + `h1` + one-line description), consistent stat-card and tab-bar treatment.
+- **Error states:** every data-fetching page has a visible error banner on failure (not just a console log) — verified across `AdminDashboard`, `AdminReports`, `PaymentsPage`, `MeterSchedule`, `InstallerDashboard`, `AdminInstallations`.
+- **Empty states:** present and reasonably specific (e.g. "No installations awaiting installation — check back after a payment is confirmed" rather than a generic "No data").
+- **Loading states:** present everywhere; mostly a centered spinner + short label, consistent look.
+
+## Testing
+
+- **Framework:** **none.** No `vitest`/`jest`/`@testing-library/*`/`playwright`/`cypress` in `package.json` (production or dev dependencies), and no `*.test.*`/`*.spec.*` files anywhere in `src/`.
+- **Existing coverage:** 0%.
+- **Missing critical tests:** given there are none, prioritizing by blast radius if a suite were introduced:
+  1. `src/components/services/api.js` — response-envelope unwrapping, error-type mapping, retry/timeout behavior. This is the single highest-leverage place to add unit tests, since every page depends on it behaving correctly and it has no UI to "eyeball" when it's wrong.
+  2. `src/components/auth/permissions.js` / `usePermissions.jsx` — the entire security-adjacent gating model. A regression here silently over- or under-grants access; worth a focused unit-test pass even before broader UI testing.
+  3. `src/hooks/useAdminIdleTimeout.js` — timing-sensitive logic (deadline persistence across refresh, throttled extension, expiry detection) that's easy to subtly break and hard to notice broke, short of a dedicated test or a manual multi-minute wait.
+  4. Installation-completion flow (`InstallationDetail.jsx`'s `completeInstallation` call) and payment-confirmation flow (`ConfirmPaymentTab.jsx`) — these are the two irreversible, real-money/real-installation-adjacent mutations in the app.
+- **High-risk areas (given the above):** any change to `api.js`'s response handling, the permission model, or the idle-timeout hook currently has zero automated protection — every prior change to these areas this session was validated by manual/scripted browser testing rather than a repeatable suite.
+
+## Technical Debt Summary
+
+### CRITICAL
+*(none identified — no data-loss, security-bypass, or crash-on-normal-use defects were found during this audit)*
+
+### HIGH
+- **No test suite at all**, for an app that handles payment confirmation and installation completion. See "Testing" above for the prioritized list of what to cover first. *(Location: whole repo. Impact: every refactor or dependency bump is validated only by manual testing. Remediation: introduce Vitest + React Testing Library, starting with `api.js` and `permissions.js`.)*
+- **`react-router-dom`/`react-router` (installed 7.9.6) has multiple published HIGH-severity advisories** (XSS via open redirects, a deserialization RCE path in vendored `turbo-stream`, CSRF, DoS) per `npm audit --omit=dev`, with a non-breaking fix available within the same major version. See `Security.md` for full detail. *(Location: `package.json` dependency. Impact: real, exploitable-in-principle vulnerabilities in a core routing dependency. Remediation: `npm audit fix`, then re-run the full test/build/manual-check pass.)*
+
+### MEDIUM
+- **Repeated response-unwrapping logic** across 4 files (see "Duplicate / repeated logic" above). *(Impact: a fix or new response-shape variant has to be applied in multiple places by hand. Remediation: extract `utils/unwrapListResponse.js`.)*
+- **`vercel.json` sets no security response headers** (no CSP, `X-Content-Type-Options`, `X-Frame-Options`/`frame-ancestors`, `Referrer-Policy`, HSTS) beyond the asset cache-control rule. See `Security.md`. *(Impact: no defense-in-depth against clickjacking/MIME-sniffing/etc. at the hosting layer. Remediation: add a `headers` block to `vercel.json`.)*
+- **No client-side file-size limit on Excel/CSV uploads** (`ExcelUpload.jsx`, `BulkConfirmPaymentsTab.jsx`) — only the `accept` attribute hints at file type, which is trivially bypassable and doesn't cap size. *(Impact: a user could select an arbitrarily large file before any server-side rejection; low real-world severity given this is an internal staff tool, but cheap to fix. Remediation: a client-side size check before upload, matching whatever limit the backend actually enforces.)*
+
+### LOW
+- Dead code: `useNavigation.js`, `canAccessPage()`/`PAGE_ACCESS`, `getPermissionDisplayName()` — all unused, all safe to remove independently.
+- Three generated lint-output files committed at the repo root (`lint_json.json`, `lint_results.txt`, `lint_results_utf8.txt`) — stray artifacts, not referenced by any tooling.
+- `MeterSchedule.jsx` and `Header.jsx` mix enough unrelated concerns to be worth splitting opportunistically.
+- Inconsistent import alias for the API singleton (`jedApi` vs `JEDApiService`) — cosmetic only.
+
+## What This Audit Did Not Find
+
+Worth stating explicitly, since absence-of-evidence claims are easy to overstate: no invented API endpoints, no fabricated dashboard/report data, no `dangerouslySetInnerHTML` or other raw-HTML injection point, no hardcoded secrets or API keys in source, no duplicate routes, no client-side-only persistence standing in for a required backend feature (installer/meter assignment were explicitly *not* implemented that way — see `API_GAP_REPORT.md`), and no evidence that any previously-removed feature (Webhook Replay, RRR/Order Lookup, Requests-by-Status, Complete Installation tab, Regenerate Reference) left orphaned routes, dead imports, or unreachable UI behind — each was verified via a repo-wide search after removal.

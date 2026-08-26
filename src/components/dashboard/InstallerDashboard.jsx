@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataRefresh } from '../contexts/DataRefreshContext';
 import JEDApiService from '../services/api';
 import { getStatusBadgeClass, isCompletedStatus, isAwaitingInstallationStatus } from '../../utils/statusBadge';
 import {
@@ -110,7 +111,7 @@ function JobList({ jobs, onRowClick, emptyIcon: EmptyIcon, emptyMessage }) {
       <div className="hidden sm:block overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="text-left text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border-b text-xs">
+            <tr className="text-left text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 text-xs">
               <th className="px-4 py-3 font-semibold">Account</th>
               <th className="px-4 py-3 font-semibold">Customer</th>
               <th className="px-4 py-3 font-semibold">Meter No.</th>
@@ -133,6 +134,7 @@ function JobList({ jobs, onRowClick, emptyIcon: EmptyIcon, emptyMessage }) {
 function InstallerDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refreshSignal } = useDataRefresh();
 
   const [allJobs, setAllJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -165,7 +167,9 @@ function InstallerDashboard() {
 
   useEffect(() => {
     fetchJobs();
-  }, [fetchJobs, refreshKey]);
+    // refreshKey: manual refresh button. refreshSignal: app-wide mutation
+    // elsewhere (e.g. an admin's bulk payment import) — see DataRefreshContext.
+  }, [fetchJobs, refreshKey, refreshSignal]);
 
   // Awaiting Installation = PAID only (INITIATED requests haven't been
   // paid yet, so there's nothing for an installer to act on there — they
@@ -244,7 +248,7 @@ function InstallerDashboard() {
       )}
 
       {/* Tabs */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
+      <div className="card overflow-hidden">
         <div className="flex border-b border-gray-200 dark:border-gray-700">
           <button
             type="button"
@@ -287,7 +291,7 @@ function InstallerDashboard() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by account, customer, or meter number..."
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="form-input w-full pl-9 pr-3 py-2 text-sm"
             />
           </div>
         </div>

@@ -94,7 +94,7 @@ function TrendChart({ title, data, type = 'area', colorLight, colorDark, formatV
   const tooltipOnRight = tooltipLeft < width - 140;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 sm:p-6">
+    <div className="card p-4 sm:p-6">
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />

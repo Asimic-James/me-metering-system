@@ -230,21 +230,15 @@ function Login({ onLogin }) {
     // follow the app-wide light/dark toggle, by design.
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-950">
       {/* Brand panel — full column at lg+, hidden on mobile in favor of
-          the compact strip below. Dot-grid texture plus a few soft glow
-          orbs stand in for the old wave pattern. */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-2/5 flex-col justify-between p-10 xl:p-16 relative overflow-hidden bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950">
+          the compact strip below. Solid navy surface with a subtle
+          dot-grid texture — no gradients or decorative glow effects. */}
+      <div className="hidden lg:flex lg:w-1/2 xl:w-2/5 flex-col justify-between p-10 xl:p-16 relative overflow-hidden bg-brand-900">
         <div className="absolute inset-0" style={DOT_GRID_STYLE} />
-        <div className="absolute -top-24 -left-16 w-72 h-72 bg-blue-500/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-32 -right-10 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl" />
-        <div className="absolute top-1/3 right-0 w-56 h-56 bg-cyan-400/10 rounded-full blur-3xl" />
 
         <div className="relative" />
         <div className="relative flex flex-col items-center text-center">
-          <div className="relative mb-6">
-            <div className="absolute inset-0 bg-blue-500 rounded-2xl blur-xl opacity-40" />
-            <div className="relative bg-gradient-to-br from-blue-600 to-indigo-600 p-4 rounded-2xl shadow-xl">
-              <Power className="w-10 h-10 text-white" />
-            </div>
+          <div className="mb-6 bg-brand-600 p-4 rounded-2xl">
+            <Power className="w-10 h-10 text-white" />
           </div>
           <p className="text-white font-bold tracking-[0.15em] text-xl">
             MASTERS ENERGY
@@ -262,8 +256,8 @@ function Login({ onLogin }) {
       </div>
 
       {/* Compact brand strip — mobile/tablet only */}
-      <div className="lg:hidden flex items-center gap-3 px-4 sm:px-6 py-5 bg-gradient-to-r from-blue-950 via-blue-900 to-indigo-950">
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-2 rounded-xl shadow-lg flex-shrink-0">
+      <div className="lg:hidden flex items-center gap-3 px-4 sm:px-6 py-5 bg-brand-900">
+        <div className="bg-brand-600 p-2 rounded-xl flex-shrink-0">
           <Power className="w-6 h-6 text-white" />
         </div>
         <div className="min-w-0">
@@ -362,11 +356,10 @@ function Login({ onLogin }) {
                 w-full flex items-center justify-center gap-2
                 py-3 px-4 rounded-lg
                 text-base font-semibold text-white
-                bg-blue-600 hover:bg-blue-700
-                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-950
+                bg-brand-600 hover:bg-brand-700
+                focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-950
                 disabled:bg-slate-700 disabled:cursor-not-allowed
-                shadow-lg hover:shadow-xl
-                transition-all duration-200
+                transition-colors duration-150
               "
             >
               {isSubmitting ? (

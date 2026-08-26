@@ -8,10 +8,16 @@
 // fallback color. Comparisons here are case-insensitive so this can't
 // happen again regardless of casing drift from the backend.
 
+// Deliberately NOT blue — blue is this app's brand/primary-action colour
+// (see tailwind.config.js), so a status badge never uses it, to avoid a
+// status looking like an interactive/primary element. INITIATED uses a
+// neutral slate instead (real status enum is INITIATED/PAID/COMPLETED —
+// no PROCESSING value the backend actually returns, so it isn't a real
+// status entry here; a bare `getStatusBadgeClass` call with any other
+// string still falls back to the same neutral gray below).
 export const STATUS_BADGE_STYLES = {
-  INITIATED: 'bg-blue-100 text-blue-800',
+  INITIATED: 'bg-slate-100 text-slate-700',
   PENDING: 'bg-yellow-100 text-yellow-800',
-  PROCESSING: 'bg-blue-100 text-blue-800',
   PAID: 'bg-yellow-100 text-yellow-800',        // payment confirmed, ready to install
   COMPLETED: 'bg-green-100 text-green-800',
   PAID_COMPLETED: 'bg-green-100 text-green-800',

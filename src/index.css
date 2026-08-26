@@ -27,31 +27,61 @@ code {
 }
 
 /* ============================================
-   LIGHT THEME — Soft warm-white gradient mesh
+   APP BACKGROUND — flat, solid surface (see the
+   `background` token in tailwind.config.js). No decorative
+   gradient mesh — enterprise-plain by design.
+   Light Theme uses gray-100 (not gray-50) specifically so
+   white cards/panels have visible contrast against the page
+   — gray-50 was close enough to white that cards blended
+   into the background (see the `.card` rule below, which
+   pairs this with a real border for the same reason).
    ============================================ */
 .app-bg-light {
-  background-color: #f0f4ff;
-  background-image:
-    radial-gradient(ellipse at 10% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 55%),
-    radial-gradient(ellipse at 90% 5%, rgba(6, 182, 212, 0.07) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 100%, rgba(139, 92, 246, 0.05) 0%, transparent 60%);
+  background-color: #f3f4f6; /* gray-100 */
   min-height: 100vh;
 }
 
-/* ============================================
-   DARK THEME — Deep slate gradient mesh
-   ============================================ */
 .app-bg-dark {
-  background-color: #0a0f1e;
-  background-image:
-    radial-gradient(ellipse at 10% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 90% 5%, rgba(6, 182, 212, 0.10) 0%, transparent 45%),
-    radial-gradient(ellipse at 50% 100%, rgba(139, 92, 246, 0.08) 0%, transparent 55%);
+  background-color: #030712; /* gray-950 */
   min-height: 100vh;
 }
 
 /* ============================================
-   SCROLLBAR — Theme-aware
+   CARD / PANEL SURFACE — the shared "elevated surface"
+   look for dashboard stat cards, tables, panels, forms, and
+   list cards throughout the app. Centralized here (Light
+   Theme visibility pass) so a card previously relying on
+   shadow alone — and blending into the page background in
+   Light Theme — always gets a real, visible border. Dark
+   Theme's existing look (gray-800 surface on a gray-950
+   page) already had enough contrast and is unchanged here.
+   ============================================ */
+@layer components {
+  .card {
+    @apply bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm;
+  }
+
+  /* ============================================
+     FORM CONTROLS — text/search/date inputs, selects,
+     textareas. Light Theme intentionally pairs white input
+     text with a dark input surface (per design request)
+     instead of the usual white-surface/dark-text pairing,
+     specifically so the white text stays readable — do not
+     apply `text-white` to an input without this background.
+     Dark Theme's existing input look (dark surface, white
+     text) already worked and is unchanged here.
+     ============================================ */
+  .form-input {
+    @apply bg-gray-800 text-white placeholder-gray-400 border border-gray-600 rounded-lg
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500
+           disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-700
+           dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:border-gray-600
+           transition-colors;
+  }
+}
+
+/* ============================================
+   SCROLLBAR — Theme-aware, brand-coloured
    ============================================ */
 ::-webkit-scrollbar {
   width: 6px;
@@ -63,20 +93,20 @@ code {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.3);
+  background: rgba(37, 99, 235, 0.3); /* brand-600 */
   border-radius: 99px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.55);
+  background: rgba(37, 99, 235, 0.55);
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.35);
+  background: rgba(59, 130, 246, 0.35); /* brand-500 */
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.6);
+  background: rgba(59, 130, 246, 0.6);
 }
 
 /* ============================================
