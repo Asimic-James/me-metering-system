@@ -306,7 +306,11 @@ class JEDApiService {
 
   // ==================== AUTHENTICATION METHODS ====================
   async register(userData) {
-    console.log('[Auth] Register:', { phone: userData.phone, role: userData.role });
+    // Phone number is PII — only logged in dev, same gate as the general
+    // request/response logging below (this call site predates that gate).
+    if (this.config.FEATURES.LOG_REQUESTS) {
+      console.log('[Auth] Register:', { phone: userData.phone, role: userData.role });
+    }
     const url = this.buildUrl(this.endpoints.AUTH.REGISTER, true);
     
     return await this.makeRequest(url, {
@@ -320,7 +324,11 @@ class JEDApiService {
    * { phone, password }, real LoginResponse is Success + { data: { user, token } }.
    */
   async login(credentials) {
-    console.log('[Auth] Login request:', { phone: credentials.phone, hasPassword: !!credentials.password });
+    // Phone number is PII — only logged in dev, same gate as the general
+    // request/response logging below (this call site predates that gate).
+    if (this.config.FEATURES.LOG_REQUESTS) {
+      console.log('[Auth] Login request:', { phone: credentials.phone, hasPassword: !!credentials.password });
+    }
     const url = this.buildUrl(this.endpoints.AUTH.LOGIN, true);
 
     const response = await this.makeRequest(url, {
@@ -780,15 +788,42 @@ class JEDApiService {
   }
 
   // ==================== UPLOADS METHODS ====================
+  // BUG FIX: this used to call buildUrl(endpoint, 'UPLOADS'), which prepends
+  // the UPLOADS group's own '/uploads' prefix on top of the endpoint
+  // constants in api.config.js — which already include '/uploads' themselves
+  // (ENDPOINTS.UPLOADS.EXCEL = '/uploads/excel', etc.). That produced
+  // .../api/v1/uploads/uploads/excel, a route the real API doesn't have —
+  // the exact cause of "Route not found" on Validate File (BulkConfirmPaymentsTab.jsx)
+  // and every upload mode in ExcelUpload.jsx. buildApiUrl() doesn't add a
+  // group prefix, so it resolves to the real .../api/v1/uploads/excel.
   async processExcelUpload(endpoint, formData) {
-    const url = this.utils.buildUrl(endpoint, 'UPLOADS');
+    const url = this.utils.buildApiUrl(endpoint);
     const headers = this.utils.buildHeaders();
     delete headers['Content-Type'];
 
     const response = await fetch(url, { method: 'POST', headers, body: formData });
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || `Upload failed: ${response.status}`);
+      // Extract a clean `.message` from a JSON error body instead of
+      // throwing the raw response text — this used to surface literal
+      // backend JSON (e.g. `{"success":false,"message":"Route not found"}`)
+      // straight into the UI. Callers can check `.status` (e.g. 404) to
+      // decide how to present the failure without string-matching on text.
+      const contentType = response.headers.get('content-type') || '';
+      let message = `Upload failed: ${response.status}`;
+      if (contentType.includes('application/json')) {
+        try {
+          const data = await response.json();
+          message = data?.message || message;
+        } catch {
+          // fall through to the generic message above
+        }
+      } else {
+        const text = await response.text();
+        if (text) message = text;
+      }
+      const error = new Error(message);
+      error.status = response.status;
+      throw error;
     }
 
     const contentType = response.headers.get('content-type') || '';
@@ -955,7 +990,11 @@ class JEDApiService {
   }
 
   async createUser(userData) {
-    console.log('[API] Creating user:', userData.email);
+    // Email is PII — only logged in dev, same gate as the general
+    // request/response logging below (this call site predates that gate).
+    if (this.config.FEATURES.LOG_REQUESTS) {
+      console.log('[API] Creating user:', userData.email);
+    }
     const url = this.utils.buildUrl(this.endpoints.USERS.BASE, 'USERS');
     const response = await this.makeRequest(url, {
       method: 'POST',
@@ -1006,6 +1045,20 @@ class JEDApiService {
     localStorage.removeItem('jedAuthToken');
     localStorage.removeItem('jedUser');
     this.clearSessionDeadline();
+    // FIXED: clearing storage alone left a real gap — a 401 mid-session
+    // wiped the token from localStorage, but AuthContext's in-memory
+    // `user`/`isAuthenticated` React state stayed stale until the next
+    // full page load (its own useMemo only recomputes when `user`
+    // changes, not when storage changes independently), so an expired
+    // session could keep rendering protected UI until a manual refresh.
+    // Dispatching this event lets any mounted AuthContext drop its
+    // session state immediately, regardless of which API call triggered
+    // the 401. Safe to fire unconditionally (including on a normal
+    // logout) — AuthContext's handler is just `setUser(null)`, idempotent
+    // with logout's own cleanup.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('jed-auth:session-expired'));
+    }
   }
 
   // ==================== ADMIN IDLE-TIMEOUT DEADLINE ====================

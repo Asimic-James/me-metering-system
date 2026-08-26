@@ -50,13 +50,16 @@ export const AuthProvider = ({ children }) => {
 
         if (storedUser && token) {
           const normalizedUser = normalizeUser(storedUser);
-          
-          console.log('[AuthContext] User restored:', {
-            id: normalizedUser.id,
-            phone: normalizedUser.phone,
-            role: normalizedUser.role
-          });
-          
+
+          // Phone number is PII — only logged in dev.
+          if (import.meta.env.DEV) {
+            console.log('[AuthContext] User restored:', {
+              id: normalizedUser.id,
+              phone: normalizedUser.phone,
+              role: normalizedUser.role
+            });
+          }
+
           setUser(normalizedUser);
         } else {
           console.log('[AuthContext] No valid session found');
@@ -89,6 +92,19 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
   }, [normalizeUser]);
 
+  // FIXED: a 401 anywhere in the app calls jedApi.clearTokens(), which
+  // wipes localStorage — but without this, this context's own `user`
+  // React state (and therefore `isAuthenticated`) stayed stale until a
+  // full page reload, letting an expired/invalid session keep rendering
+  // protected UI in the meantime. clearTokens() now dispatches this event
+  // on every call (including a normal logout, where this is a harmless
+  // no-op since `user` is already being set to null there).
+  useEffect(() => {
+    const handleSessionExpired = () => setUser(null);
+    window.addEventListener('jed-auth:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('jed-auth:session-expired', handleSessionExpired);
+  }, []);
+
   // Login function
   const login = useCallback(async (userData) => {
     console.log('[AuthContext] Login called with user data');
@@ -103,12 +119,15 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Invalid user data: missing required fields');
       }
       
-      console.log('[AuthContext] Setting user:', {
-        id: normalizedUser.id,
-        phone: normalizedUser.phone,
-        role: normalizedUser.role
-      });
-      
+      // Phone number is PII — only logged in dev.
+      if (import.meta.env.DEV) {
+        console.log('[AuthContext] Setting user:', {
+          id: normalizedUser.id,
+          phone: normalizedUser.phone,
+          role: normalizedUser.role
+        });
+      }
+
       setUser(normalizedUser);
       
       // Verify storage consistency

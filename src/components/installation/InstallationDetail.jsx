@@ -156,7 +156,7 @@ function InstallationDetail() {
   };
 
   const handleComplete = async () => {
-    if (!validate()) return;
+    if (submitting || !validate()) return;
     setSubmitting(true);
     setSubmitError(null);
 
@@ -268,14 +268,10 @@ function InstallationDetail() {
             </div>
           )}
 
-          {/* Reference already exists — shown read-only, no regenerate action. */}
-          {!completed && (job.rrr || job.paymentReference || job.paymentRef) && (
-            <div className="card p-4 sm:p-6">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Payment Reference</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Reference</p>
-              <p className="font-mono text-sm text-gray-900 dark:text-white">{job.rrr || job.paymentReference || job.paymentRef}</p>
-            </div>
-          )}
+          {/* Once a reference exists it's already shown by RequestInfoPanel's
+              "Payment Reference / RRR" row above — this section only ever
+              needs to render the generate-reference CTA (see the block
+              above), not a second read-only copy of the same value. */}
 
           {/* Payment timeline — built only from real timestamps the API
               returns on this request (dateRequested/datePaid/dateCompleted) */}

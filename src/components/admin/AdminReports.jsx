@@ -17,6 +17,7 @@ import {
 import { formatDateTime } from '../../utils/date';
 import { formatCurrencyNGN } from '../../utils/currency';
 import { normalizeStatus } from '../../utils/statusBadge';
+import { downloadCsv } from '../../utils/csv';
 import InfoModal from '../common/InfoModal';
 import StatusBadge from '../common/StatusBadge';
 
@@ -150,26 +151,16 @@ function AdminReports() {
     setExporting(true);
     try {
       const headers = EXPORT_FIELDS.map(f => f.label);
-      const csvRows = [headers.join(',')];
-      for (const record of filtered) {
-        const values = EXPORT_FIELDS.map(field => {
+      const rows = filtered.map((record) =>
+        EXPORT_FIELDS.map((field) => {
           let value = record[field.key] || '';
           if (field.key.includes('Date') && value && value !== '-') {
             try { value = formatDateTime(value); } catch { /* keep original */ }
           }
-          return `"${String(value).replace(/"/g, '""')}"`;
-        });
-        csvRows.push(values.join(','));
-      }
-      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `admin-reports-${new Date().toISOString().slice(0,10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+          return value;
+        })
+      );
+      downloadCsv(`admin-reports-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed. Please try again.');

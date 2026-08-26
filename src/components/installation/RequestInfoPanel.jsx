@@ -11,8 +11,12 @@ import {
   CheckCircle,
   MapPin,
   Phone,
+  Mail,
+  Gauge,
+  Wallet,
 } from 'lucide-react';
 import { formatDateTime } from '../../utils/date';
+import { formatCurrencyNGN } from '../../utils/currency';
 
 function InfoRow({ icon: Icon, label, value }) {
   if (!value) return null;
@@ -29,10 +33,15 @@ function InfoRow({ icon: Icon, label, value }) {
 
 /**
  * @param {Object} props
- * @param {Object|null} props.data - request/customer object (fields are
- *   best-effort guesses against unconfirmed API response shape: custNames,
- *   applicantName, phone, phoneNumber, address, accountNumber, meterNo,
- *   meterNumber, sealNo, paymentReference, paymentRef, submittedAt)
+ * @param {Object|null} props.data - request/customer object. Real fields
+ *   confirmed against the live JedCustomerRequest schema/response:
+ *   custNames, applicantName, gsm (phone — NOT `phone`/`phoneNumber`,
+ *   which don't exist on the real schema and previously made this panel's
+ *   Phone row silently disappear), email, address, region, accountNumber,
+ *   meterRecommended (phase type requested at submission), meterNo,
+ *   meterNumber, sealNo, amount, rrr/paymentReference/paymentRef,
+ *   dateRequested (used as "Submitted" — there is no separate
+ *   `submittedAt` field on the real schema).
  * @param {string} [props.title] - optional section heading
  */
 function RequestInfoPanel({ data, title = 'Request Details' }) {
@@ -46,12 +55,15 @@ function RequestInfoPanel({ data, title = 'Request Details' }) {
         </h2>
       )}
       <InfoRow icon={User} label="Customer" value={data.custNames || data.applicantName} />
-      <InfoRow icon={Phone} label="Phone" value={data.phone || data.phoneNumber} />
+      <InfoRow icon={Phone} label="Phone" value={data.gsm || data.phone1 || data.phone2 || data.phone || data.phoneNumber} />
+      <InfoRow icon={Mail} label="Email" value={data.email || data.emailAddress} />
       <InfoRow icon={MapPin} label="Address" value={data.address} />
+      <InfoRow icon={MapPin} label="Region" value={data.region} />
       <InfoRow icon={Hash} label="Account Number" value={data.accountNumber} />
+      <InfoRow icon={Gauge} label="Meter Type Requested" value={data.meterRecommended} />
       <InfoRow icon={Zap} label="Meter Number" value={data.meterNo || data.meterNumber} />
       <InfoRow icon={ShieldCheck} label="Seal Number" value={data.sealNo} />
-      <InfoRow icon={Phone} label="Email" value={data.email || data.emailAddress} />
+      <InfoRow icon={Wallet} label="Amount" value={data.amount != null ? formatCurrencyNGN(data.amount) : null} />
       <InfoRow
         icon={CheckCircle}
         label="Payment Reference / RRR"
@@ -60,7 +72,7 @@ function RequestInfoPanel({ data, title = 'Request Details' }) {
       <InfoRow
         icon={User}
         label="Submitted"
-        value={formatDateTime(data.submittedAt)}
+        value={formatDateTime(data.dateRequested || data.submittedAt)}
       />
     </div>
   );

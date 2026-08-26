@@ -1,24 +1,32 @@
 // src/components/admin/BulkConfirmPaymentsTab.jsx
 //
-// "Upload Pending Paid Customers" — the real Pharez API has no bulk
-// "create these customers as PAID" endpoint (no way to batch-create
-// JedCustomerRequest records at all, and no way to set status directly —
-// see API_GAP_REPORT.md). What it does have is exactly what a genuine
-// paid-customer import needs, composed honestly:
-//   1. POST /uploads/excel — the real generic Excel-parsing endpoint,
-//      already wired via jedApi.processExcelUpload — turns the uploaded
-//      file into row objects, so no client-side spreadsheet library is
-//      needed.
+// "Upload Paid Customers" — the real Pharez API has no bulk "create these
+// customers as PAID" endpoint (no way to batch-create JedCustomerRequest
+// records at all, and no way to set status directly — see
+// API_GAP_REPORT.md). What it does have — on paper — is exactly what a
+// genuine paid-customer import needs, composed honestly:
+//   1. POST /uploads/excel — documented in the live OpenAPI spec as a
+//      generic Excel-parsing endpoint (turns an uploaded file into row
+//      objects, so no client-side spreadsheet library is needed) — but
+//      confirmed (see API_GAP_REPORT.md) to return 404 "Route not found"
+//      on the deployed production server for every documented variant
+//      (/uploads/excel, /uploads/excel-first-sheet, /uploads/excel-modified),
+//      identically to a deliberately-invalid path. The endpoint is
+//      documented but not actually deployed — a real backend gap, not a
+//      frontend bug — so "Validate File" cannot succeed until the backend
+//      team deploys it (or an equivalent).
 //   2. POST /external/jed/confirm-payment (by accountNumber) or
 //      POST /external/jed/confirm-payment/manual/{rrr} — the same real,
 //      already-used endpoints ConfirmPaymentTab calls for a single
-//      customer — called once per row here.
+//      customer — called once per row here. These work correctly.
 // Every row is a real API call against a real backend record (the
 // request must already exist, created earlier via Generate RRR); nothing
 // is fabricated client-side, and no invented bulk endpoint is called.
 import { useState } from 'react';
 import jedApi from '../services/api';
 import { ENDPOINTS } from '../services/api.config.js';
+import { downloadCsv } from '../../utils/csv';
+import { validateUploadFile } from '../../utils/fileValidation';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
 import ConfirmationModal from '../common/ConfirmationModal';
 import {
@@ -110,17 +118,8 @@ function StatCard({ icon: Icon, label, value, color = 'gray' }) {
 
 const exportErrorsToCSV = (errorRows) => {
   const headers = ['Row', 'Identifier', 'Error'];
-  const csvRows = errorRows.map((r) => [r.index + 1, r.identifier || '', `"${String(r.error || '').replace(/"/g, '""')}"`]);
-  const csvContent = [headers.join(','), ...csvRows.map((r) => r.join(','))].join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'bulk_confirm_errors.csv';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  const rows = errorRows.map((r) => [r.index + 1, r.identifier || '', r.error || '']);
+  downloadCsv('bulk_confirm_errors.csv', headers, rows);
 };
 
 function BulkConfirmPaymentsTab() {
@@ -152,10 +151,22 @@ function BulkConfirmPaymentsTab() {
   };
 
   const handleFileChange = (e) => {
-    setFile(e.target.files[0] || null);
-    setParseError(null);
+    const selected = e.target.files[0] || null;
     setParsedRows(null);
     setResults(null);
+
+    if (selected) {
+      const { valid, reason } = validateUploadFile(selected);
+      if (!valid) {
+        setFile(null);
+        setParseError(reason);
+        e.target.value = '';
+        return;
+      }
+    }
+
+    setFile(selected);
+    setParseError(null);
   };
 
   const handleParse = async () => {
@@ -195,8 +206,18 @@ function BulkConfirmPaymentsTab() {
       setParsedRows(rows);
     } catch (err) {
       console.error('[BulkConfirmPayments] Parse failed:', err);
-      const message = err?.message?.includes(':') ? err.message.split(':').slice(1).join(':').trim() : err?.message;
-      setParseError(message || 'Failed to parse the uploaded file.');
+      if (err?.status === 404) {
+        // The file-validation service isn't reachable right now — a clear,
+        // non-technical message rather than the backend's raw "route not
+        // found" response.
+        setParseError('File validation is currently unavailable. Please try again later or contact support.');
+      } else if (err?.status === 401) {
+        setParseError('Your session has expired. Please log in again.');
+      } else if (String(err?.message || '').toLowerCase().includes('network')) {
+        setParseError('Network error — check your connection and try again.');
+      } else {
+        setParseError(err?.message || 'Failed to parse the uploaded file. Please check the file and try again.');
+      }
     } finally {
       setParsing(false);
     }
@@ -277,11 +298,10 @@ function BulkConfirmPaymentsTab() {
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex gap-2 text-xs sm:text-sm text-blue-800 dark:text-blue-300">
           <Info className="w-4 h-4 shrink-0 mt-0.5" />
           <p>
-            Each row is confirmed individually against the real payment API (the same call used by
-            <strong> Confirm Payment</strong>) — nothing is fabricated. The customer's request must already
-            exist in the system (created earlier via Generate RRR) and must have genuinely been paid; this
-            tool does not create new requests. There is no bulk "import as paid" endpoint on the real API —
-            see <span className="font-mono">API_GAP_REPORT.md</span>.
+            Upload a file of customers who have already paid to confirm their payments in bulk. Each row
+            needs an <strong>Account Number</strong> and/or <strong>RRR</strong>, and the customer must
+            already have a request in the system with a completed payment — new requests can't be created
+            this way.
           </p>
         </div>
 

@@ -525,15 +525,6 @@ const MeterCard = ({ meter, canDelete, deleting, onDeleteClick, onAssignClick })
       <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-1">
           <MeterStatusBadge status={status} />
-          {canAssign && (
-            <button
-              onClick={() => onAssignClick(meter)}
-              className="p-1 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-              title="Assign this meter to an installer/job"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-            </button>
-          )}
           {canDelete && (
             <button
               onClick={() => onDeleteClick(meter)}
@@ -573,10 +564,22 @@ const MeterCard = ({ meter, canDelete, deleting, onDeleteClick, onAssignClick })
     </div>
 
     <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
-      <div className="flex justify-between">
-        <span>Uploaded: {formatDateOnly(meter.uploadedAt)}</span>
-        {getInstalledAtValue(meter) && (
-          <span>Installed: {formatDateOnly(getInstalledAtValue(meter))}</span>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 space-y-0.5">
+          <p>Uploaded: {formatDateOnly(meter.uploadedAt)}</p>
+          {getInstalledAtValue(meter) && (
+            <p>Installed: {formatDateOnly(getInstalledAtValue(meter))}</p>
+          )}
+        </div>
+        {canAssign && (
+          <button
+            onClick={() => onAssignClick(meter)}
+            className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors text-xs font-medium"
+            title="Assign this meter to an installer/job"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            Assign
+          </button>
         )}
       </div>
     </div>

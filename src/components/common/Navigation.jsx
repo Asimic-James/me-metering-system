@@ -56,7 +56,10 @@ const NAVIGATION_CONFIG = {
       path: '/schedule',
       icon: Database,
       description: 'View and query meter inventory',
-      accessible: () => true,
+      // Admin/Super Admin only — Installer must not see or reach this page
+      // (a distinct, separate feature from Uploads below, which Installer
+      // does use for bulk Excel meter registration).
+      accessible: (userRole) => isAdminTierRole(userRole),
     },
     {
       id: 'users',

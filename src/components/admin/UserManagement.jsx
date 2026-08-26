@@ -426,7 +426,9 @@ function UserManagement() {
         nin: userData.nin,
         role,
       };
-      console.log('[UserManagement] Creating user:', payload.email);
+      if (import.meta.env.DEV) {
+        console.log('[UserManagement] Creating user:', payload.email);
+      }
       await jedApi.createUser(payload);
 
       setShowForm(false);

@@ -3,6 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { PERMISSIONS, hasPermission } from '../auth/permissions';
 import jedApi from '../services/api';
 import { ENDPOINTS } from '../services/api.config.js';
+import { downloadCsv } from '../../utils/csv';
+import { validateUploadFile } from '../../utils/fileValidation';
 import { AlertCircle, Upload, Download, FileCheck2, FileX2, Percent, List, FileDown } from 'lucide-react';
 
 const UPLOAD_MODES = {
@@ -53,10 +55,22 @@ function ExcelUpload() {
   }
 
   const handleFileChange = (e) => {
-    setFile(e.target.files[0] || null);
+    const selected = e.target.files[0] || null;
     setMessage(null);
-    setError(null);
     setUploadResult(null);
+
+    if (selected) {
+      const { valid, reason } = validateUploadFile(selected);
+      if (!valid) {
+        setFile(null);
+        setError(reason);
+        e.target.value = '';
+        return;
+      }
+    }
+
+    setFile(selected);
+    setError(null);
   };
 
   const handleDownloadTemplate = async () => {
@@ -131,8 +145,14 @@ function ExcelUpload() {
       document.querySelector('input[type="file"]').value = ''; // Reset file input
     } catch (err) {
       console.error('Upload failed', err);
-      const errorMessage = err.message.includes(':') ? err.message.split(':')[1].trim() : err.message;
-      setError(errorMessage || 'An unknown error occurred during upload.');
+      if (err?.status === 404) {
+        setError('This upload mode is currently unavailable. Please try "Upload New Meters" or contact support.');
+      } else if (err?.status === 401) {
+        setError('Your session has expired. Please log in again.');
+      } else {
+        const errorMessage = err.message?.includes(':') ? err.message.split(':')[1].trim() : err.message;
+        setError(errorMessage || 'An unknown error occurred during upload.');
+      }
       setMessage(null);
     } finally {
       setUploading(false);
@@ -335,17 +355,8 @@ const StatCard = ({ icon: Icon, label, value, color = 'gray' }) => {
 
 const exportErrorsToCSV = (errors) => {
   const headers = ['Row', 'Meter Number', 'Error'];
-  const rows = errors.map(e => [e.row + 1, e.meterNumber, `"${e.error.replace(/"/g, '""')}"`]);
-  const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-  
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'upload_errors.csv';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const rows = errors.map(e => [e.row + 1, e.meterNumber, e.error]);
+  downloadCsv('upload_errors.csv', headers, rows);
 };
 
 export default ExcelUpload;

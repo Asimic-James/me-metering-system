@@ -152,17 +152,17 @@ const ROLE_PERMISSIONS = Object.freeze({
     PERMISSIONS.INSTALLATIONS.VIEW,
     PERMISSIONS.INSTALLATIONS.COMPLETE,
 
-    // FIXED (real, live bug found during consolidation): Navigation.jsx
-    // has always shown "Meter Schedule" to installers
-    // (accessible: () => true for both roles), but this Set never
-    // actually granted SCHEDULE.VIEW — meaning every installer who
-    // tapped that nav item landed on AccessDenied. Added now.
-    PERMISSIONS.SCHEDULE.VIEW,
+    // Meter Schedule is deliberately NOT granted to Installer — it's an
+    // Admin/Super Admin-only inventory management page. (A previous pass
+    // added SCHEDULE.VIEW here to match a stray Navigation.jsx entry that
+    // showed the link to every role; the correct fix was the other way
+    // around — Navigation.jsx's `schedule` item is now gated to admin-tier
+    // roles instead, and the App.jsx route guard already reads this same
+    // canViewSchedule permission, so removing it here blocks direct-URL
+    // access too.)
 
-    // FIXED (real, live bug found during consolidation): same dead-end
-    // pattern as above — Navigation.jsx explicitly lists Uploads as
-    // accessible to ['admin', 'installer'], but UPLOADS.EXCEL was never
-    // in this Set. Added now.
+    // Installer does use Uploads (bulk Excel meter registration) — a
+    // separate feature from Meter Schedule.
     PERMISSIONS.UPLOADS.EXCEL
   ])
 });
