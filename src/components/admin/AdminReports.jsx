@@ -47,6 +47,83 @@ const EXPORT_FIELDS = [
 
 const formatStatusText = (status) => normalizeStatus(status).replace(/_/g, ' ');
 
+// Shared row shape for both the table and the Avg Transaction calculation —
+// one normalization function so the two can never quietly drift apart.
+const normalizeRequestRow = (r) => ({
+  id: r.id ?? '-',
+  accountNumber: r.accountNumber || '-',
+  meterNumber: r.meterNo || '-',
+  sealNumber: r.sealNo || '-',
+  customerName: r.custNames || '-',
+  customerAddress: r.address || '-',
+  area: r.region || '-',
+  meterType: r.meterType || r.meterRecommended || '-',
+  status: normalizeStatus(r.status || 'unknown'),
+  amount: Number(r.amount || 0),
+  paymentReference: r.rrr || '-',
+  submittedDate: r.dateRequested || null,
+  completedDate: r.dateCompleted || null,
+  raw: r
+});
+
+// Shared filter predicate — the same status/search/date-range rules apply
+// to the table (`filtered`) and to which rows count toward Avg Transaction,
+// so there is exactly one definition of "matches the admin's current
+// filters" rather than two that could drift apart.
+const rowMatchesFilters = (row, { query, status, dateFrom, dateTo }) => {
+  if (status && normalizeStatus(status) !== normalizeStatus(row.status)) return false;
+
+  const q = query.trim().toLowerCase();
+  if (q) {
+    const searchFields = [row.accountNumber, row.meterNumber, row.sealNumber, row.customerName, row.area, row.customerAddress].join(' ').toLowerCase();
+    if (!searchFields.includes(q)) return false;
+  }
+
+  const fromTs = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : null;
+  const toTs = dateTo ? new Date(dateTo).setHours(23, 59, 59, 999) : null;
+  if (fromTs || toTs) {
+    const ts = row.submittedDate ? new Date(row.submittedDate).getTime() : null;
+    if (fromTs && ts !== null && ts < fromTs) return false;
+    if (toTs && ts !== null && ts > toTs) return false;
+  }
+
+  return true;
+};
+
+// Avg Transaction data source: GET /external/jed/requests, the same
+// endpoint the table already uses (so amounts/statuses/dates are guaranteed
+// consistent with what's on screen) — NOT GET /dashboard-stats, which the
+// previous implementation read an `avgTicket`/`averageTicket` field from
+// that doesn't exist anywhere in the real, documented response shape
+// (confirmed against the live OpenAPI spec: dashboard-stats returns exactly
+// `pendingRequests`, `completedRequests`, `activeInstallers`, `totalRevenue`
+// — nothing average-related), so it silently never updated from its 0
+// initial value. See the business-definition note above `AdminReports`
+// below for what counts as a qualifying transaction.
+//
+// The real endpoint supports server-side `status` filtering (confirmed:
+// enum exactly INITIATED/PAID/COMPLETED, max `limit` 100) but no date
+// filter — so date-range filtering still has to happen client-side, but
+// fetching only PAID/COMPLETED server-side (never INITIATED, which isn't a
+// qualifying transaction — see below) avoids pulling records that could
+// never count toward the average in the first place.
+const TRANSACTION_STATS_PAGE_LIMIT = 100; // the API's documented maximum
+const TRANSACTION_STATS_MAX_PAGES = 20; // safety cap (~2000 records per status) against an unbounded loop on a very large dataset
+
+async function fetchAllRequestsByStatus(status) {
+  const all = [];
+  let page = 1;
+  while (page <= TRANSACTION_STATS_MAX_PAGES) {
+    const resp = await JEDApiService.getAllCustomerRequests({ page, limit: TRANSACTION_STATS_PAGE_LIMIT, status });
+    const data = Array.isArray(resp?.data) ? resp.data : Array.isArray(resp) ? resp : [];
+    if (data.length === 0) break;
+    all.push(...data);
+    if (!resp?.pagination?.hasNext) break;
+    page += 1;
+  }
+  return all;
+}
+
 function AdminReports() {
   const { user } = useAuth();
   const { refreshSignal } = useDataRefresh();
@@ -54,11 +131,19 @@ function AdminReports() {
   const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
 
-  const [stats, setStats] = useState({ revenue: 0, avgTicket: 0, transactions: 0 });
+  const [stats, setStats] = useState({ revenue: 0 });
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({
     currentPage: 1, totalPages: 1, totalCount: 0, hasNext: false, hasPrev: false, limit: 50
   });
+
+  // Backing dataset for Avg Transaction — every PAID/COMPLETED request
+  // across every page (not just the table's currently-displayed page), so
+  // the metric reflects the whole qualifying dataset. Loaded independently
+  // of the table's own (still server-paginated, unchanged) `rows`/`pagination`.
+  const [transactionRows, setTransactionRows] = useState([]);
+  const [transactionStatsLoading, setTransactionStatsLoading] = useState(true);
+  const [transactionStatsError, setTransactionStatsError] = useState(null);
 
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
@@ -78,14 +163,12 @@ function AdminReports() {
           const payload = s?.data || s || {};
           setStats(prev => ({
             revenue: payload.revenue || payload.totalRevenue || prev.revenue,
-            avgTicket: payload.avgTicket || payload.averageTicket || prev.avgTicket,
-            transactions: payload.transactions || payload.completedRequests || prev.transactions
           }));
         } catch (err) {
           console.debug('Reports: dashboard stats not available', err);
         }
 
-        const resp = await JEDApiService.getAllCustomerRequests({ 
+        const resp = await JEDApiService.getAllCustomerRequests({
           page: pagination.currentPage, limit: Number(pagination.limit) || 50
         });
         const data = resp?.data || resp || [];
@@ -94,24 +177,7 @@ function AdminReports() {
           hasNext: false, hasPrev: pagination.currentPage > 1, limit: pagination.limit
         };
 
-        const normalized = (Array.isArray(data) ? data : []).map((r) => ({
-          id: r.id ?? '-',
-          accountNumber: r.accountNumber || '-',
-          meterNumber: r.meterNo || '-',
-          sealNumber: r.sealNo || '-',
-          customerName: r.custNames || '-',
-          customerAddress: r.address || '-',
-          area: r.region || '-',
-          meterType: r.meterType || r.meterRecommended || '-',
-          status: normalizeStatus(r.status || 'unknown'),
-          amount: Number(r.amount || 0),
-          paymentReference: r.rrr || '-',
-          submittedDate: r.dateRequested || null,
-          completedDate: r.dateCompleted || null,
-          raw: r
-        }));
-
-        setRows(normalized);
+        setRows((Array.isArray(data) ? data : []).map(normalizeRequestRow));
         setPagination(paginationData);
       } catch (err) {
         console.error('Failed to load reports:', err);
@@ -127,25 +193,59 @@ function AdminReports() {
     // without the user needing to manually reload — see DataRefreshContext.
   }, [user, pagination.currentPage, pagination.limit, refreshSignal]);
 
-    const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const fromTs = dateFrom ? new Date(dateFrom).setHours(0,0,0,0) : null;
-    const toTs = dateTo ? new Date(dateTo).setHours(23,59,59,999) : null;
+  // Avg Transaction's own data load — independent of the table's paginated
+  // fetch above (different page range entirely: every PAID/COMPLETED
+  // record, not one page of everything). Business definition: a
+  // "qualifying transaction" is a request that has genuinely been paid —
+  // status PAID or COMPLETED. INITIATED is explicitly excluded (an RRR
+  // was generated but the customer hasn't paid — there is no transaction
+  // yet), matching this app's existing PAID/COMPLETED-only conventions
+  // elsewhere (see isAwaitingInstallationStatus/isCompletedStatus in
+  // statusBadge.js and the revenue fallback calculation in
+  // AdminDashboard.jsx, both of which already treat INITIATED as
+  // non-revenue-bearing).
+  useEffect(() => {
+    const loadTransactions = async () => {
+      if (!hasPermission(user?.role, PERMISSIONS.REPORTS.VIEW)) return;
+      try {
+        setTransactionStatsLoading(true);
+        setTransactionStatsError(null);
+        const [paid, completed] = await Promise.all([
+          fetchAllRequestsByStatus('PAID'),
+          fetchAllRequestsByStatus('COMPLETED'),
+        ]);
+        setTransactionRows([...paid, ...completed].map(normalizeRequestRow));
+      } catch (err) {
+        console.error('Failed to load transaction data for Avg Transaction:', err);
+        setTransactionStatsError('Unavailable');
+      } finally {
+        setTransactionStatsLoading(false);
+      }
+    };
 
-    return rows.filter(r => {
-      if (status && normalizeStatus(status) !== normalizeStatus(r.status)) return false;
-      if (q) {
-        const searchFields = [r.accountNumber, r.meterNumber, r.sealNumber, r.customerName, r.area, r.customerAddress].join(' ').toLowerCase();
-        if (!searchFields.includes(q)) return false;
-      }
-      if (fromTs || toTs) {
-        const ts = r.submittedDate ? new Date(r.submittedDate).getTime() : null;
-        if (fromTs && ts !== null && ts < fromTs) return false;
-        if (toTs && ts !== null && ts > toTs) return false;
-      }
-      return true;
-    });
-  }, [rows, query, status, dateFrom, dateTo]);
+    loadTransactions();
+    // refreshSignal: a payment confirmation or bulk import elsewhere in the
+    // app changes which requests are PAID/COMPLETED — refetch so the
+    // average doesn't go stale, same trigger the table's own fetch uses.
+  }, [user, refreshSignal]);
+
+  const filtered = useMemo(
+    () => rows.filter((r) => rowMatchesFilters(r, { query, status, dateFrom, dateTo })),
+    [rows, query, status, dateFrom, dateTo]
+  );
+
+  // transactionRows already only ever contains PAID/COMPLETED rows (fetched
+  // with a server-side status filter) — applying the same filter predicate
+  // used by the table naturally handles every case: no status filter counts
+  // both, picking PAID or COMPLETED narrows to just that one, and picking
+  // any other status (e.g. INITIATED) correctly yields zero qualifying
+  // transactions, since none of those rows would ever be in this array.
+  const avgTransactionStats = useMemo(() => {
+    const qualifying = transactionRows.filter((r) => rowMatchesFilters(r, { query, status, dateFrom, dateTo }));
+    const total = qualifying.reduce((sum, r) => sum + (Number.isFinite(r.amount) ? r.amount : 0), 0);
+    const count = qualifying.length;
+    return { total, count, average: count > 0 ? total / count : 0 };
+  }, [transactionRows, query, status, dateFrom, dateTo]);
 
   const exportToCSV = () => {
     setExporting(true);
@@ -285,13 +385,32 @@ function AdminReports() {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {[
-          { label: 'Total Revenue', value: formatCurrencyNGN(stats.revenue) },
-          { label: 'Avg. Transaction', value: formatCurrencyNGN(stats.avgTicket) },
-          { label: 'Total Records', value: pagination.totalCount || rows.length },
-        ].map(({ label, value }) => (
+          { label: 'Total Revenue', value: formatCurrencyNGN(stats.revenue), loading: false, error: null },
+          {
+            label: 'Avg. Transaction',
+            value: formatCurrencyNGN(avgTransactionStats.average),
+            caption: `${avgTransactionStats.count.toLocaleString()} qualifying transaction${avgTransactionStats.count === 1 ? '' : 's'}`,
+            loading: transactionStatsLoading,
+            error: transactionStatsError,
+          },
+          { label: 'Total Records', value: pagination.totalCount || rows.length, loading: false, error: null },
+        ].map(({ label, value, caption, loading: cardLoading, error: cardError }) => (
           <div key={label} className="card p-4 sm:p-5">
             <h4 className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-medium">{label}</h4>
-            <p className="text-xl sm:text-2xl font-bold mt-2 text-gray-900 dark:text-white">{value}</p>
+            {cardLoading ? (
+              <div
+                className="mt-2 h-7 sm:h-8 w-24 rounded bg-gray-200 dark:bg-gray-700 animate-pulse"
+                role="status"
+                aria-label={`Loading ${label}`}
+              />
+            ) : cardError ? (
+              <p className="text-sm font-medium mt-2.5 text-red-600 dark:text-red-400">{cardError}</p>
+            ) : (
+              <>
+                <p className="text-xl sm:text-2xl font-bold mt-2 text-gray-900 dark:text-white">{value}</p>
+                {caption && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{caption}</p>}
+              </>
+            )}
           </div>
         ))}
       </div>
