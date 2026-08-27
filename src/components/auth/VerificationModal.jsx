@@ -174,8 +174,8 @@ const VerificationModal = ({
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-              <Shield className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="w-12 h-12 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
+              <Shield className="w-6 h-6 text-brand-600 dark:text-brand-400" />
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -264,7 +264,7 @@ const VerificationModal = ({
             <button
               onClick={handleVerify}
               disabled={loading || otp.join('').length !== 6}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
             >
               {loading ? (
                 <>
@@ -284,7 +284,7 @@ const VerificationModal = ({
               <button
                 onClick={sendOTP}
                 disabled={resending || countdown > 0}
-                className="inline-flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="inline-flex items-center gap-2 text-sm text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <RefreshCw className={`w-4 h-4 ${resending ? 'animate-spin' : ''}`} />
                 {countdown > 0 ? (
@@ -301,8 +301,8 @@ const VerificationModal = ({
 
         {/* Help Text */}
         {!success && (
-          <div className="mt-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-            <p className="text-xs text-blue-700 dark:text-blue-300 text-center">
+          <div className="mt-6 p-3 bg-brand-50 dark:bg-brand-900/20 rounded-lg">
+            <p className="text-xs text-brand-700 dark:text-brand-300 text-center">
               Didn't receive the code? Check your spam folder or click resend
             </p>
           </div>

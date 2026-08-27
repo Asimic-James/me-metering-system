@@ -125,12 +125,12 @@ function GenerateRRRModal({ isOpen, onClose, payload, loading, error, result, ge
                 <Row label="Date Generated" value={formatDateTime(generatedAt)} />
               </div>
 
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex gap-2 text-sm text-blue-800 dark:text-blue-300">
+              <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg p-3 flex gap-2 text-sm text-brand-800 dark:text-brand-300">
                 <Info className="w-4 h-4 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium">Payment Instructions</p>
                   <p className="mt-0.5">Give the RRR above to the customer. They can pay at any bank branch, via USSD, or online through Remita using this reference.</p>
-                  <p className="mt-1 text-xs text-blue-700/80 dark:text-blue-400/80">
+                  <p className="mt-1 text-xs text-brand-700/80 dark:text-brand-400/80">
                     Payment expiry isn't returned by this endpoint — confirm the RRR's validity window with Remita if needed.
                   </p>
                 </div>

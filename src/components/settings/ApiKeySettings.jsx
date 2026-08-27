@@ -262,7 +262,7 @@ const ApiKeySettings = () => {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-2" />
+          <Loader2 className="w-8 h-8 animate-spin text-brand-600 dark:text-brand-400 mx-auto mb-2" />
           <p className="text-gray-600 dark:text-gray-400">Loading API keys...</p>
         </div>
       </div>
@@ -285,7 +285,7 @@ const ApiKeySettings = () => {
             setError(null);
           }}
           disabled={!!actionLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50"
         >
           <Plus className="w-4 h-4" />
           Create API Key
@@ -441,7 +441,7 @@ const ApiKeySettings = () => {
           <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-auto">
             <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <BarChart3 className="w-5 h-5 text-brand-600 dark:text-brand-400" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                   Usage — {getKeyName(usageModal.key || {})}
                 </h3>
@@ -462,7 +462,7 @@ const ApiKeySettings = () => {
                     onClick={() => changeUsageDays(d)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                       usageModal.days === d
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-brand-500 text-gray-900'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
                     }`}
                   >
@@ -473,7 +473,7 @@ const ApiKeySettings = () => {
 
               {usageModal.loading ? (
                 <div className="flex items-center justify-center py-10">
-                  <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                  <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
                 </div>
               ) : usageModal.error ? (
                 <div className="text-sm text-red-600 dark:text-red-400">{usageModal.error}</div>
@@ -483,11 +483,11 @@ const ApiKeySettings = () => {
                       shape is unconfirmed, so this falls back to a raw
                       view rather than showing nothing. */}
                   {(usageModal.data.totalRequests !== undefined || usageModal.data.total !== undefined) && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-center">
-                      <p className="text-2xl font-bold text-blue-900 dark:text-blue-200">
+                    <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4 text-center">
+                      <p className="text-2xl font-bold text-brand-900 dark:text-brand-200">
                         {usageModal.data.totalRequests ?? usageModal.data.total}
                       </p>
-                      <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                      <p className="text-xs text-brand-700 dark:text-brand-400 mt-1">
                         Total requests (last {usageModal.days} days)
                       </p>
                     </div>
@@ -545,7 +545,7 @@ const ApiKeySettings = () => {
               <button
                 onClick={handleCreate}
                 disabled={actionLoading === 'create'}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50"
               >
                 {actionLoading === 'create' ? (
                   <><Loader2 className="w-4 h-4 animate-spin" />Creating...</>
@@ -585,7 +585,7 @@ const ApiKeySettings = () => {
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-3">
-                    <button onClick={() => openUsageModal(key)} className="p-2 text-blue-600 hover:text-blue-800 dark:text-blue-400" title="View Usage">
+                    <button onClick={() => openUsageModal(key)} className="p-2 text-brand-600 hover:text-brand-800 dark:text-brand-400" title="View Usage">
                       <BarChart3 className="w-4 h-4" />
                     </button>
                     {active && (
@@ -652,7 +652,7 @@ const ApiKeySettings = () => {
                         <div className="flex gap-2 justify-end">
                           <button
                             onClick={() => openUsageModal(key)}
-                            className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                            className="p-1 text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300"
                             title="View Usage"
                           >
                             <BarChart3 className="w-4 h-4" />
@@ -691,20 +691,20 @@ const ApiKeySettings = () => {
       </div>
 
       {/* Stats Footer */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+      <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg p-4">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <div>
-            <span className="text-blue-700 dark:text-blue-300">Total Keys:</span>
-            <span className="ml-2 font-bold text-blue-900 dark:text-blue-100">{apiKeys.length}</span>
+            <span className="text-brand-700 dark:text-brand-300">Total Keys:</span>
+            <span className="ml-2 font-bold text-brand-900 dark:text-brand-100">{apiKeys.length}</span>
           </div>
           <div>
-            <span className="text-blue-700 dark:text-blue-300">Active:</span>
+            <span className="text-brand-700 dark:text-brand-300">Active:</span>
             <span className="ml-2 font-bold text-green-600 dark:text-green-400">
               {apiKeys.filter((k) => getKeyActive(k)).length}
             </span>
           </div>
           <div>
-            <span className="text-blue-700 dark:text-blue-300">Inactive:</span>
+            <span className="text-brand-700 dark:text-brand-300">Inactive:</span>
             <span className="ml-2 font-bold text-gray-600 dark:text-gray-400">
               {apiKeys.filter((k) => !getKeyActive(k)).length}
             </span>

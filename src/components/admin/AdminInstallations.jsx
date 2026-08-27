@@ -43,7 +43,7 @@ function JobRow({ job, onClick, selectable, selected, onToggleSelect, onAssignOn
           checked={selected}
           onChange={(e) => { e.stopPropagation(); onToggleSelect(job.accountNumber); }}
           onClick={(e) => e.stopPropagation()}
-          className="mt-1 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 shrink-0"
+          className="mt-1 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500 shrink-0"
           aria-label={`Select account ${job.accountNumber}`}
         />
       )}
@@ -79,7 +79,7 @@ function JobRow({ job, onClick, selectable, selected, onToggleSelect, onAssignOn
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onAssignOne(job); }}
-            className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400"
+            className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 dark:text-brand-400"
           >
             <UserPlus className="w-3.5 h-3.5" />
             Assign Installer
@@ -100,7 +100,7 @@ function JobTableRow({ job, onClick, selectable, selected, onToggleSelect, onAss
             type="checkbox"
             checked={selected}
             onChange={() => onToggleSelect(job.accountNumber)}
-            className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+            className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500"
             aria-label={`Select account ${job.accountNumber}`}
           />
         </td>
@@ -117,7 +117,7 @@ function JobTableRow({ job, onClick, selectable, selected, onToggleSelect, onAss
           <button
             type="button"
             onClick={() => onAssignOne(job)}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-300"
           >
             <UserPlus className="w-3.5 h-3.5" />
             Assign Installer
@@ -273,7 +273,7 @@ function AdminInstallations() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400 text-sm">Loading installations...</p>
         </div>
       </div>
@@ -284,8 +284,8 @@ function AdminInstallations() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg shrink-0">
-            <ClipboardList className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          <div className="p-2 bg-brand-100 dark:bg-brand-900/30 rounded-lg shrink-0">
+            <ClipboardList className="w-6 h-6 text-brand-600 dark:text-brand-400" />
           </div>
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
@@ -301,7 +301,7 @@ function AdminInstallations() {
           onClick={() => setRefreshKey((k) => k + 1)}
           disabled={loading}
           aria-label="Refresh"
-          className="p-2.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 shrink-0 flex items-center gap-2 transition-all duration-150 active:scale-[0.98]"
+          className="p-2.5 sm:px-4 sm:py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 disabled:bg-brand-400 shrink-0 flex items-center gap-2 transition-all duration-150 active:scale-[0.98]"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           <span className="hidden sm:inline text-sm font-medium">Refresh</span>
@@ -339,15 +339,15 @@ function AdminInstallations() {
         </div>
 
         {activeTab === 'awaiting' && selected.size > 0 && (
-          <div className="px-3 sm:px-4 py-2.5 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+          <div className="px-3 sm:px-4 py-2.5 bg-brand-50 dark:bg-brand-900/20 border-b border-brand-200 dark:border-brand-800 flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-brand-800 dark:text-brand-300">
               {selected.size} selected
             </p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleAssignSelected}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-500 text-gray-900 rounded-lg text-xs font-medium hover:bg-brand-600"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 Assign to Installer
@@ -356,7 +356,7 @@ function AdminInstallations() {
                 type="button"
                 onClick={() => setSelected(new Set())}
                 aria-label="Clear selection"
-                className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg"
+                className="p-1.5 text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 rounded-lg"
               >
                 <X className="w-4 h-4" />
               </button>

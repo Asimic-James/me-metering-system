@@ -93,20 +93,20 @@ code {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(37, 99, 235, 0.3); /* brand-600 */
+  background: rgba(184, 134, 10, 0.35); /* brand-600 */
   border-radius: 99px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(37, 99, 235, 0.55);
+  background: rgba(184, 134, 10, 0.6);
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(59, 130, 246, 0.35); /* brand-500 */
+  background: rgba(220, 172, 15, 0.4); /* brand-500 */
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(59, 130, 246, 0.6);
+  background: rgba(220, 172, 15, 0.65);
 }
 
 /* ============================================

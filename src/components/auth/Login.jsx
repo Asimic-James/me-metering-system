@@ -1,7 +1,7 @@
 // src/components/auth/Login.jsx
 // Modern, mobile-first login with best practices
 import { useState, useCallback, useEffect } from 'react';
-import { Power, Phone, Lock, Eye, EyeOff, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { Phone, Lock, Eye, EyeOff, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
 import InfoModal from '../common/InfoModal';
 
 // Validation rules
@@ -56,7 +56,7 @@ const InputField = ({
         className={`
           block w-full pl-10 ${showToggle ? 'pr-10' : 'pr-3'} py-3
           border rounded-lg
-          focus:ring-2 focus:ring-blue-500 focus:border-transparent
+          focus:ring-2 focus:ring-brand-500 focus:border-transparent
           disabled:opacity-50 disabled:cursor-not-allowed
           transition-all duration-200
           text-white placeholder-slate-500
@@ -237,32 +237,28 @@ function Login({ onLogin }) {
 
         <div className="relative" />
         <div className="relative flex flex-col items-center text-center">
-          <div className="mb-6 bg-brand-600 p-4 rounded-2xl">
-            <Power className="w-10 h-10 text-white" />
-          </div>
+          <img src="/brand-logo.png" alt="ME Metering" className="mb-6 w-24 h-24 object-contain rounded-2xl bg-white/95 p-2" />
           <p className="text-white font-bold tracking-[0.15em] text-xl">
             MASTERS ENERGY
           </p>
-          <p className="text-blue-200/90 text-sm mt-1.5 tracking-wide">
+          <p className="text-brand-200/90 text-sm mt-1.5 tracking-wide">
             ME Metering Integration
           </p>
-          <p className="text-blue-300/60 text-xs mt-1 tracking-wide">
+          <p className="text-brand-300/60 text-xs mt-1 tracking-wide">
             JEDC Partnership
           </p>
         </div>
-        <p className="relative text-blue-300/50 text-xs">
+        <p className="relative text-brand-300/50 text-xs">
           © {new Date().getFullYear()} JEDC Meter Management. All rights reserved.
         </p>
       </div>
 
       {/* Compact brand strip — mobile/tablet only */}
       <div className="lg:hidden flex items-center gap-3 px-4 sm:px-6 py-5 bg-brand-900">
-        <div className="bg-brand-600 p-2 rounded-xl flex-shrink-0">
-          <Power className="w-6 h-6 text-white" />
-        </div>
+        <img src="/brand-logo.png" alt="ME Metering" className="w-10 h-10 object-contain rounded-xl bg-white/95 p-1 flex-shrink-0" />
         <div className="min-w-0">
           <p className="text-white font-bold text-sm tracking-wide truncate">Masters Energy</p>
-          <p className="text-blue-300/70 text-xs truncate">ME Metering Integration &middot; JEDC Partnership</p>
+          <p className="text-brand-300/70 text-xs truncate">ME Metering Integration &middot; JEDC Partnership</p>
         </div>
       </div>
 
@@ -341,7 +337,7 @@ function Login({ onLogin }) {
                     isOpen: true,
                     title: 'Password Reset',
                     message: 'For security reasons, please contact your system administrator to reset your password.' })}
-                  className="text-sm font-medium text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+                  className="text-sm font-medium text-brand-400 hover:text-brand-300 hover:underline transition-colors"
                 >
                   Forgot password?
                 </button>
@@ -356,7 +352,7 @@ function Login({ onLogin }) {
                 w-full flex items-center justify-center gap-2
                 py-3 px-4 rounded-lg
                 text-base font-semibold text-white
-                bg-brand-600 hover:bg-brand-700
+                bg-brand-600 hover:bg-brand-600
                 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-950
                 disabled:bg-slate-700 disabled:cursor-not-allowed
                 transition-colors duration-150
@@ -383,7 +379,7 @@ function Login({ onLogin }) {
                   isOpen: true,
                   title: 'Account Creation',
                   message: 'New user accounts must be created by a system administrator. Please contact support for assistance.' })}
-                className="font-semibold text-blue-400 hover:text-blue-300 hover:underline transition-colors"
+                className="font-semibold text-brand-400 hover:text-brand-300 hover:underline transition-colors"
               >
                 Contact Administrator
               </button>

@@ -7,13 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon-32.png', 'apple-touch-icon.png', 'logo.svg'],
+      includeAssets: ['favicon-32.png', 'apple-touch-icon.png', 'brand-logo.png'],
       manifest: {
         name: 'ME Metering Integration - JEDC Meter Management',
         short_name: 'ME Metering',
         description: 'JEDC Partnership meter installation, payment, and management system',
-        theme_color: '#2563EB',
-        background_color: '#f0f4ff',
+        theme_color: '#5c4104',
+        background_color: '#fefbea',
         display: 'standalone',
         start_url: '/',
         scope: '/',

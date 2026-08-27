@@ -187,7 +187,7 @@ function ConfirmPaymentTab() {
                 type="button"
                 onClick={handleCheckRRR}
                 disabled={rrrLoading || !rrrQuery.trim()}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-sm font-medium shrink-0"
+                className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 disabled:bg-brand-400 disabled:cursor-not-allowed text-sm font-medium shrink-0"
               >
                 {rrrLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 <span className="hidden sm:inline">Check Status</span>
@@ -212,7 +212,7 @@ function ConfirmPaymentTab() {
                   <button
                     type="button"
                     onClick={handleUseAccountFromRRR}
-                    className="flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                    className="flex items-center gap-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-800 dark:hover:text-brand-300"
                   >
                     <ArrowDownToLine className="w-3.5 h-3.5" />
                     Use account {foundAccount}

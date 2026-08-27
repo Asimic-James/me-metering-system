@@ -170,8 +170,8 @@ function ExcelUpload() {
     <div className="space-y-6 p-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
-            <Upload className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          <div className="p-2 bg-brand-100 dark:bg-brand-900/30 rounded-lg flex-shrink-0">
+            <Upload className="w-6 h-6 text-brand-600 dark:text-brand-400" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Upload Meters (Excel)</h1>
@@ -198,7 +198,7 @@ function ExcelUpload() {
               accept=".xlsx,.xls,.csv" 
               onChange={handleFileChange} 
               disabled={uploading}
-              className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
             />
             {file && (
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
@@ -248,7 +248,7 @@ function ExcelUpload() {
             <button
               onClick={handleUpload}
               disabled={!file || uploading}
-              className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 bg-brand-500 text-gray-900 px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-brand-600 transition-colors"
             >
               <Upload className="w-4 h-4" />
               {uploading ? 'Uploading...' : 'Upload'}
@@ -313,7 +313,7 @@ function ExcelUpload() {
 
           {/* Messages and Errors */}
           {message && !uploadResult && (
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
+            <div className="mt-4 p-3 bg-brand-50 border border-brand-200 rounded-lg text-brand-700 text-sm">
               {message}
             </div>
           )}
@@ -334,13 +334,13 @@ const StatCard = ({ icon: Icon, label, value, color = 'gray' }) => {
     gray: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700',
     green: 'text-green-700 bg-green-50 border-green-200',
     red: 'text-red-700 bg-red-50 border-red-200',
-    blue: 'text-blue-700 bg-blue-50 border-blue-200',
+    blue: 'text-brand-700 bg-brand-50 border-brand-200',
   };
   const textColors = {
     gray: 'text-gray-900 dark:text-white',
     green: 'text-green-700',
     red: 'text-red-700',
-    blue: 'text-blue-700',
+    blue: 'text-brand-700',
   }
   return (
     <div className={`flex items-center p-3 rounded-lg border ${colors[color]}`}>

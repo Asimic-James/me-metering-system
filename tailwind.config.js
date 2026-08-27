@@ -11,39 +11,57 @@ export default {
       colors: {
         // ==================== BRAND / DESIGN TOKENS ====================
         // Single source of truth for this app's colour system — components
-        // should use these (`bg-brand-600`, `text-brand-700`, etc.) rather
+        // should use these (`bg-brand-500`, `text-brand-600`, etc.) rather
         // than picking one-off Tailwind colours or gradients directly.
         //
-        // `brand` is this app's existing primary (matches index.html's
-        // `<meta name="theme-color" content="#2563EB">` and the blue
-        // already used throughout the UI) — not a new colour, just now
-        // named and centralized instead of repeated ad hoc everywhere.
-        // 600 = primary, 700 = hover/active.
+        // `brand` is the real ME Metering corporate gold, taken directly
+        // from the official brand (memetering.com — logo + site palette:
+        // `#f7c51e`/`#ffc400`, paired with a leaf-green accent in the logo
+        // mark itself). Replaces the previous placeholder blue scale
+        // (`#2563eb`-based) used before the real brand was integrated —
+        // blue is now free to use as an ordinary UI colour (e.g. the
+        // INSTALLED meter-status badge) since it no longer means "brand."
         //
-        // Semantic roles (all standard Tailwind gray/green/amber/red —
-        // used as-is, not redefined, so they stay distinct from `brand`):
+        // IMPORTANT — text-colour pairing is inverted from a typical blue
+        // brand scale: gold/yellow hues have poor contrast with white text
+        // at vibrant shades (verified: #f7c51e vs white ≈ 1.6:1, far under
+        // WCAG AA) but excellent contrast with dark text (≈11:1). So:
+        //   shades 50–600  → pair with dark text (`text-gray-900`)
+        //   shades 700–900 → pair with white text (`text-white`)
+        // 500 = primary interactive default, 600 = hover/active (both
+        // dark-text) — deliberately one step lighter than the old blue
+        // scale's 600/700 convention, to stay in the dark-text-safe range
+        // on both the resting and hover state (no text-colour flip needed
+        // between them). 800/900 are the dark "bronze" shades used for
+        // large chrome surfaces (header/sidebar/login panel) that carry
+        // white text/logo — verified ≥9:1 contrast.
+        //
+        // Semantic roles (all standard Tailwind colours — used as-is, not
+        // redefined, so they stay distinct from `brand`):
         //   background   gray-50   / dark:gray-950
         //   surface      white     / dark:gray-800
         //   border       gray-200  / dark:gray-700
         //   text         gray-900  / dark:white
         //   muted text   gray-500  / dark:gray-400
-        //   success      green-*   (also: COMPLETED status)
-        //   warning      amber-*   (also: PAID / awaiting-action status)
+        //   success      green-*   (also: COMPLETED status — a happy
+        //                overlap with the brand logo's own leaf-green,
+        //                not a coincidence worth fighting)
+        //   warning      blue-*    (also: PAID / awaiting-action status —
+        //                moved off amber/yellow specifically because that
+        //                hue is now `brand`; see statusBadge.js)
         //   error        red-*     (also: FAILED status)
-        //   info/neutral slate-*   (also: INITIATED status — deliberately
-        //                NOT blue, so a status badge is never visually
-        //                confused with the brand/primary-action colour)
+        //   info/neutral slate-*   (also: INITIATED status)
         brand: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50: '#fefbea',
+          100: '#fdf3c7',
+          200: '#fbe58a',
+          300: '#f9d752',
+          400: '#f7c51e',
+          500: '#dcac0f',
+          600: '#b8860a',
+          700: '#8a6206',
+          800: '#5c4104',
+          900: '#3d2b03',
         },
         dark: {
           50: '#f9fafb',

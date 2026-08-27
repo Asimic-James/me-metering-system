@@ -55,7 +55,7 @@ const StatCard = ({ title, value, icon: Icon, change, changeType = 'neutral' }) 
         <div className={`flex items-center text-xs sm:text-sm font-medium ${
           changeType === 'positive' ? 'text-green-600' :
           changeType === 'negative' ? 'text-red-600' :
-          'text-blue-600'
+          'text-brand-600'
         }`}>
           {changeType === 'positive' ? <ArrowUpRight className="w-3 h-3 sm:w-4 sm:h-4" /> :
            changeType === 'negative' ? <ArrowDownRight className="w-3 h-3 sm:w-4 sm:h-4" /> : null}
@@ -86,7 +86,7 @@ const RecentInstallations = ({ installations, totalCount, onViewAll, onItemClick
       <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Recent Installations</h3>
       <button 
         onClick={onViewAll} 
-        className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 font-medium"
+        className="text-xs sm:text-sm text-brand-600 hover:text-brand-700 font-medium"
       >
         View All ({totalCount})
       </button>
@@ -273,7 +273,7 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
             <button
               onClick={handleExport}
               disabled={isExporting}
-              className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isExporting ? (
                 <>
@@ -552,7 +552,7 @@ function AdminDashboard() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400 text-sm">Loading dashboard...</p>
         </div>
       </div>
@@ -567,7 +567,7 @@ function AdminDashboard() {
           <p className="text-gray-900 dark:text-white mb-4">{error}</p>
           <button 
             onClick={() => window.location.reload()}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-6 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors"
           >
             Try Again
           </button>
@@ -581,8 +581,8 @@ function AdminDashboard() {
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <LayoutDashboard className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="p-2 bg-brand-100 dark:bg-brand-900/30 rounded-lg">
+              <LayoutDashboard className="w-6 h-6 text-brand-600 dark:text-brand-400" />
             </div>
             <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
@@ -596,7 +596,7 @@ function AdminDashboard() {
           <div className="mt-4 sm:mt-0">
             <button
               onClick={handleGenerateReport}
-              className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+              className="w-full sm:w-auto bg-brand-500 text-gray-900 px-4 py-2 rounded-lg hover:bg-brand-600 transition-colors flex items-center justify-center gap-2"
             >
               <FileText className="w-4 h-4" />
               Generate Report
@@ -635,7 +635,7 @@ function AdminDashboard() {
                     onClick={() => setTrendDays(preset.id)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                       trendDays === preset.id
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-brand-500 text-gray-900'
                         : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                     }`}
                   >

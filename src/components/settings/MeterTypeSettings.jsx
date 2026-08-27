@@ -262,7 +262,7 @@ const MeterTypeSettings = () => {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-2" />
+          <Loader2 className="w-8 h-8 animate-spin text-brand-600 dark:text-brand-400 mx-auto mb-2" />
           <p className="text-gray-600 dark:text-gray-400">Loading meter types...</p>
         </div>
       </div>
@@ -288,7 +288,7 @@ const MeterTypeSettings = () => {
             setError(null);
           }}
           disabled={!!actionLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50"
         >
           <Plus className="w-4 h-4" />
           Add Meter Type
@@ -403,7 +403,7 @@ const MeterTypeSettings = () => {
               <button
                 onClick={handleCreate}
                 disabled={actionLoading === 'create'}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50"
               >
                 {actionLoading === 'create' ? (
                   <>
@@ -525,7 +525,7 @@ const MeterTypeSettings = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                          <div className="text-sm font-semibold text-brand-600 dark:text-brand-400">
                             {formatCurrency(type.amount)}
                           </div>
                         </td>
@@ -548,7 +548,7 @@ const MeterTypeSettings = () => {
                             <button
                               onClick={() => startEdit(type)}
                               disabled={!!actionLoading}
-                              className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50"
+                              className="p-1 text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 disabled:opacity-50"
                               title="Edit"
                             >
                               <Edit2 className="w-4 h-4" />
@@ -578,27 +578,27 @@ const MeterTypeSettings = () => {
       </div>
 
       {/* Stats Footer */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+      <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
-            <span className="text-blue-700 dark:text-blue-300">Total Types:</span>
-            <span className="ml-2 font-bold text-blue-900 dark:text-blue-100">{meterTypes.length}</span>
+            <span className="text-brand-700 dark:text-brand-300">Total Types:</span>
+            <span className="ml-2 font-bold text-brand-900 dark:text-brand-100">{meterTypes.length}</span>
           </div>
           <div>
-            <span className="text-blue-700 dark:text-blue-300">Active:</span>
+            <span className="text-brand-700 dark:text-brand-300">Active:</span>
             <span className="ml-2 font-bold text-green-600 dark:text-green-400">
               {meterTypes.filter(t => t.isActive).length}
             </span>
           </div>
           <div>
-            <span className="text-blue-700 dark:text-blue-300">Inactive:</span>
+            <span className="text-brand-700 dark:text-brand-300">Inactive:</span>
             <span className="ml-2 font-bold text-gray-600 dark:text-gray-400">
               {meterTypes.filter(t => !t.isActive).length}
             </span>
           </div>
           <div>
-            <span className="text-blue-700 dark:text-blue-300">Showing:</span>
-            <span className="ml-2 font-bold text-blue-900 dark:text-blue-100">
+            <span className="text-brand-700 dark:text-brand-300">Showing:</span>
+            <span className="ml-2 font-bold text-brand-900 dark:text-brand-100">
               {filteredMeterTypes.length}
             </span>
           </div>

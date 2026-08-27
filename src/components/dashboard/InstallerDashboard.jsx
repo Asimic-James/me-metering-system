@@ -202,7 +202,7 @@ function InstallerDashboard() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400 text-sm">Loading installation queue...</p>
         </div>
       </div>
@@ -214,8 +214,8 @@ function InstallerDashboard() {
       {/* Page header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg shrink-0">
-            <Wrench className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          <div className="p-2 bg-brand-100 dark:bg-brand-900/30 rounded-lg shrink-0">
+            <Wrench className="w-6 h-6 text-brand-600 dark:text-brand-400" />
           </div>
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
@@ -231,7 +231,7 @@ function InstallerDashboard() {
           onClick={() => setRefreshKey((k) => k + 1)}
           disabled={loading}
           aria-label="Refresh"
-          className="p-2.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 shrink-0 flex items-center gap-2 transition-all duration-150 active:scale-[0.98]"
+          className="p-2.5 sm:px-4 sm:py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 disabled:bg-brand-400 shrink-0 flex items-center gap-2 transition-all duration-150 active:scale-[0.98]"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           <span className="hidden sm:inline text-sm font-medium">Refresh</span>

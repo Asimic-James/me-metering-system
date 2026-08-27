@@ -24,7 +24,7 @@ const STEPS = [
     label: 'RRR Generated',
     description: 'Payment reference was generated for this request.',
     icon: FileText,
-    color: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30',
+    color: 'text-brand-600 dark:text-brand-400 bg-brand-100 dark:bg-brand-900/30',
     dotColor: 'bg-slate-400',
   },
   {

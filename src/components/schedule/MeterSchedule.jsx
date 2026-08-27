@@ -34,7 +34,7 @@ const PRIORITY_CONFIG = {
 };
 
 const STATUS_CONFIG = {
-  pending: { bg: 'bg-blue-100', text: 'text-blue-800', icon: Clock },
+  pending: { bg: 'bg-brand-100', text: 'text-brand-800', icon: Clock },
   completed: { bg: 'bg-green-100', text: 'text-green-800', icon: CheckCircle }
 };
 
@@ -56,8 +56,8 @@ const METER_STATISTICS_CONFIG = {
   totalMeters: {
     title: 'Total Meters',
     icon: Database,
-    bgColor: 'bg-blue-100',
-    iconColor: 'text-blue-600'
+    bgColor: 'bg-brand-100',
+    iconColor: 'text-brand-600'
   },
   available: {
     title: 'Available',
@@ -110,8 +110,8 @@ const METER_STATISTICS_CONFIG = {
   pending: {
     title: 'Pending',
     icon: Clock,
-    bgColor: 'bg-blue-100',
-    iconColor: 'text-blue-600'
+    bgColor: 'bg-brand-100',
+    iconColor: 'text-brand-600'
   }
 };
 
@@ -464,7 +464,7 @@ const MeterStatusBadge = ({ status }) => {
       case 'AVAILABLE':
         return { bg: 'bg-green-100', text: 'text-green-800', label: 'Available' };
       case 'INSTALLED':
-        return { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Installed' };
+        return { bg: 'bg-brand-100', text: 'text-brand-800', label: 'Installed' };
       case 'FAULTY':
         return { bg: 'bg-red-100', text: 'text-red-800', label: 'Faulty' };
       case 'RETIRED':
@@ -487,7 +487,9 @@ const PhaseTypeBadge = ({ phaseType }) => {
   const getPhaseConfig = (phaseType) => {
     switch (phaseType) {
       case 'SINGLE PHASE':
-        return { bg: 'bg-yellow-100', text: 'text-yellow-800', icon: Zap, label: 'Single Phase' };
+        // Cyan, not amber/gold — gold is now this app's brand colour (see
+        // tailwind.config.js), so a phase-type badge doesn't collide with it.
+        return { bg: 'bg-cyan-100', text: 'text-cyan-800', icon: Zap, label: 'Single Phase' };
       case 'THREE PHASE':
         return { bg: 'bg-indigo-100', text: 'text-indigo-800', icon: Cpu, label: 'Three Phase' };
       default:
@@ -574,7 +576,7 @@ const MeterCard = ({ meter, canDelete, deleting, onDeleteClick, onAssignClick })
         {canAssign && (
           <button
             onClick={() => onAssignClick(meter)}
-            className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors text-xs font-medium"
+            className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-brand-200 dark:border-brand-800 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors text-xs font-medium"
             title="Assign this meter to an installer/job"
           >
             <UserPlus className="w-3.5 h-3.5" />
@@ -592,7 +594,7 @@ const MeterTable = ({ meters, loading }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+        <RefreshCw className="w-6 h-6 animate-spin text-brand-600" />
         <span className="ml-2 text-gray-600 dark:text-gray-400">Loading meters...</span>
       </div>
     );
@@ -652,7 +654,17 @@ const MeterTable = ({ meters, loading }) => {
                   {meter.manufacturedDate}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                  {getInstalledAtValue(meter) ? new Date(getInstalledAtValue(meter)).toLocaleDateString() : 'Not Installed'}
+                  {getInstalledAtValue(meter)
+                    ? formatDateOnly(getInstalledAtValue(meter))
+                    // A meter can genuinely be status INSTALLED with no
+                    // installedAt timestamp on the real API (confirmed:
+                    // this happens in production data) — "Not Installed"
+                    // would contradict the Status column right next to it,
+                    // so this only says that when the meter really isn't
+                    // installed yet. Never fabricates a date either way.
+                    : getMeterStatus(meter) === 'INSTALLED'
+                      ? 'Installed (date unavailable)'
+                      : 'Not Installed'}
                 </td>
               </tr>
             ))}
@@ -796,7 +808,7 @@ const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
             <button
               onClick={onRefresh}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed text-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:bg-brand-400 disabled:cursor-not-allowed text-sm"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -897,7 +909,7 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
             <button
               onClick={onRefresh}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed text-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:bg-brand-400 disabled:cursor-not-allowed text-sm"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -996,7 +1008,7 @@ const Pagination = ({ pagination, onPageChange, loading }) => {
                 disabled={loading}
                 className={`min-w-[40px] px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   page === pageNum
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-brand-500 text-gray-900'
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-600'
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
@@ -1177,12 +1189,12 @@ const MeterQuery = ({ meterQuery }) => {
       )}
 
       {!loading && meters.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-brand-50 border border-brand-200 rounded-lg p-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="text-sm text-blue-800">
+            <div className="text-sm text-brand-800">
               Found <span className="font-semibold">{pagination.total}</span> meters matching your criteria
             </div>
-            <div className="text-xs text-blue-600 flex items-center gap-2">
+            <div className="text-xs text-brand-600 flex items-center gap-2">
               <span>Page {pagination.page} of {pagination.pages}</span>
               <span>•</span>
               <span>Showing {((pagination.page - 1) * pagination.limit) + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)}</span>
@@ -1193,7 +1205,7 @@ const MeterQuery = ({ meterQuery }) => {
 
       {loading && (
         <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+          <RefreshCw className="w-8 h-8 animate-spin text-brand-600" />
           <span className="ml-3 text-gray-600 dark:text-gray-400">Loading meters...</span>
         </div>
       )}
@@ -1241,8 +1253,8 @@ function MeterSchedule() {
         title: 'Total Meters', 
         value: meterStats.totalMeters, 
         icon: Database, 
-        bgColor: 'bg-blue-100', 
-        iconColor: 'text-blue-600',
+        bgColor: 'bg-brand-100', 
+        iconColor: 'text-brand-600',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1286,8 +1298,8 @@ function MeterSchedule() {
         title: 'Pending', 
         value: meterStats.pending, 
         icon: Clock, 
-        bgColor: 'bg-blue-100', 
-        iconColor: 'text-blue-600',
+        bgColor: 'bg-brand-100', 
+        iconColor: 'text-brand-600',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1300,12 +1312,12 @@ function MeterSchedule() {
         loading: statsLoading,
         error: !!statsError
       },
-      { 
-        title: 'Single Phase', 
-        value: meterStats.singlePhase, 
-        icon: Zap, 
-        bgColor: 'bg-yellow-100', 
-        iconColor: 'text-yellow-600',
+      {
+        title: 'Single Phase',
+        value: meterStats.singlePhase,
+        icon: Zap,
+        bgColor: 'bg-cyan-100',
+        iconColor: 'text-cyan-600',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1331,8 +1343,8 @@ function MeterSchedule() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
-            <Database className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          <div className="p-2 bg-brand-100 dark:bg-brand-900/30 rounded-lg flex-shrink-0">
+            <Database className="w-6 h-6 text-brand-600 dark:text-brand-400" />
           </div>
           <div className="min-w-0">
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1">Meter Management</h2>
@@ -1347,7 +1359,7 @@ function MeterSchedule() {
             <span className="text-red-600 text-sm">{statsError}</span>
             <button
               onClick={refetchStats}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+              className="text-brand-600 hover:text-brand-800 text-sm font-medium"
             >
               Retry
             </button>
@@ -1369,7 +1381,7 @@ function MeterSchedule() {
               onClick={() => handleTabChange(tab.id)}
               className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-xs sm:text-sm ${
                 activeTab === tab.id
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-brand-500 text-gray-900'
                   : 'bg-gray-100 dark:bg-gray-800/80 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
               }`}
             >

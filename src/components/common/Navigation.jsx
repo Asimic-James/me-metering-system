@@ -14,7 +14,7 @@
 // permanently-docked desktop rail.
 import {
   LayoutDashboard, Database, Users, BarChart3,
-  Upload, Settings, X, Layers2, CreditCard, ChevronsLeft, ChevronsRight,
+  Upload, Settings, X, CreditCard, ChevronsLeft, ChevronsRight,
   ClipboardList
 } from 'lucide-react';
 import { useEffect, useCallback, useMemo, useState } from 'react';
@@ -131,7 +131,7 @@ function NavItem({ item, onClick, collapsed }) {
         >
           <div className={`p-2 rounded-lg flex-shrink-0 ${
             isActive
-              ? 'bg-brand-600 text-white'
+              ? 'bg-brand-500 text-gray-900'
               : 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400'
           }`}>
             <Icon className="w-4 h-4" />
@@ -204,15 +204,17 @@ function Navigation({ userRole, isOpen, onClose, collapsed = false, onToggleColl
         `}
       >
         {/* Sidebar header / branding */}
-        <div className="bg-brand-600 text-white p-5 flex-shrink-0">
+        <div className="bg-brand-500 text-gray-900 p-5 flex-shrink-0">
           <div className={`flex items-center ${collapsed ? 'lg:justify-center' : 'justify-between'}`}>
             <div className={`flex items-center gap-3 min-w-0 ${collapsed ? 'lg:gap-0' : ''}`}>
-              <div className="w-9 h-9 bg-white/15 backdrop-blur-sm rounded-lg flex items-center justify-center flex-shrink-0">
-                <Layers2 className="w-5 h-5" />
-              </div>
+              <img
+                src="/brand-logo.png"
+                alt="ME Metering"
+                className="w-9 h-9 rounded-lg object-contain bg-white/90 p-0.5 flex-shrink-0"
+              />
               <div className={`min-w-0 ${collapsed ? 'lg:hidden' : ''}`}>
                 <h2 className="font-bold text-base truncate">Navigation</h2>
-                <p className="text-blue-100 text-xs truncate">JEDC Partnership</p>
+                <p className="text-brand-100 text-xs truncate">JEDC Partnership</p>
               </div>
             </div>
             <button
@@ -253,7 +255,7 @@ function Navigation({ userRole, isOpen, onClose, collapsed = false, onToggleColl
             <p className="text-xs font-semibold text-brand-900 dark:text-brand-300 mb-1">Need Help?</p>
             <p className="text-xs text-brand-700 dark:text-brand-400 mb-2.5">Contact the support team</p>
             <button
-              className="w-full px-3 py-2 bg-brand-600 text-white text-xs font-semibold rounded-lg hover:bg-brand-700 transition-colors"
+              className="w-full px-3 py-2 bg-brand-500 text-gray-900 text-xs font-semibold rounded-lg hover:bg-brand-600 transition-colors"
               onClick={handleOpenSupportModal}
             >
               Get Support

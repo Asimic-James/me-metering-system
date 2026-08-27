@@ -187,7 +187,7 @@ function InstallationDetail() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-4">
         <div className="text-center">
-          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-3" />
+          <Loader2 className="w-10 h-10 text-brand-600 animate-spin mx-auto mb-3" />
           <p className="text-gray-600 dark:text-gray-400 text-sm">Loading installation details...</p>
         </div>
       </div>
@@ -202,7 +202,7 @@ function InstallationDetail() {
           <p className="text-gray-900 dark:text-white mb-4">{error || 'Installation not found'}</p>
           <button
             onClick={() => navigate('/dashboard')}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-6 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors"
           >
             Back to Dashboard
           </button>

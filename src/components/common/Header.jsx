@@ -1,4 +1,4 @@
-import { Power, User, LogOut, ChevronDown, Menu, X, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2, Sun, Moon, Pencil, KeyRound, Save, Eye, EyeOff } from 'lucide-react';
+import { User, LogOut, ChevronDown, Menu, X, Mail, Phone, MapPin, Shield, CheckCircle, AlertCircle, Loader2, Sun, Moon, Pencil, KeyRound, Save, Eye, EyeOff } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import JEDApiService from '../services/api';
@@ -9,17 +9,21 @@ import { getRoleMetadata } from '../auth/permissions';
 
 // Header-specific constants
 const HEADER_STYLES = {
-  headerBg: 'bg-brand-600',
+  // Dark bronze, not the vibrant brand gold — the header bar carries white
+  // text/icons throughout (title, nav labels), and gold at a vibrant shade
+  // doesn't have enough contrast with white to be readable (see
+  // tailwind.config.js's brand-scale comment); brand-900 does (~13.6:1).
+  headerBg: 'bg-brand-900',
   mobile: {
     menuButton: 'lg:hidden p-2 -ml-2 hover:bg-white/10 rounded-lg transition-colors',
     avatar: 'w-9 h-9 bg-brand-500',
     title: 'text-base font-bold truncate',
-    subtitle: 'text-blue-100 text-xs'
+    subtitle: 'text-brand-100 text-xs'
   },
   desktop: {
     avatar: 'sm:w-9 sm:h-9',
     title: 'sm:text-lg md:text-xl lg:text-2xl font-bold',
-    subtitle: 'text-blue-100 text-sm'
+    subtitle: 'text-brand-100 text-sm'
   }
 };
 
@@ -121,7 +125,7 @@ const EditProfileForm = ({ profileData, onCancel, onSaved }) => {
         <button type="button" onClick={onCancel} disabled={submitting} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
           Cancel
         </button>
-        <button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+        <button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg text-sm font-medium hover:bg-brand-600 disabled:opacity-50">
           {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           Save Changes
         </button>
@@ -227,7 +231,7 @@ const ChangePasswordForm = ({ onCancel, onSaved }) => {
         <button type="button" onClick={onCancel} disabled={submitting} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
           Cancel
         </button>
-        <button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+        <button type="submit" disabled={submitting} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg text-sm font-medium hover:bg-brand-600 disabled:opacity-50">
           {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           Update Password
         </button>
@@ -258,7 +262,7 @@ const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVer
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium text-gray-800">{value || 'Not provided'}</p>
           {isVerified === false && onStartVerification && (
-            <button onClick={() => onStartVerification(verificationType, contact)} className="text-xs text-blue-600 hover:underline font-semibold">Verify</button>
+            <button onClick={() => onStartVerification(verificationType, contact)} className="text-xs text-brand-600 hover:underline font-semibold">Verify</button>
           )}
         </div>
       </div>
@@ -280,7 +284,7 @@ const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVer
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {loading && (
             <div className="flex flex-col items-center justify-center h-full min-h-[200px]">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
               <p className="mt-3 text-sm text-gray-600">Loading profile...</p>
             </div>
           )}
@@ -323,7 +327,7 @@ const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVer
               )}
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-brand-600 rounded-full flex items-center justify-center font-bold text-white text-2xl">
+                  <div className="w-16 h-16 bg-brand-500 rounded-full flex items-center justify-center font-bold text-gray-900 text-2xl">
                     {getUserInitials(profileData)}
                   </div>
                   <div>
@@ -334,7 +338,7 @@ const ProfileModal = ({ isOpen, onClose, profileData, loading, error, onStartVer
                 <div className="flex flex-col gap-2 shrink-0">
                   <button
                     onClick={() => setMode('edit')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-brand-600 border border-brand-200 rounded-lg hover:bg-brand-50"
                   >
                     <Pencil className="w-3.5 h-3.5" /> Edit
                   </button>
@@ -434,7 +438,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   const UserInfo = useCallback(() => (
     <div className="px-4 py-3 border-b border-gray-100">
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 bg-brand-600 rounded-full flex items-center justify-center font-bold text-white text-lg">
+        <div className="w-12 h-12 bg-brand-500 rounded-full flex items-center justify-center font-bold text-gray-900 text-lg">
           {getUserInitials(user)}
         </div>
         <div className="flex-1 min-w-0">
@@ -474,9 +478,11 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   const LogoSection = useCallback(() => (
     <div className="flex items-center gap-2 sm:gap-3 min-w-0">
       <div className="flex-shrink-0">
-        <div className="w-9 h-9 sm:w-10 sm:h-10 bg-white/10 backdrop-blur-sm rounded-lg flex items-center justify-center">
-          <Power className="w-5 h-5 sm:w-6 sm:h-6" />
-        </div>
+        <img
+          src="/brand-logo.png"
+          alt="ME Metering"
+          className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg object-contain bg-white/90 p-0.5"
+        />
       </div>
       <div className="min-w-0">
         <h1 className={`${HEADER_STYLES.mobile.title} ${HEADER_STYLES.desktop.title}`}>
@@ -515,7 +521,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
         className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center flex-shrink-0"
         aria-label="Toggle Theme"
       >
-        {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-100" />}
+        {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-brand-100" />}
       </button>
 
       <div className="w-px h-5 bg-white/20 hidden sm:block" />
@@ -528,12 +534,12 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
         aria-haspopup="true"
         aria-label="User menu"
       >
-        <div className={`${HEADER_STYLES.mobile.avatar} ${HEADER_STYLES.desktop.avatar} rounded-full flex items-center justify-center font-semibold text-sm`}>
+        <div className={`${HEADER_STYLES.mobile.avatar} ${HEADER_STYLES.desktop.avatar} rounded-full flex items-center justify-center font-semibold text-sm text-gray-900`}>
           {getUserInitials(user)}
         </div>
         <div className="text-left hidden md:block">
           <p className="text-sm font-semibold leading-tight">{user.name}</p>
-          <p className="text-xs text-blue-200 leading-tight">{getRoleMetadata(user.role).displayName || user.role}</p>
+          <p className="text-xs text-brand-200 leading-tight">{getRoleMetadata(user.role).displayName || user.role}</p>
         </div>
 
         <ChevronDown

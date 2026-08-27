@@ -2,6 +2,26 @@
 
 This documents where the desired ME-Metering workflow cannot be fully implemented against the real Pharez API (`https://pharez-api.onrender.com/api-docs`, verified against its OpenAPI spec) — as opposed to places where the frontend was simply calling the API incorrectly (those were fixed directly, not listed here). These are backend feature requests, not frontend bugs.
 
+## Reconfirmed 2026-08-27: Installer "Assigned Meters" — not implemented, for the same reason as gaps #1/#3
+
+A dedicated "Installer → Assigned Meters" view (an Installer seeing only the specific meters an Admin assigned to *them*, distinct from any other installer) was requested this pass. Before writing any UI for it, the live spec was re-pulled fresh from production and diffed against this report: **still exactly 45 endpoints**, identical to the 2026-08-25 list below — no new assignment endpoint, no `installerId`/`assignedTo` field added to either `JedCustomerRequest` or the `Meter` schema (`GET /meters`'s response properties are still exactly `id, meterNumber, simNumber, manufacturedDate, meterMake, model, phaseType, sgcNumber, status, uploadedAt, installedAt` — confirmed via the live schema, not assumed).
+
+**This is the same gap as #1 and #3 below, from a different entry point.** There is no way to build a real, backend-authoritative "meters assigned to me" list for an Installer, because the backend has no concept of a meter or a customer request being assigned to a specific installer at all — every installer-facing endpoint (`GET /external/jed/requests/installer`) filters only by `status`, identically for every installer.
+
+**What was NOT done:** no client-side/`localStorage`-based fake assignment store, no UI that looks like it persists an assignment when it doesn't. Consistent with gaps #1/#3, this was explicitly declined again — it would violate the requirement that assignment be authoritative and cross-device, and would silently break the moment two admins (or two browser sessions) disagreed about who's assigned what.
+
+**What exists instead (real, unchanged):** Meter Schedule's "Assign" action (Admin/Super Admin only) still opens the same explanatory `InfoModal` as before — clicking it does not claim to succeed. No Installer-facing "Assigned Meters" tab/page was added, since there is no real data to back it; adding one would necessarily either show every meter (defeating the actual request — "the Installer must NOT see all meters") or show a fabricated empty/fake list, neither of which is acceptable per this task's own explicit instruction not to fabricate data to make a UI appear functional.
+
+**What's needed from the backend, precisely:** (a) an `assignedInstallerId` (or equivalent) field on either `Meter` or `JedCustomerRequest`, (b) an Admin-facing assign/reassign endpoint, and (c) either a `?assignedTo=me` filter on `GET /meters`/`GET /external/jed/requests/installer`, or a dedicated `GET /external/jed/meters/installer` analogous to the existing requests-for-installers endpoint. Once any of these exist, the frontend work is straightforward — an "Assigned Meters" tab reusing the exact same shared-queue/tab pattern already used by `InstallerDashboard.jsx`'s Awaiting Installation/Completed tabs, filtered to the authenticated installer.
+
+## Confirmed 2026-08-27: `Meter.installedAt` is frequently `null` even when `status` is `INSTALLED`
+
+While verifying Meter Schedule's Installation Date display (a separate, real task — see `PROJECT_CONTEXT.md`), a live check of `GET /meters?status=INSTALLED` against production returned genuine `INSTALLED`-status meters with `"installedAt": null` (not a missing key — the field is present and explicitly `null`). This means a meter's status can legitimately advance to `INSTALLED` without the backend recording *when*.
+
+**Impact:** the frontend cannot always show a real installation date next to an `INSTALLED` meter, even though it correctly never fabricates one. `MeterCard` simply omits the "Installed:" line when the date is absent (no contradiction visible, since the status badge and the missing date line don't directly conflict) — Meter Schedule's Query-tab table now says **"Installed (date unavailable)"** rather than the previous "Not Installed" for this exact case, since "Not Installed" would directly contradict the Status column showing `INSTALLED` right next to it.
+
+**What's needed from the backend:** populate `installedAt` at the moment a meter's status transitions to `INSTALLED` (this likely already happens via `POST /external/jed/complete-installation`'s `meterNo` submission — worth checking whether that flow is the one leaving it null, or whether some meters are marked `INSTALLED` through a different path that never sets the timestamp).
+
 ## Confirmed 2026-08-26: `/uploads/excel*` are documented but not actually deployed
 
 Investigating a "Route not found" error on Upload Paid Customers → Validate File turned up **two separate, stacked issues**:

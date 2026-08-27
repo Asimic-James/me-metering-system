@@ -29,7 +29,7 @@ function StatusTabs({ tabs, activeTab, onChange }) {
             aria-current={isActive ? 'true' : undefined}
             className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 transition-all duration-150 ${
               isActive
-                ? 'border-blue-600 text-blue-600'
+                ? 'border-brand-600 text-brand-600'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 active:scale-[0.98]'
             }`}
           >

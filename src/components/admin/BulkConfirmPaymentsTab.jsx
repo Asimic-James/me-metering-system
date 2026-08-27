@@ -95,14 +95,14 @@ function StatCard({ icon: Icon, label, value, color = 'gray' }) {
     gray: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700',
     green: 'text-green-700 bg-green-50 border-green-200',
     red: 'text-red-700 bg-red-50 border-red-200',
-    blue: 'text-blue-700 bg-blue-50 border-blue-200',
+    blue: 'text-brand-700 bg-brand-50 border-brand-200',
     amber: 'text-amber-700 bg-amber-50 border-amber-200',
   };
   const textColors = {
     gray: 'text-gray-900 dark:text-white',
     green: 'text-green-700',
     red: 'text-red-700',
-    blue: 'text-blue-700',
+    blue: 'text-brand-700',
     amber: 'text-amber-700',
   };
   return (
@@ -283,8 +283,8 @@ function BulkConfirmPaymentsTab() {
     <div className="space-y-4">
       <div className="card p-4 sm:p-6 space-y-4">
         <div className="flex items-start gap-3">
-          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg shrink-0">
-            <UploadCloud className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <div className="p-2 bg-brand-100 dark:bg-brand-900/30 rounded-lg shrink-0">
+            <UploadCloud className="w-5 h-5 text-brand-600 dark:text-brand-400" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Upload Paid Customers</h2>
@@ -295,7 +295,7 @@ function BulkConfirmPaymentsTab() {
           </div>
         </div>
 
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex gap-2 text-xs sm:text-sm text-blue-800 dark:text-blue-300">
+        <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg p-3 flex gap-2 text-xs sm:text-sm text-brand-800 dark:text-brand-300">
           <Info className="w-4 h-4 shrink-0 mt-0.5" />
           <p>
             Upload a file of customers who have already paid to confirm their payments in bulk. Each row
@@ -315,7 +315,7 @@ function BulkConfirmPaymentsTab() {
             accept=".xlsx,.xls,.csv"
             onChange={handleFileChange}
             disabled={parsing || importing}
-            className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
           />
           {file && (
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
@@ -329,7 +329,7 @@ function BulkConfirmPaymentsTab() {
             type="button"
             onClick={handleParse}
             disabled={!file || parsing || importing}
-            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-blue-700 transition-colors text-sm font-medium"
+            className="inline-flex items-center gap-2 bg-brand-500 text-gray-900 px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-brand-600 transition-colors text-sm font-medium"
           >
             {parsing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
             {parsing ? 'Parsing...' : 'Validate File'}
@@ -433,7 +433,7 @@ function BulkConfirmPaymentsTab() {
         {/* In-progress */}
         {importing && (
           <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-            <Loader2 className="w-5 h-5 animate-spin text-blue-600 shrink-0" />
+            <Loader2 className="w-5 h-5 animate-spin text-brand-600 shrink-0" />
             <span className="text-sm text-gray-700 dark:text-gray-300">
               Processing {progress.done} of {progress.total}...
             </span>

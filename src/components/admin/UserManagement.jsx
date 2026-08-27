@@ -24,7 +24,7 @@ import {
 const roleBadgeClass = (role) => {
   if (role === ROLES.SUPERADMIN) return 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300';
   if (role === ROLES.ADMIN) return 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300';
-  return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
+  return 'bg-brand-100 dark:bg-brand-900/30 text-brand-800 dark:text-brand-300';
 };
 
 // User Form Component
@@ -317,7 +317,7 @@ const UserForm = ({ user, onSubmit, onCancel, loading, canAssignPrivilegedRoles 
         <button
           type="submit"
           disabled={loading || formLocked}
-          className="flex items-center gap-2 px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-gray-900 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 transition-colors"
         >
           {loading ? (
             <>
@@ -567,7 +567,7 @@ function UserManagement() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Users className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+          <Users className="w-8 h-8 text-brand-600 dark:text-brand-400" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               User Management
@@ -584,7 +584,7 @@ function UserManagement() {
             setEditingUser(null);
             setShowForm(true);
           }}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors"
         >
           <UserPlus className="w-4 h-4" />
           Add User
@@ -719,7 +719,7 @@ function UserManagement() {
       {loading ? (
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
+            <Loader2 className="w-8 h-8 animate-spin text-brand-600 mx-auto mb-2" />
             <p className="text-gray-600 dark:text-gray-400">Loading users...</p>
           </div>
         </div>
@@ -760,8 +760,8 @@ function UserManagement() {
                   <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center flex-shrink-0">
-                          <span className="text-white font-semibold text-sm">
+                        <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center flex-shrink-0">
+                          <span className="text-gray-900 font-semibold text-sm">
                             {((user?.firstName || 'U')[0] + (user?.lastName || ''))[0].toUpperCase()}
                           </span>
                         </div>
@@ -817,7 +817,7 @@ function UserManagement() {
                                 setShowForm(true);
                               }}
                               disabled={!canEditThisUser || actionLoading === `delete-${user.id}`}
-                              className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors disabled:opacity-50"
+                              className="p-2 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 rounded-lg transition-colors disabled:opacity-50"
                               title={canEditThisUser ? 'Edit user' : editRestrictedTitle}
                             >
                               <Edit className="w-4 h-4" />
@@ -862,16 +862,16 @@ function UserManagement() {
           Admin's view is scoped to Installer accounts only and doesn't
           have the full picture to make that count meaningful. */}
       {!loading && users.length > 0 && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg p-4">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-blue-800 dark:text-blue-200">
+            <span className="text-brand-800 dark:text-brand-200">
               Total {permissions.isSuperAdmin ? 'Users' : 'Installers'}: <strong>{users.length}</strong>
             </span>
-            <span className="text-blue-800 dark:text-blue-200">
+            <span className="text-brand-800 dark:text-brand-200">
               Showing: <strong>{filteredUsers.length}</strong>
             </span>
             {permissions.isSuperAdmin && (
-              <span className="text-blue-800 dark:text-blue-200">
+              <span className="text-brand-800 dark:text-brand-200">
                 Admins: <strong>{users.filter(u => u.role === ROLES.ADMIN || u.role === ROLES.SUPERADMIN).length}</strong>
               </span>
             )}
