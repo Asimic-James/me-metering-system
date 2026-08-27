@@ -25,6 +25,7 @@ import {
   UserPlus
 } from 'lucide-react';
 import { formatDateOnly } from '../../utils/date';
+import { unwrapListResponse } from '../../utils/unwrapListResponse';
 
 // Constants for better maintainability
 const PRIORITY_CONFIG = {
@@ -177,25 +178,7 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
       const response = await JEDApiService.getMeters(params);
 
       const payload = response?.data ?? response;
-      const metersData = Array.isArray(response)
-        ? response
-        : Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray(response?.data?.data)
-            ? response.data.data
-            : Array.isArray(response?.data?.results)
-              ? response.data.results
-              : Array.isArray(response?.data?.items)
-                ? response.data.items
-                : Array.isArray(payload?.results)
-                  ? payload.results
-                  : Array.isArray(payload?.items)
-                    ? payload.items
-                    : Array.isArray(payload?.records)
-                      ? payload.records
-                      : Array.isArray(payload)
-                        ? payload
-                        : [];
+      const metersData = unwrapListResponse(response);
 
       const metadata = response?.meta ?? response?.data?.meta ?? payload?.meta ?? {};
       const paginationData = response?.pagination

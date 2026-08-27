@@ -22,6 +22,7 @@ import StatusTabs from '../common/StatusTabs';
 import StatusBadge from '../common/StatusBadge';
 import { isCompletedStatus } from '../../utils/statusBadge';
 import { formatDateOnly } from '../../utils/date';
+import { unwrapListResponse } from '../../utils/unwrapListResponse';
 import {
   ClipboardList,
   Clock,
@@ -217,8 +218,8 @@ function AdminInstallations() {
         JEDApiService.getCustomerRequestsByStatus('COMPLETED'),
       ]);
 
-      const paidList = Array.isArray(paidResponse) ? paidResponse : (paidResponse?.data || []);
-      const completedList = Array.isArray(completedResponse) ? completedResponse : (completedResponse?.data || []);
+      const paidList = unwrapListResponse(paidResponse);
+      const completedList = unwrapListResponse(completedResponse);
 
       setAwaitingJobs(paidList);
       setCompletedJobs(completedList);

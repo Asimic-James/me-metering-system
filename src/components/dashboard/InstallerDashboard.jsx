@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
 import JEDApiService from '../services/api';
 import { isCompletedStatus, isAwaitingInstallationStatus } from '../../utils/statusBadge';
+import { unwrapListResponse } from '../../utils/unwrapListResponse';
 import StatusTabs from '../common/StatusTabs';
 import StatusBadge from '../common/StatusBadge';
 import {
@@ -153,7 +154,7 @@ function InstallerDashboard() {
       // not a personally-assigned list (the real API has no per-installer
       // assignment field or endpoint; see API_GAP_REPORT.md).
       const response = await JEDApiService.getMyInstallations({ limit: 100 });
-      const list = Array.isArray(response) ? response : (response?.data || []);
+      const list = unwrapListResponse(response);
       setAllJobs(list);
     } catch (err) {
       console.error('[InstallerDashboard] Failed to load jobs:', err);

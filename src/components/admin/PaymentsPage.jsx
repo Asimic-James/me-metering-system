@@ -24,6 +24,7 @@ import {
   CreditCard, RefreshCw, AlertCircle, Loader2, Calendar
 } from 'lucide-react';
 import { formatDateTime, parseTimestamp } from '../../utils/date';
+import { unwrapListResponse } from '../../utils/unwrapListResponse';
 
 const TABS = [
   { id: 'payments', label: 'Payments' },
@@ -36,20 +37,6 @@ const DATE_PRESETS = [
   { id: '30', label: 'Last 30 days' },
   { id: '90', label: 'Last 90 days' },
 ];
-
-const unwrapPaymentsPayload = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.payments)) return response.payments;
-  if (Array.isArray(response?.transactions)) return response.transactions;
-  if (Array.isArray(response?.items)) return response.items;
-  if (Array.isArray(response?.results)) return response.results;
-  if (Array.isArray(response?.data?.payments)) return response.data.payments;
-  if (Array.isArray(response?.data?.transactions)) return response.data.transactions;
-  if (Array.isArray(response?.data?.items)) return response.data.items;
-  if (Array.isArray(response?.data?.results)) return response.data.results;
-  return [];
-};
 
 // Field helpers matching the real, documented GET /external/jed/payments
 // item schema exactly: custNames, accountNumber, amount, meterType,
@@ -78,7 +65,7 @@ function PaymentsTab() {
     setError(null);
     try {
       const response = await jedApi.getPayments({ days: Number(days) });
-      const list = unwrapPaymentsPayload(response);
+      const list = unwrapListResponse(response, ['payments', 'transactions']);
       setPayments(list);
       setHasFetched(true);
     } catch (err) {
