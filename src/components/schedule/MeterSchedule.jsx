@@ -1096,19 +1096,11 @@ const MeterInventory = ({ meterInventory, canManageSchedule }) => {
       <InfoModal
         isOpen={!!meterToAssign}
         onClose={() => setMeterToAssign(null)}
-        title="Meter Assignment Not Yet Available"
+        title="Meter Assignment Not Available Yet"
       >
         <p>
-          Assigning meter <strong className="font-mono">{meterToAssign?.meterNumber}</strong> to an
-          installer/job isn't possible yet — the real Pharez API has no field or endpoint linking a
-          meter record to an installation request or an installer.
-        </p>
-        <p className="mt-2">
-          This requires a backend change first (an endpoint to reserve a meter against a request,
-          and a field recording that reservation). See <span className="font-mono">API_GAP_REPORT.md</span>{' '}
-          for the exact endpoints needed. Meters are still linked to a completed installation today via
-          the existing <span className="font-mono">meterNo</span>/<span className="font-mono">sealNo</span>{' '}
-          fields submitted at completion time.
+          Meter assignment isn't available yet. A meter is linked to a job automatically
+          when an installer completes the installation.
         </p>
       </InfoModal>
 

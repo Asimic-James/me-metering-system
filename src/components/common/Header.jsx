@@ -140,6 +140,39 @@ const EditProfileForm = ({ profileData, onCancel, onSaved }) => {
 // immediate feedback instead of a round-trip 400.
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
 
+// Hoisted to module scope — this previously lived inside ChangePasswordForm
+// as a nested component function, which meant React saw a brand-new
+// component *type* on every parent re-render (every keystroke) and
+// unmounted/remounted the <input> instead of just updating its value. That
+// dropped focus on every character, which closes the on-screen keyboard on
+// mobile after each key. Taking props instead of closing over the parent's
+// state fixes the identity so the same <input> DOM node persists.
+const PasswordField = ({ field, label, autoComplete, value, visible, onChange, onToggleVisibility, inputClass }) => (
+  <div>
+    <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+    <div className="relative">
+      <input
+        type={visible ? 'text' : 'password'}
+        className={inputClass}
+        value={value}
+        onChange={onChange}
+        required
+        minLength={field === 'currentPassword' ? undefined : 6}
+        autoComplete={autoComplete}
+      />
+      <button
+        type="button"
+        onClick={onToggleVisibility}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-200"
+        tabIndex={-1}
+        aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+      >
+        {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  </div>
+);
+
 const ChangePasswordForm = ({ onCancel, onSaved }) => {
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [visibility, setVisibility] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
@@ -190,32 +223,6 @@ const ChangePasswordForm = ({ onCancel, onSaved }) => {
 
   const inputClass = "form-input w-full px-3 py-2 pr-10 text-sm";
 
-  const PasswordField = ({ field, label, autoComplete }) => (
-    <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-      <div className="relative">
-        <input
-          type={visibility[field] ? 'text' : 'password'}
-          className={inputClass}
-          value={form[field]}
-          onChange={update(field)}
-          required
-          minLength={field === 'currentPassword' ? undefined : 6}
-          autoComplete={autoComplete}
-        />
-        <button
-          type="button"
-          onClick={() => toggleVisibility(field)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-200"
-          tabIndex={-1}
-          aria-label={visibility[field] ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-        >
-          {visibility[field] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {formError && (
@@ -224,9 +231,36 @@ const ChangePasswordForm = ({ onCancel, onSaved }) => {
           {formError}
         </div>
       )}
-      <PasswordField field="currentPassword" label="Current Password" autoComplete="current-password" />
-      <PasswordField field="newPassword" label="New Password" autoComplete="new-password" />
-      <PasswordField field="confirmPassword" label="Confirm New Password" autoComplete="new-password" />
+      <PasswordField
+        field="currentPassword"
+        label="Current Password"
+        autoComplete="current-password"
+        value={form.currentPassword}
+        visible={visibility.currentPassword}
+        onChange={update('currentPassword')}
+        onToggleVisibility={() => toggleVisibility('currentPassword')}
+        inputClass={inputClass}
+      />
+      <PasswordField
+        field="newPassword"
+        label="New Password"
+        autoComplete="new-password"
+        value={form.newPassword}
+        visible={visibility.newPassword}
+        onChange={update('newPassword')}
+        onToggleVisibility={() => toggleVisibility('newPassword')}
+        inputClass={inputClass}
+      />
+      <PasswordField
+        field="confirmPassword"
+        label="Confirm New Password"
+        autoComplete="new-password"
+        value={form.confirmPassword}
+        visible={visibility.confirmPassword}
+        onChange={update('confirmPassword')}
+        onToggleVisibility={() => toggleVisibility('confirmPassword')}
+        inputClass={inputClass}
+      />
       <div className="flex gap-3 pt-2">
         <button type="button" onClick={onCancel} disabled={submitting} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
           Cancel

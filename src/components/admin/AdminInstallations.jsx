@@ -384,20 +384,11 @@ function AdminInstallations() {
       <InfoModal
         isOpen={!!assignTarget}
         onClose={() => setAssignTarget(null)}
-        title="Installer Assignment Not Yet Available"
+        title="Installer Assignment Not Available Yet"
       >
         <p>
-          Assigning {assignTarget?.accounts.length === 1
-            ? <>account <strong className="font-mono">{assignTarget.accounts[0]}</strong></>
-            : <><strong>{assignTarget?.accounts.length}</strong> selected accounts</>} to a specific
-          installer isn't possible yet — the real Pharez API's <span className="font-mono">JedCustomerRequest</span>{' '}
-          record has no <span className="font-mono">installerId</span> field, and there is no assign/reassign
-          endpoint (single or bulk). Every installer currently sees the same shared "Awaiting Installation" queue.
-        </p>
-        <p className="mt-2">
-          This requires a backend change first (a field on the request plus assign/bulk-assign endpoints scoped
-          to the authenticated installer). See <span className="font-mono">API_GAP_REPORT.md</span> for the
-          exact endpoints needed — this action will be wired up to them once they exist.
+          Installer assignment isn't available yet. Every installer currently sees the
+          same shared "Awaiting Installation" queue.
         </p>
       </InfoModal>
     </div>

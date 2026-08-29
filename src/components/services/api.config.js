@@ -386,10 +386,19 @@ export const API_UTILS = {
       '/meters/upload',
       '/meters/customer-requests/export',
       '/uploads/',
-      '/requests/export'
+      '/requests/export',
+      // The real API (pharez-api.onrender.com) is hosted on Render's free
+      // tier, which spins the instance down after a period of inactivity
+      // and takes 30-60s to cold-start the next request. Login is usually
+      // the first request of a session, so it's the one most likely to hit
+      // a sleeping instance — the default 30s timeout was aborting before
+      // a cold start finished, surfacing as "Network error" on the very
+      // first sign-in attempt even on a good connection (the second click
+      // then succeeded because the instance was already awake by then).
+      '/auth/login'
     ];
-    
-    return longRunningEndpoints.some(e => endpoint.includes(e)) 
+
+    return longRunningEndpoints.some(e => endpoint.includes(e))
       ? 60000
       : API_CONFIG.TIMEOUT;
   },
@@ -405,9 +414,17 @@ export const API_UTILS = {
     const retryableErrors = [
       'NetworkError',
       'TypeError',
-      'Failed to fetch'
+      'Failed to fetch',
+      // A timed-out request aborts via AbortController, which throws a
+      // DOMException named 'AbortError' — distinct from the network-error
+      // shapes above, so it was previously falling through unretried. This
+      // is exactly the shape a Render cold-start timeout takes (see
+      // getTimeout's '/auth/login' comment), so without this a slow-waking
+      // backend failed the whole request on attempt 1 instead of getting a
+      // second, cheap in-app retry.
+      'AbortError'
     ];
-    
+
     const retryableStatuses = [502, 503, 504];
     
     return retryableErrors.some(retryableError => 
