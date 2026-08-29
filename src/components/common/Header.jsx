@@ -520,12 +520,6 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
         <h1 className={`${HEADER_STYLES.mobile.title} ${HEADER_STYLES.desktop.title}`}>
           ME Metering Integration
         </h1>
-        <p className={`${HEADER_STYLES.desktop.subtitle} hidden sm:block`}>
-          ME Metering System
-        </p>
-        <p className={`${HEADER_STYLES.mobile.subtitle} sm:hidden`}>
-          ME Metering
-        </p>
       </div>
     </div>
   ), []);

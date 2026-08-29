@@ -213,8 +213,7 @@ function Navigation({ userRole, isOpen, onClose, collapsed = false, onToggleColl
                 className="w-9 h-9 rounded-lg object-contain bg-white/90 p-0.5 flex-shrink-0"
               />
               <div className={`min-w-0 ${collapsed ? 'lg:hidden' : ''}`}>
-                <h2 className="font-bold text-base truncate">Navigation</h2>
-                <p className="text-brand-100 text-xs truncate">ME Metering</p>
+                <h2 className="font-bold text-base truncate">ME Metering System</h2>
               </div>
             </div>
             <button
