@@ -131,7 +131,7 @@ function GenerateRRRModal({ isOpen, onClose, payload, loading, error, result, ge
                   <p className="font-medium">Payment Instructions</p>
                   <p className="mt-0.5">Give the RRR above to the customer. They can pay at any bank branch, via USSD, or online through Remita using this reference.</p>
                   <p className="mt-1 text-xs text-brand-700/80 dark:text-brand-400/80">
-                    Payment expiry isn't returned by this endpoint — confirm the RRR's validity window with Remita if needed.
+                    The exact payment expiry isn't shown here — confirm the RRR's validity window with Remita if needed.
                   </p>
                 </div>
               </div>

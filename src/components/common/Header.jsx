@@ -452,14 +452,12 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   }, [navigate]);
 
   const handleStartVerification = useCallback((type, contact) => {
-    console.log(`Starting verification for ${type}: ${contact}`);
     setVerificationDetails({ type, contact });
     setShowProfileModal(false); // Close profile modal
     setIsVerificationModalOpen(true); // Open verification modal
   }, []);
 
   const handleVerificationSuccess = useCallback(() => {
-    console.log('Verification successful!');
     setIsVerificationModalOpen(false);
     handleProfileClick(); // Re-fetch profile to show updated status
   }, [handleProfileClick]);
@@ -606,7 +604,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
   , [showDropdown, handleLogout]);
 
   return (
-    <header className={`${HEADER_STYLES.headerBg} text-white shadow-sm sticky top-0 z-40 border-b border-white/10`}>
+    <header className={`${HEADER_STYLES.headerBg} text-white shadow-sm sticky top-0 z-40 border-b border-white/10 print:hidden`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
           <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0 mr-2 sm:mr-4">

@@ -77,7 +77,6 @@ class JEDApiService {
     if (useCache && cacheKey) {
       const cached = this.getCachedResponse(cacheKey);
       if (cached) {
-        console.log('[API] Returning cached response for:', cacheKey);
         return cached;
       }
     }
@@ -343,11 +342,15 @@ class JEDApiService {
       throw new Error(`${this.errorTypes.VALIDATION}:Invalid authentication response`);
     }
 
-    console.log('[Auth] Login successful - storing user:', {
-      id: userData.id,
-      phone: userData.phone,
-      role: userData.role
-    });
+    // Phone number is PII — only logged in dev, same gate used elsewhere
+    // in this file for the same kind of data (register/login request logs).
+    if (this.config.FEATURES.LOG_REQUESTS) {
+      console.log('[Auth] Login successful - storing user:', {
+        id: userData.id,
+        phone: userData.phone,
+        role: userData.role
+      });
+    }
 
     this.storeTokens({ token });
     this.storeUser(userData);
@@ -480,7 +483,6 @@ class JEDApiService {
    * compatibility (AuthContext.logout awaits it).
    */
   async logout() {
-    console.log('[Auth] Clearing local tokens and cache');
     this.clearTokens();
     this.clearCache();
   }
@@ -663,8 +665,7 @@ class JEDApiService {
   // ==================== ADMIN & DASHBOARD METHODS ====================
   async getDashboardStats() {
     const url = this.buildApiUrl(this.endpoints.ADMIN.DASHBOARD_STATS);
-    console.log('[API] Calling dashboard stats endpoint:', url);
-    
+
     try {
       return await this.makeRequest(url, { 
         method: 'GET',
@@ -840,14 +841,12 @@ class JEDApiService {
 
   // ==================== SETTINGS MANAGEMENT METHODS ====================
   async getMeterTypes(params = {}) {
-    console.log('[API] Fetching meter types from /settings/meter-type');
     // Use buildApiUrl (root level) instead of buildUrl with group
     const url = this.utils.buildUrlWithParams(
-      this.endpoints.SETTINGS.METER_TYPES.BASE, 
+      this.endpoints.SETTINGS.METER_TYPES.BASE,
       params
     );
-    console.log('[API] Final URL:', url);
-    return await this.makeRequest(url, { 
+    return await this.makeRequest(url, {
       method: 'GET',
       useCache: true,
       cacheKey: `meter-types-${JSON.stringify(params)}`
@@ -855,10 +854,8 @@ class JEDApiService {
   }
 
   async getMeterTypeById(id) {
-    console.log('[API] Fetching meter type:', id);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
-    console.log('[API] Final URL:', url);
-    return await this.makeRequest(url, { 
+    return await this.makeRequest(url, {
       method: 'GET',
       useCache: true,
       cacheKey: `meter-type-${id}`
@@ -866,9 +863,7 @@ class JEDApiService {
   }
 
   async createMeterType(meterTypeData) {
-    console.log('[API] Creating meter type:', meterTypeData);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BASE);
-    console.log('[API] Final URL:', url);
     const response = await this.makeRequest(url, {
       method: 'POST',
       body: JSON.stringify(meterTypeData),
@@ -878,9 +873,7 @@ class JEDApiService {
   }
 
   async updateMeterType(id, meterTypeData) {
-    console.log('[API] Updating meter type:', id, meterTypeData);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
-    console.log('[API] Final URL:', url);
     const response = await this.makeRequest(url, {
       method: 'PATCH',
       body: JSON.stringify(meterTypeData),
@@ -890,9 +883,7 @@ class JEDApiService {
   }
 
   async deleteMeterType(id) {
-    console.log('[API] Deleting meter type:', id);
     const url = this.buildApiUrl(this.endpoints.SETTINGS.METER_TYPES.BY_ID(id));
-    console.log('[API] Final URL:', url);
     const response = await this.makeRequest(url, { method: 'DELETE' });
     this.clearCache();
     return response;
@@ -910,7 +901,6 @@ class JEDApiService {
    * prominently so the admin can copy it before navigating away.
    */
   async createApiKey(data) {
-    console.log('[API] Creating API key:', data.name);
     const url = this.utils.buildUrl(this.endpoints.APIKEYS.BASE, 'APIKEYS');
     const response = await this.makeRequest(url, {
       method: 'POST',
@@ -939,7 +929,6 @@ class JEDApiService {
   }
 
   async deleteApiKey(id) {
-    console.log('[API] Deleting API key:', id);
     const url = this.utils.buildUrl(this.endpoints.APIKEYS.BY_ID(id), 'APIKEYS');
     const response = await this.makeRequest(url, { method: 'DELETE' });
     this.clearCache();
@@ -947,7 +936,6 @@ class JEDApiService {
   }
 
   async deactivateApiKey(id) {
-    console.log('[API] Deactivating API key:', id);
     const url = this.utils.buildUrl(this.endpoints.APIKEYS.DEACTIVATE(id), 'APIKEYS');
     const response = await this.makeRequest(url, { method: 'POST' });
     this.clearCache();
@@ -966,7 +954,6 @@ class JEDApiService {
 
   // ==================== USER MANAGEMENT METHODS ====================
   async getUsers(params = {}) {
-    console.log('[API] Fetching users');
     const url = this.utils.buildUrlWithParams(
       this.endpoints.USERS.BASE, 
       params,
@@ -980,7 +967,6 @@ class JEDApiService {
   }
 
   async getUserById(userId) {
-    console.log('[API] Fetching user:', userId);
     const url = this.utils.buildUrl(this.endpoints.USERS.BY_ID(userId), 'USERS');
     return await this.makeRequest(url, { 
       method: 'GET',
@@ -1005,7 +991,6 @@ class JEDApiService {
   }
 
   async updateUser(userId, userData) {
-    console.log('[API] Updating user:', userId);
     const url = this.utils.buildUrl(this.endpoints.USERS.BY_ID(userId), 'USERS');
     const response = await this.makeRequest(url, {
       method: 'PUT',
@@ -1016,7 +1001,6 @@ class JEDApiService {
   }
 
   async deleteUser(userId) {
-    console.log('[API] Deleting user:', userId);
     const url = this.utils.buildUrl(this.endpoints.USERS.BY_ID(userId), 'USERS');
     const response = await this.makeRequest(url, { method: 'DELETE' });
     this.clearCache();
@@ -1144,30 +1128,6 @@ class JEDApiService {
     localStorage.removeItem('jedActiveApiKeyName');
   }
 
-  // ==================== HEALTH CHECK & VALIDATION ====================
-  async validateApiIntegration() {
-    console.log('[API Health Check] Starting validation...');
-    const checks = {
-      baseUrl: !!this.config.BASE_URL,
-      authEndpoint: !!this.config.ENDPOINT_GROUPS.AUTH,
-      jedEndpoint: !!this.config.ENDPOINT_GROUPS.JED,
-      hasTokenStorage: !!localStorage,
-      methods: {
-        login: typeof this.login === 'function',
-        getMeterTypes: typeof this.getMeterTypes === 'function',
-        getUsers: typeof this.getUsers === 'function',
-        getDashboardStats: typeof this.getDashboardStats === 'function',
-        getMyInstallations: typeof this.getMyInstallations === 'function',
-        getPayments: typeof this.getPayments === 'function',
-        resetPassword: typeof this.resetPassword === 'function',
-      }
-    };
-    
-    console.log('[API Health Check] Results:', checks);
-    const allPass = Object.values(checks.methods).every(v => v === true);
-    console.log('[API Health Check]', allPass ? 'PASSED ✅' : 'FAILED ❌');
-    return allPass;
-  }
 }
 
 // Export both the class and a singleton instance

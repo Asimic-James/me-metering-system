@@ -20,7 +20,8 @@ import {
   FileText,
   Settings,
   X,
-  LayoutDashboard
+  LayoutDashboard,
+  RefreshCw
 } from 'lucide-react';
 
 // Reference dataviz palette slots (see the project's dataviz skill —
@@ -367,6 +368,10 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showExportModal, setShowExportModal] = useState(false);
+  // Manual refresh button — bumps this to re-run both fetch effects below
+  // (stats/recent installations and the trend chart), same pattern already
+  // used by AdminInstallations.jsx/InstallerDashboard.jsx's Refresh buttons.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Revenue / Installations trend — built entirely from real payment
   // records (GET /external/jed/payments), aggregated client-side per day.
@@ -436,8 +441,9 @@ function AdminDashboard() {
     // this effect, so including it as a dependency caused a refetch loop.
     // `refreshSignal` re-runs this on any app-wide data mutation (e.g. a
     // bulk payment import) so stats/recent installations stay live without
-    // a full page reload — see DataRefreshContext.
-  }, [user, refreshSignal]);
+    // a full page reload — see DataRefreshContext. `refreshKey` re-runs it
+    // on a manual click of the header's Refresh button.
+  }, [user, refreshSignal, refreshKey]);
 
   // Revenue / Installations trend — admin-only, mirrors the KPI section's
   // admin-vs-installer scoping above. Fetches real payment records for the
@@ -484,7 +490,7 @@ function AdminDashboard() {
     if (user) {
       fetchTrendData(trendDays);
     }
-  }, [user, trendDays, fetchTrendData, refreshSignal]);
+  }, [user, trendDays, fetchTrendData, refreshSignal, refreshKey]);
 
   const handleExportData = async (exportType, format) => {
     try {
@@ -593,10 +599,19 @@ function AdminDashboard() {
             </p>
           </div>
           </div>
-          <div className="mt-4 sm:mt-0">
+          <div className="mt-4 sm:mt-0 flex items-center gap-2">
+            <button
+              onClick={() => setRefreshKey((k) => k + 1)}
+              disabled={loading}
+              aria-label="Refresh"
+              className="p-2.5 sm:px-4 sm:py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline text-sm font-medium">Refresh</span>
+            </button>
             <button
               onClick={handleGenerateReport}
-              className="w-full sm:w-auto bg-brand-500 text-gray-900 px-4 py-2 rounded-lg hover:bg-brand-600 transition-colors flex items-center justify-center gap-2"
+              className="flex-1 sm:flex-none bg-brand-500 text-gray-900 px-4 py-2 rounded-lg hover:bg-brand-600 transition-colors flex items-center justify-center gap-2"
             >
               <FileText className="w-4 h-4" />
               Generate Report

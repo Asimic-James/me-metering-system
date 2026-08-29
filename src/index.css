@@ -158,3 +158,18 @@ html {
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
 }
+
+/* ============================================
+   PRINT — landscape by default, since printable report
+   tables (see AdminReports.jsx's "Print to PDF") are wide.
+   The app chrome itself (sidebar/header/footer) is hidden via
+   Tailwind's `print:hidden` utility at each usage site, not
+   here — this file only holds the one rule Tailwind has no
+   utility for (`@page`).
+   ============================================ */
+@media print {
+  @page {
+    size: landscape;
+    margin: 12mm;
+  }
+}

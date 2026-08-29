@@ -1,5 +1,5 @@
 // App.jsx - Final optimized version with admin full access
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './components/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './components/contexts/ThemeContext';
@@ -78,11 +78,6 @@ function AppContent() {
   // Installer (permissions.isAdmin is false), and for a logged-out user.
   useAdminIdleTimeout(isAuthenticated && permissions.isAdmin);
 
-  // Validate API integration on mount
-  useEffect(() => {
-    jedApi.validateApiIntegration();
-  }, []);
-  
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   // Desktop sidebar collapse — persisted so the choice survives a reload,
   // consistent with the app's existing localStorage-backed preferences
@@ -100,9 +95,7 @@ function AppContent() {
 
   const handleLogin = useCallback(async (credentials) => {
     try {
-      console.log('[App] Attempting login...');
       const userData = await jedApi.login(credentials);
-      console.log('[App] Login successful:', { role: userData.role });
       login(userData);
       // Always land on the role-appropriate dashboard after a fresh login.
       // The browser's current URL can still point at a route left over
@@ -128,23 +121,31 @@ function AppContent() {
   }
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'app-bg-dark' : 'app-bg-light'}`}>
+    <div className={`min-h-screen transition-colors duration-300 print:bg-white ${isDark ? 'app-bg-dark' : 'app-bg-light'}`}>
       {/* Sidebar: off-canvas drawer on mobile, persistent fixed column at
           lg+. Rendered outside the content column below since it's
           `fixed` regardless of breakpoint. */}
-      <Navigation
-        userRole={user?.role}
-        isOpen={isMobileMenuOpen}
-        onClose={() => setIsMobileMenuOpen(false)}
-        collapsed={isSidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapsed}
-      />
+      {/* print:hidden — a printed report (see AdminReports.jsx's "Print to
+          PDF") shouldn't include the app's own navigation chrome. Plain
+          wrapper div rather than editing Navigation.jsx's own root classes:
+          its `fixed`-positioned drawer/rail are still viewport-relative
+          inside a plain (non-transformed) wrapper, so this hides it at
+          print time without touching the component's multiple return paths. */}
+      <div className="print:hidden">
+        <Navigation
+          userRole={user?.role}
+          isOpen={isMobileMenuOpen}
+          onClose={() => setIsMobileMenuOpen(false)}
+          collapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapsed}
+        />
+      </div>
 
       {/* Content column — offset right at lg+ to clear the persistent
           sidebar (no offset needed on mobile, where the sidebar is
           off-canvas and doesn't occupy layout space). Offset tracks
           whether the sidebar is currently collapsed to an icon-only rail. */}
-      <div className={`min-h-screen flex flex-col ${isSidebarCollapsed ? CONTENT_OFFSET_COLLAPSED_CLASS : CONTENT_OFFSET_EXPANDED_CLASS} transition-[padding] duration-200`}>
+      <div className={`min-h-screen flex flex-col ${isSidebarCollapsed ? CONTENT_OFFSET_COLLAPSED_CLASS : CONTENT_OFFSET_EXPANDED_CLASS} print:pl-0 transition-[padding] duration-200`}>
         <Header
           user={user}
           onLogout={logout}

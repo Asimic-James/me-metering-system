@@ -2,6 +2,7 @@
 // Refactored and optimized to align with latest app updates
 import { useState, useEffect, useCallback } from 'react';
 import ConfirmationModal from '../common/ConfirmationModal';
+import InfoModal from '../common/InfoModal';
 import { usePermissions } from '../auth/usePermissions';
 import { ROLES, getRoleMetadata } from '../auth/permissions';
 import jedApi from '../services/api';
@@ -18,7 +19,8 @@ import {
   Loader2,
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  RefreshCw
 } from 'lucide-react';
 
 const roleBadgeClass = (role) => {
@@ -348,6 +350,14 @@ function UserManagement() {
   const [editingUser, setEditingUser] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
   const [userToResetPassword, setUserToResetPassword] = useState(null);
+  // "View" action — GET /users/{id}, distinct from the table row (which only
+  // shows name/email/phone/role/active) so an admin can see the rest of the
+  // real User schema (home/office address, NIN, verification flags) without
+  // re-deriving it from the already-fetched list.
+  const [viewingUser, setViewingUser] = useState(null);
+  const [viewUserDetail, setViewUserDetail] = useState(null);
+  const [viewUserLoading, setViewUserLoading] = useState(false);
+  const [viewUserError, setViewUserError] = useState(null);
   const [resetPasswordMessage, setResetPasswordMessage] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState('all');
@@ -364,7 +374,6 @@ function UserManagement() {
       setLoading(true);
       setError(null);
 
-      console.log('[UserManagement] Fetching users...');
       const response = await jedApi.getUsers(
         permissions.isSuperAdmin ? {} : { role: ROLES.INSTALLER }
       );
@@ -376,7 +385,6 @@ function UserManagement() {
         response?.users ||
         (Array.isArray(response) ? response : []);
 
-      console.log('[UserManagement] Users loaded:', usersData.length);
       setUsers(usersData);
 
     } catch (err) {
@@ -387,7 +395,7 @@ function UserManagement() {
       if (errorMessage.includes('PERMISSION_ERROR') || errorMessage.includes('403')) {
         setError('You do not have permission to manage users.');
       } else if (errorMessage.includes('NOT_FOUND') || errorMessage.includes('404')) {
-        setError('User management endpoint not found. Please contact support.');
+        setError('Unable to load users right now. Please contact support if this continues.');
       } else if (errorMessage.includes('NETWORK_ERROR')) {
         setError('Network error. Please check your connection.');
       } else {
@@ -463,7 +471,6 @@ function UserManagement() {
         nin: userData.nin,
       };
 
-      console.log('[UserManagement] Updating user:', editingUser.id, 'with payload:', payload);
       await jedApi.updateUser(editingUser.id, payload);
 
       setShowForm(false);
@@ -489,7 +496,6 @@ function UserManagement() {
       setActionLoading(`delete-${userToDelete.id}`);
       setError(null);
 
-      console.log('[UserManagement] Deleting user:', userToDelete.id);
       await jedApi.deleteUser(userToDelete.id);
 
       await fetchUsers();
@@ -502,6 +508,22 @@ function UserManagement() {
       setActionLoading(null);
     }
   }, [userToDelete, fetchUsers, permissions.isSuperAdmin]);
+
+  const handleViewUser = useCallback(async (user) => {
+    setViewingUser(user);
+    setViewUserDetail(null);
+    setViewUserError(null);
+    setViewUserLoading(true);
+    try {
+      const response = await jedApi.getUserById(user.id);
+      setViewUserDetail(response?.data || response?.user || response || null);
+    } catch (err) {
+      console.error('[UserManagement] Error fetching user detail:', err);
+      setViewUserError(err.message || 'Failed to load user details');
+    } finally {
+      setViewUserLoading(false);
+    }
+  }, []);
 
   const handleResetPassword = useCallback(async () => {
     if (!userToResetPassword) return;
@@ -516,7 +538,6 @@ function UserManagement() {
       setError(null);
       setResetPasswordMessage(null);
 
-      console.log('[UserManagement] Resetting password for user:', userToResetPassword.id);
       await jedApi.resetPassword(userToResetPassword.id);
 
       setResetPasswordMessage(
@@ -579,16 +600,28 @@ function UserManagement() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            setEditingUser(null);
-            setShowForm(true);
-          }}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors"
-        >
-          <UserPlus className="w-4 h-4" />
-          Add User
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fetchUsers()}
+            disabled={loading}
+            aria-label="Refresh"
+            className="p-2.5 sm:px-4 sm:py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline text-sm font-medium">Refresh</span>
+          </button>
+          <button
+            onClick={() => {
+              setEditingUser(null);
+              setShowForm(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors"
+          >
+            <UserPlus className="w-4 h-4" />
+            Add User
+          </button>
+        </div>
       </div>
 
       {/* Reset Password Success Alert */}
@@ -688,6 +721,41 @@ function UserManagement() {
         message={`Reset the password for "${userToResetPassword?.firstName} ${userToResetPassword?.lastName}" to the system default? They will need to change it after logging in.`}
         confirmText="Reset Password"
       />
+
+      {/* View User Modal — GET /users/{id}, real fields the compact table
+          row doesn't show. */}
+      <InfoModal
+        isOpen={!!viewingUser}
+        onClose={() => setViewingUser(null)}
+        title={`${viewingUser?.firstName || ''} ${viewingUser?.lastName || ''}`.trim() || 'User Profile'}
+      >
+        {viewUserLoading && (
+          <p className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading profile...</p>
+        )}
+        {!viewUserLoading && viewUserError && (
+          <p className="text-red-600 dark:text-red-400">{viewUserError}</p>
+        )}
+        {!viewUserLoading && !viewUserError && viewUserDetail && (
+          <dl className="space-y-2 text-left">
+            {[
+              ['Phone', viewUserDetail.phone],
+              ['Email', viewUserDetail.email],
+              ['Role', getRoleMetadata(viewUserDetail.role).displayName || viewUserDetail.role],
+              ['Home Address', viewUserDetail.homeAddress],
+              ['Office Address', viewUserDetail.officeAddress],
+              ['NIN', viewUserDetail.nin],
+              ['Email Verified', viewUserDetail.isEmailVerified ? 'Yes' : 'No'],
+              ['Phone Verified', viewUserDetail.isPhoneVerified ? 'Yes' : 'No'],
+              ['Account Active', viewUserDetail.isActive !== false ? 'Yes' : 'No'],
+            ].map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-4 border-b border-gray-100 dark:border-gray-700 pb-1.5 last:border-0">
+                <dt className="text-gray-500 dark:text-gray-400">{label}</dt>
+                <dd className="font-medium text-gray-900 dark:text-white text-right">{value || 'Not provided'}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </InfoModal>
 
       {/* Filters and Search */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -811,6 +879,14 @@ function UserManagement() {
                         const superAdminOnlyTitle = 'Access Restricted: only a Super Administrator can do this';
                         return (
                           <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleViewUser(user)}
+                              disabled={actionLoading === `delete-${user.id}`}
+                              className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                              title="View full profile"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={() => {
                                 setEditingUser(user);

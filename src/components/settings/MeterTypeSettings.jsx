@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, Edit2, Trash2, Check, X,
-  AlertCircle, Loader2, Search
+  AlertCircle, Loader2, Search, RefreshCw
 } from 'lucide-react';
 import jedApi from '../services/api';
 import ConfirmationModal from '../common/ConfirmationModal';
@@ -36,14 +36,11 @@ const MeterTypeSettings = () => {
       setLoading(true);
       setError(null);
 
-      console.log('[Settings] Fetching meter types from /settings/meter-type');
       const response = await jedApi.getMeterTypes({
         page: pagination.currentPage,
         limit: pagination.limit,
         query: searchTerm
       });
-
-      console.log('[Settings] API Response:', response);
 
       // Handle different response structures from the API
       let data = [];
@@ -71,8 +68,6 @@ const MeterTypeSettings = () => {
         totalCount: data.length,
         totalPages: Math.ceil(data.length / prev.limit)
       }));
-
-      console.log('[Settings] Loaded meter types:', data.length, 'items');
     } catch (err) {
       console.error('[Settings] Failed to fetch meter types:', err);
       const errorMsg = String(err?.message || 'Failed to load meter types');
@@ -118,17 +113,11 @@ const MeterTypeSettings = () => {
         description: formData.description.trim() || undefined
       };
 
-      console.log('[Settings] Creating meter type via POST /settings/meter-type:', payload);
-      const response = await jedApi.createMeterType(payload);
-      console.log('[Settings] Create response:', response);
+      await jedApi.createMeterType(payload);
 
       await fetchMeterTypes();
       setFormData({ name: '', description: '', amount: '' });
       setIsCreating(false);
-
-      // Show success message briefly
-      const successMsg = response?.message || 'Meter type created successfully';
-      console.log('[Settings] ✓', successMsg);
     } catch (err) {
       console.error('[Settings] Failed to create meter type:', err);
 
@@ -162,17 +151,11 @@ const MeterTypeSettings = () => {
         description: formData.description.trim() || undefined
       };
 
-      console.log('[Settings] Updating meter type via PATCH /settings/meter-type/{id}:', id, payload);
-      const response = await jedApi.updateMeterType(id, payload);
-      console.log('[Settings] Update response:', response);
+      await jedApi.updateMeterType(id, payload);
 
       await fetchMeterTypes();
       setEditingId(null);
       setFormData({ name: '', description: '', amount: '' });
-
-      // Show success message
-      const successMsg = response?.message || 'Meter type updated successfully';
-      console.log('[Settings] ✓', successMsg);
     } catch (err) {
       console.error('[Settings] Failed to update meter type:', err);
 
@@ -197,16 +180,10 @@ const MeterTypeSettings = () => {
       setActionLoading(`delete-${itemToDelete.id}`);
       setError(null);
 
-      console.log('[Settings] Deactivating meter type via DELETE /settings/meter-type/{id}:', itemToDelete.id);
-      const response = await jedApi.deleteMeterType(itemToDelete.id);
-      console.log('[Settings] Delete response:', response);
+      await jedApi.deleteMeterType(itemToDelete.id);
 
       await fetchMeterTypes();
       setItemToDelete(null); // Close modal on success
-
-      // Show success message
-      const successMsg = response?.message || 'Meter type deactivated successfully';
-      console.log('[Settings] ✓', successMsg);
     } catch (err) {
       console.error('[Settings] Failed to delete meter type:', err);
       const errorMsg = String(err?.message || 'Failed to deactivate meter type');
@@ -280,19 +257,31 @@ const MeterTypeSettings = () => {
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Meter Types</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400">Manage installation pricing by meter type</p>
         </div>
-        <button
-          onClick={() => {
-            setIsCreating(true);
-            setEditingId(null);
-            setFormData({ name: '', description: '', amount: '' });
-            setError(null);
-          }}
-          disabled={!!actionLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          Add Meter Type
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fetchMeterTypes()}
+            disabled={loading}
+            aria-label="Refresh"
+            className="p-2.5 sm:px-4 sm:py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline text-sm font-medium">Refresh</span>
+          </button>
+          <button
+            onClick={() => {
+              setIsCreating(true);
+              setEditingId(null);
+              setFormData({ name: '', description: '', amount: '' });
+              setError(null);
+            }}
+            disabled={!!actionLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" />
+            Add Meter Type
+          </button>
+        </div>
       </div>
 
       {/* Error Alert */}

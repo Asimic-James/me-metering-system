@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
 import { PERMISSIONS, hasPermission } from '../auth/permissions';
@@ -12,7 +13,8 @@ import {
   Search,
   RefreshCw,
   BarChart3,
-  Eye
+  Eye,
+  Printer
 } from 'lucide-react';
 import { formatDateTime } from '../../utils/date';
 import { formatCurrencyNGN } from '../../utils/currency';
@@ -107,14 +109,24 @@ const rowMatchesFilters = (row, { query, status, dateFrom, dateTo }) => {
 // fetching only PAID/COMPLETED server-side (never INITIATED, which isn't a
 // qualifying transaction — see below) avoids pulling records that could
 // never count toward the average in the first place.
-const TRANSACTION_STATS_PAGE_LIMIT = 100; // the API's documented maximum
-const TRANSACTION_STATS_MAX_PAGES = 20; // safety cap (~2000 records per status) against an unbounded loop on a very large dataset
+const FULL_DATASET_PAGE_LIMIT = 100; // the API's documented maximum
+const FULL_DATASET_MAX_PAGES = 20; // safety cap (~2000 records) against an unbounded loop on a very large dataset
 
-async function fetchAllRequestsByStatus(status) {
+// Loops GET /external/jed/requests across every page to build the complete
+// dataset instead of just the table's current 50-row page — shared by Avg
+// Transaction (status-scoped, below), and by Export CSV/Print to PDF
+// (unscoped: every status, then filtered client-side same as the table —
+// see buildFullFilteredRows). `status` is optional; the endpoint supports
+// server-side status filtering (confirmed: enum exactly
+// INITIATED/PAID/COMPLETED) but no date/search filter, so date-range and
+// text search still have to happen client-side regardless of which caller.
+async function fetchAllRequests(status) {
   const all = [];
   let page = 1;
-  while (page <= TRANSACTION_STATS_MAX_PAGES) {
-    const resp = await JEDApiService.getAllCustomerRequests({ page, limit: TRANSACTION_STATS_PAGE_LIMIT, status });
+  while (page <= FULL_DATASET_MAX_PAGES) {
+    const params = { page, limit: FULL_DATASET_PAGE_LIMIT };
+    if (status) params.status = status;
+    const resp = await JEDApiService.getAllCustomerRequests(params);
     const data = Array.isArray(resp?.data) ? resp.data : Array.isArray(resp) ? resp : [];
     if (data.length === 0) break;
     all.push(...data);
@@ -130,6 +142,12 @@ function AdminReports() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
+  // Print to PDF's own async prep step (fetching every page, see
+  // buildFullFilteredRows) plus the full result it renders from — the
+  // print-only view can't reuse `filtered` below, which is deliberately
+  // scoped to just the table's current page.
+  const [printing, setPrinting] = useState(false);
+  const [printRows, setPrintRows] = useState([]);
 
   const [stats, setStats] = useState({ revenue: 0 });
   const [rows, setRows] = useState([]);
@@ -151,6 +169,10 @@ function AdminReports() {
   const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
+  // Manual refresh button — bumps this to re-run both fetch effects below
+  // (the paginated table and the Avg Transaction dataset), same pattern
+  // already used by AdminInstallations.jsx/InstallerDashboard.jsx.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -191,7 +213,8 @@ function AdminReports() {
     // refreshSignal: re-run after an app-wide data mutation elsewhere (e.g.
     // a bulk payment import) so newly-paid/completed requests show up here
     // without the user needing to manually reload — see DataRefreshContext.
-  }, [user, pagination.currentPage, pagination.limit, refreshSignal]);
+    // `refreshKey` re-runs it on a manual click of the header's Refresh button.
+  }, [user, pagination.currentPage, pagination.limit, refreshSignal, refreshKey]);
 
   // Avg Transaction's own data load — independent of the table's paginated
   // fetch above (different page range entirely: every PAID/COMPLETED
@@ -211,8 +234,8 @@ function AdminReports() {
         setTransactionStatsLoading(true);
         setTransactionStatsError(null);
         const [paid, completed] = await Promise.all([
-          fetchAllRequestsByStatus('PAID'),
-          fetchAllRequestsByStatus('COMPLETED'),
+          fetchAllRequests('PAID'),
+          fetchAllRequests('COMPLETED'),
         ]);
         setTransactionRows([...paid, ...completed].map(normalizeRequestRow));
       } catch (err) {
@@ -227,7 +250,7 @@ function AdminReports() {
     // refreshSignal: a payment confirmation or bulk import elsewhere in the
     // app changes which requests are PAID/COMPLETED — refetch so the
     // average doesn't go stale, same trigger the table's own fetch uses.
-  }, [user, refreshSignal]);
+  }, [user, refreshSignal, refreshKey]);
 
   const filtered = useMemo(
     () => rows.filter((r) => rowMatchesFilters(r, { query, status, dateFrom, dateTo })),
@@ -247,25 +270,59 @@ function AdminReports() {
     return { total, count, average: count > 0 ? total / count : 0 };
   }, [transactionRows, query, status, dateFrom, dateTo]);
 
-  const exportToCSV = () => {
+  // Fetches every page (fetchAllRequests, no status — every status, same as
+  // the table's own unscoped fetch) and applies the exact same filter
+  // predicate the table uses, so "the report" means the same thing whether
+  // it's on screen, in the CSV, or on the printed page — just not capped to
+  // one 50-row page. Shared by both Export CSV and Print to PDF below.
+  const buildFullFilteredRows = useCallback(async () => {
+    const all = await fetchAllRequests();
+    return all.map(normalizeRequestRow).filter((r) => rowMatchesFilters(r, { query, status, dateFrom, dateTo }));
+  }, [query, status, dateFrom, dateTo]);
+
+  const buildExportTable = (records) => ({
+    headers: EXPORT_FIELDS.map((f) => f.label),
+    rows: records.map((record) =>
+      EXPORT_FIELDS.map((field) => {
+        let value = record[field.key] || '';
+        if (field.key.includes('Date') && value && value !== '-') {
+          try { value = formatDateTime(value); } catch { /* keep original */ }
+        }
+        return value;
+      })
+    ),
+  });
+
+  const exportToCSV = async () => {
     setExporting(true);
     try {
-      const headers = EXPORT_FIELDS.map(f => f.label);
-      const rows = filtered.map((record) =>
-        EXPORT_FIELDS.map((field) => {
-          let value = record[field.key] || '';
-          if (field.key.includes('Date') && value && value !== '-') {
-            try { value = formatDateTime(value); } catch { /* keep original */ }
-          }
-          return value;
-        })
-      );
+      const records = await buildFullFilteredRows();
+      const { headers, rows } = buildExportTable(records);
       downloadCsv(`admin-reports-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed. Please try again.');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handlePrintToPDF = async () => {
+    setPrinting(true);
+    try {
+      const records = await buildFullFilteredRows();
+      // flushSync forces the print-only view (below) to actually render
+      // `records` before window.print() opens the dialog — a plain
+      // setPrintRows() here wouldn't have committed to the DOM yet by the
+      // time the synchronous print() call runs, since React batches state
+      // updates outside its own event handlers.
+      flushSync(() => setPrintRows(records));
+      window.print();
+    } catch (err) {
+      console.error('Print failed:', err);
+      alert('Failed to prepare the report for printing. Please try again.');
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -357,7 +414,8 @@ function AdminReports() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <>
+    <div className="space-y-4 sm:space-y-6 print:hidden">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">
@@ -371,15 +429,38 @@ function AdminReports() {
             </p>
           </div>
         </div>
+        <div className="w-full sm:w-auto flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setRefreshKey((k) => k + 1)}
+          disabled={loading}
+          aria-label="Refresh"
+          className="p-2.5 sm:px-4 sm:py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline text-sm font-medium">Refresh</span>
+        </button>
         <button
           onClick={exportToCSV}
           disabled={exporting || filtered.length === 0}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
         >
           {exporting
             ? <><RefreshCw className="w-4 h-4 animate-spin" />Exporting...</>
             : <><FileText className="w-4 h-4" />Export CSV</>}
         </button>
+        <button
+          type="button"
+          onClick={handlePrintToPDF}
+          disabled={printing || filtered.length === 0}
+          title="Opens the browser's print dialog — choose 'Save as PDF' as the destination to export a PDF"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+        >
+          {printing
+            ? <><RefreshCw className="w-4 h-4 animate-spin" />Preparing...</>
+            : <><Printer className="w-4 h-4" />Print to PDF</>}
+        </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -674,6 +755,60 @@ function AdminReports() {
         )}
       </InfoModal>
     </div>
+
+    {/* Print view — only rendered into the page when printing (Tailwind's
+        `print:` variant), so it never affects normal on-screen layout. The
+        entire on-screen UI above is `print:hidden` for the same reason —
+        a printed report shouldn't include the sidebar/header/filters/
+        pagination controls, only the report itself. Renders `printRows`
+        (the full filtered dataset across every page, built by
+        buildFullFilteredRows/handlePrintToPDF just before window.print()
+        is called) — NOT `filtered`, which is deliberately scoped to just
+        the table's current 50-row page. Uses the same EXPORT_FIELDS as
+        Export CSV so Print and CSV always agree on what "the report" means.
+        Always light-mode styled (no dark: variants) since a printed page
+        should be legible on paper regardless of which theme was active on
+        screen. */}
+    <div className="hidden print:block p-6 text-gray-900">
+      <div className="flex items-center justify-between border-b border-gray-300 pb-3 mb-4">
+        <div>
+          <h1 className="text-xl font-bold">Admin Reports</h1>
+          <p className="text-sm text-gray-600">
+            {[
+              query && `Search: "${query}"`,
+              status && `Status: ${formatStatusText(status)}`,
+              dateFrom && `From: ${dateFrom}`,
+              dateTo && `To: ${dateTo}`,
+            ].filter(Boolean).join('  •  ') || 'All records'}
+          </p>
+        </div>
+        <p className="text-xs text-gray-500">Generated {formatDateTime(new Date().toISOString())}</p>
+      </div>
+      <table className="w-full text-[9px] border-collapse">
+        <thead>
+          <tr>
+            {EXPORT_FIELDS.map((field) => (
+              <th key={field.key} className="border border-gray-300 bg-gray-100 px-1.5 py-1 text-left font-semibold">
+                {field.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {buildExportTable(printRows).rows.map((rowValues, i) => (
+            <tr key={i}>
+              {rowValues.map((value, j) => (
+                <td key={EXPORT_FIELDS[j].key} className="border border-gray-300 px-1.5 py-1 break-words">
+                  {String(value)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-3 text-xs text-gray-500">{printRows.length} record{printRows.length === 1 ? '' : 's'}</p>
+    </div>
+    </>
   );
 }
 

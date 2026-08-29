@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   KeyRound, Plus, Trash2, PowerOff, Power, Check, X,
-  AlertCircle, Loader2, Search, Copy, CheckCircle2, BarChart3, ShieldAlert, Star, StarOff
+  AlertCircle, Loader2, Search, Copy, CheckCircle2, BarChart3, ShieldAlert, Star, StarOff, RefreshCw
 } from 'lucide-react';
 import jedApi from '../services/api';
 import ConfirmationModal from '../common/ConfirmationModal';
@@ -108,7 +108,6 @@ const ApiKeySettings = () => {
       setError(null);
 
       const response = await jedApi.getApiKeys();
-      console.log('[ApiKeys] Response:', response);
 
       let data = [];
       if (response?.success && Array.isArray(response?.data)) {
@@ -122,7 +121,6 @@ const ApiKeySettings = () => {
       }
 
       setApiKeys(data);
-      console.log('[ApiKeys] Loaded:', data.length, 'keys');
     } catch (err) {
       console.error('[ApiKeys] Failed to fetch:', err);
       setError(String(err?.message || 'Failed to load API keys'));
@@ -156,12 +154,13 @@ const ApiKeySettings = () => {
         description: formData.description.trim() || undefined
       };
 
-      console.log('[ApiKeys] Creating via POST /apikeys:', payload);
       const response = await jedApi.createApiKey(payload);
-      console.log('[ApiKeys] Create response:', response);
 
       const created = response?.data || response;
       // Surface the full secret now — this is the only chance to see it.
+      // (Deliberately never logged to console — same reasoning as the
+      // password-logging fix in api.js: this is a real, one-time-reveal
+      // secret, not diagnostic-safe data.)
       setNewlyCreatedKey(created);
       setCopied(false);
 
@@ -277,19 +276,31 @@ const ApiKeySettings = () => {
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">API Keys</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400">Manage credentials for programmatic access</p>
         </div>
-        <button
-          onClick={() => {
-            setIsCreating(true);
-            setFormData({ name: '', description: '' });
-            setNewlyCreatedKey(null);
-            setError(null);
-          }}
-          disabled={!!actionLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          Create API Key
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fetchApiKeys()}
+            disabled={loading}
+            aria-label="Refresh"
+            className="p-2.5 sm:px-4 sm:py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline text-sm font-medium">Refresh</span>
+          </button>
+          <button
+            onClick={() => {
+              setIsCreating(true);
+              setFormData({ name: '', description: '' });
+              setNewlyCreatedKey(null);
+              setError(null);
+            }}
+            disabled={!!actionLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" />
+            Create API Key
+          </button>
+        </div>
       </div>
 
       {/* Active app key indicator — never shows the secret, only which key
@@ -389,7 +400,7 @@ const ApiKeySettings = () => {
                 Use as active app key
               </button>
               <p className="text-xs text-amber-700 dark:text-amber-400 mt-1.5">
-                Needed for Generate RRR and Remita status lookups in the Payments page — those endpoints require a real API key, not your login session.
+                Needed for Generate RRR and Remita status lookups in the Payments page — those actions require a real API key, not your login session.
               </p>
 
               <button

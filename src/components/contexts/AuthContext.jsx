@@ -39,8 +39,6 @@ export const AuthProvider = ({ children }) => {
   // Initialize auth state from localStorage on mount
   useEffect(() => {
     const initializeAuth = async () => {
-      console.log('[AuthContext] Initializing authentication...');
-      
       try {
         setError(null);
         
@@ -62,8 +60,6 @@ export const AuthProvider = ({ children }) => {
 
           setUser(normalizedUser);
         } else {
-          console.log('[AuthContext] No valid session found');
-          
           // Clear any partial/corrupted data
           if (storedUser && !token) {
             console.warn('[AuthContext] Found user without token, clearing storage');
@@ -107,8 +103,6 @@ export const AuthProvider = ({ children }) => {
 
   // Login function
   const login = useCallback(async (userData) => {
-    console.log('[AuthContext] Login called with user data');
-    
     try {
       setError(null);
       
@@ -138,8 +132,6 @@ export const AuthProvider = ({ children }) => {
         console.error('[AuthContext] Storage verification failed - User:', !!storedUser, 'Token:', !!token);
         throw new Error('Failed to store authentication data');
       }
-      
-      console.log('[AuthContext] Login successful, storage verified');
     } catch (error) {
       console.error('[AuthContext] Login error:', error);
       setError(error.message);
@@ -152,15 +144,11 @@ export const AuthProvider = ({ children }) => {
 
   // Logout function
   const logout = useCallback(async () => {
-    console.log('[AuthContext] Logout called');
-    
     try {
       setError(null);
-      
+
       // Call API logout (handles both server and local cleanup)
       await JEDApiService.logout();
-      
-      console.log('[AuthContext] Logout successful');
     } catch (error) {
       console.error('[AuthContext] Logout error:', error);
       setError(error.message);
@@ -174,14 +162,11 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setUser(null);
       setError(null);
-      console.log('[AuthContext] User state cleared');
     }
   }, []);
 
   // Update user function
   const updateUser = useCallback(async (updates) => {
-    console.log('[AuthContext] Updating user with:', updates);
-    
     try {
       setError(null);
       
@@ -201,7 +186,6 @@ export const AuthProvider = ({ children }) => {
         // Update localStorage
         try {
           JEDApiService.storeUser(updated);
-          console.log('[AuthContext] User data updated in storage');
         } catch (storageError) {
           console.error('[AuthContext] Failed to store updated user:', storageError);
           setError('Failed to save user data');
@@ -218,8 +202,6 @@ export const AuthProvider = ({ children }) => {
 
   // Refresh user data from server
   const refreshUser = useCallback(async () => {
-    console.log('[AuthContext] Refreshing user data...');
-    
     try {
       setError(null);
       
@@ -236,7 +218,6 @@ export const AuthProvider = ({ children }) => {
       if (userRecord) {
         const normalizedUser = normalizeUser(userRecord);
         setUser(normalizedUser);
-        console.log('[AuthContext] User data refreshed');
       }
     } catch (error) {
       console.error('[AuthContext] Error refreshing user:', error);

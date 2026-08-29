@@ -174,7 +174,6 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
         params.search = currentFilters.searchTerm;
       }
 
-      console.log('[MeterData] Fetching meters with params:', JSON.stringify(params)); // Added for debugging
       const response = await JEDApiService.getMeters(params);
 
       const payload = response?.data ?? response;
@@ -203,8 +202,6 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
       const inferredTotal = totalCount || metersData.length;
       const totalPages = Number(paginationData.pages ?? paginationData.totalPages ?? paginationData.total_pages ?? paginationData.pageCount ?? Math.max(1, Math.ceil(inferredTotal / (limitCount || pagination.limit || 1)), currentPage));
 
-      console.log('[MeterData] Meters received:', metersData.length, 'items', 'total:', inferredTotal, 'page:', currentPage, 'limit:', limitCount, 'pages:', totalPages);
-      
       setMeters(metersData);
       setPagination(prev => ({
         ...prev,
@@ -319,7 +316,6 @@ const useMeterStatistics = () => {
       pending: data.pending ?? data.pending_meters ?? data.pendingMeters ?? data.pending_count ?? data.pendingCount ?? 0
     };
 
-    console.log('[MeterSchedule] Normalized meter stats:', stats);
     return stats;
   };
 
@@ -335,7 +331,6 @@ const useMeterStatistics = () => {
       setLoading(true);
       setError(null);
       
-      console.log('[MeterSchedule] Fetching meter statistics...');
       const response = await JEDApiService.getMeterStatistics();
       const payload = unwrapStatsResponse(response);
 
@@ -343,7 +338,6 @@ const useMeterStatistics = () => {
         throw new Error('Empty meter statistics response');
       }
 
-      console.log('[MeterSchedule] Meter stats received:', payload);
       setMeterStats(normalizeStats(payload));
       setHasPermission(true);
     } catch (err) {
@@ -1216,11 +1210,6 @@ function MeterSchedule() {
   const [activeTab, setActiveTab] = useState('inventory');
   const meterInventory = useMeterData({ searchTerm: '' }, activeTab === 'inventory');
   const meterQuery = useMeterData({ searchTerm: '' }, activeTab === 'query');
-
-  useEffect(() => {
-    console.log('[MeterSchedule] Component mounted');
-    console.log('[MeterSchedule] Active tab:', activeTab);
-  }, [activeTab]);
 
   const statsCards = useMemo(() => {
     const cards = [
