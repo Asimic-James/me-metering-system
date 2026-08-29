@@ -2,6 +2,16 @@
 
 This documents where the desired ME-Metering workflow cannot be fully implemented against the real Pharez API (`https://pharez-api.onrender.com/api-docs`, verified against its OpenAPI spec) — as opposed to places where the frontend was simply calling the API incorrectly (those were fixed directly, not listed here). These are backend feature requests, not frontend bugs.
 
+## Confirmed 2026-08-29: `GET /meters` (and `GET /meters/export`) have no search/query parameter
+
+Meter Schedule's search box was sending a `search` query param that the real API silently ignores — confirmed directly against the live OpenAPI spec: `GET /meters` documents exactly `page`, `limit` (max 100), `status` (enum), `phaseType` (enum); no search/query/free-text parameter exists. `GET /meters/export` documents only `status`/`phaseType`, same gap. Neither endpoint supports filtering by meter number, SIM number, or any other identifier server-side.
+
+**Impact:** searching previously just re-displayed whatever page happened to come back (the sent `search` param having no effect), which looked like broken/unreliable filtering.
+
+**What was implemented instead:** since the real `Meter` schema (`id, meterNumber, simNumber, manufacturedDate, meterMake, model, phaseType, sgcNumber, status, uploadedAt, installedAt`) has no `accountNumber`/customer-name field to begin with (a meter isn't linked back to a customer/account until installation, via a separate `JedCustomerRequest` — see gap #3 below), searching by those was never possible here regardless of the query-param gap. For the fields that do exist, Meter Schedule now fetches every `status`/`phaseType`-matching page (server-side, since those params ARE real) via a safety-capped pagination loop, filters client-side against `meterNumber`/`simNumber`/`meterMake`/`model`/`sgcNumber`, and paginates the filtered result itself — an accurate search across the complete matching dataset, not just one page. `GET /meters/export`'s file is still generated entirely server-side and reflects `status`/`phaseType` only, not an active search term (fetching+filtering client-side to fabricate a search-scoped export file was judged out of scope for a search-box fix).
+
+**What's needed from the backend:** a `search`/`q` query parameter on `GET /meters` (and ideally `GET /meters/export`) matching against `meterNumber`/`simNumber`/`sgcNumber` at minimum, so this can move to real server-side search — the safety-capped full-fetch approach above is a correctness-preserving workaround, not a substitute for that.
+
 ## Reconfirmed 2026-08-27: Installer "Assigned Meters" — not implemented, for the same reason as gaps #1/#3
 
 A dedicated "Installer → Assigned Meters" view (an Installer seeing only the specific meters an Admin assigned to *them*, distinct from any other installer) was requested this pass. Before writing any UI for it, the live spec was re-pulled fresh from production and diffed against this report: **still exactly 45 endpoints**, identical to the 2026-08-25 list below — no new assignment endpoint, no `installerId`/`assignedTo` field added to either `JedCustomerRequest` or the `Meter` schema (`GET /meters`'s response properties are still exactly `id, meterNumber, simNumber, manufacturedDate, meterMake, model, phaseType, sgcNumber, status, uploadedAt, installedAt` — confirmed via the live schema, not assumed).

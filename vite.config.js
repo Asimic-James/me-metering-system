@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         name: 'ME Metering Integration - JEDC Meter Management',
         short_name: 'ME Metering',
-        description: 'JEDC Partnership meter installation, payment, and management system',
+        description: 'ME Metering meter installation, payment, and management system',
         theme_color: '#5c4104',
         background_color: '#fefbea',
         display: 'standalone',

@@ -7,7 +7,7 @@ function Footer() {
             &copy; {new Date().getFullYear()} <span className="font-medium text-indigo-600 dark:text-indigo-400">ME-JEDC</span> Power Distribution. All rights reserved.
           </p>
           <p className="text-xs text-gray-400 dark:text-gray-600">
-            Meter Management System
+            ME Metering System
           </p>
         </div>
       </div>

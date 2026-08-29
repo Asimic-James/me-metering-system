@@ -521,10 +521,10 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
           ME Metering Integration
         </h1>
         <p className={`${HEADER_STYLES.desktop.subtitle} hidden sm:block`}>
-          JEDC Partnership - Meter Management System
+          ME Metering System
         </p>
         <p className={`${HEADER_STYLES.mobile.subtitle} sm:hidden`}>
-          JEDC Partnership
+          ME Metering
         </p>
       </div>
     </div>

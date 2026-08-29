@@ -245,11 +245,11 @@ function Login({ onLogin }) {
             ME Metering Integration
           </p>
           <p className="text-brand-300/60 text-xs mt-1 tracking-wide">
-            JEDC Partnership
+            ME Metering
           </p>
         </div>
         <p className="relative text-brand-300/50 text-xs">
-          © {new Date().getFullYear()} JEDC Meter Management. All rights reserved.
+          © {new Date().getFullYear()} ME Metering System. All rights reserved.
         </p>
       </div>
 
@@ -258,7 +258,7 @@ function Login({ onLogin }) {
         <img src="/brand-logo.png" alt="ME Metering" className="w-10 h-10 object-contain rounded-xl bg-white/95 p-1 flex-shrink-0" />
         <div className="min-w-0">
           <p className="text-white font-bold text-sm tracking-wide truncate">Masters Energy</p>
-          <p className="text-brand-300/70 text-xs truncate">ME Metering Integration &middot; JEDC Partnership</p>
+          <p className="text-brand-300/70 text-xs truncate">ME Metering Integration</p>
         </div>
       </div>
 
@@ -386,7 +386,7 @@ function Login({ onLogin }) {
             </p>
 
             <p className="text-xs text-slate-600 lg:hidden">
-              © {new Date().getFullYear()} JEDC Meter Management. All rights reserved.
+              © {new Date().getFullYear()} ME Metering System. All rights reserved.
             </p>
           </div>
         </div>

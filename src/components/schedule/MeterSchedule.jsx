@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import JEDApiService from '../services/api';
 import { usePermissions } from '../auth/usePermissions';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
@@ -121,6 +121,58 @@ const TABS = [
   { id: 'query', label: 'Meter Query' }
 ];
 
+// The real GET /meters (and GET /meters/export) endpoints only document
+// page/limit/status/phaseType as query parameters — confirmed against the
+// live OpenAPI spec, no search/query parameter exists. Sending a `search`
+// param (as this file previously did) is silently ignored server-side, so
+// the "search" box was really just re-displaying whatever page 1 of the
+// unfiltered/status-filtered list happened to contain — not a real search.
+//
+// Fix: when a search term is active, fetch every page matching the current
+// status/phaseType filters (server-side, since those ARE supported) via
+// fetchAllMeters below, filter client-side against the fields the real
+// Meter schema actually has, then paginate the filtered result ourselves.
+// Same safety-capped full-fetch pattern already used by AdminReports.jsx's
+// fetchAllRequests, for the same reason: an accurate search needs the
+// complete matching dataset, not just one page of it.
+//
+// The real Meter schema is exactly `id, meterNumber, simNumber,
+// manufacturedDate, meterMake, model, phaseType, sgcNumber, status,
+// uploadedAt, installedAt` — there is no accountNumber or customer-name
+// field on a meter record (a meter isn't linked back to a customer/account
+// until installation, via a separate JedCustomerRequest — see
+// API_GAP_REPORT.md), so "Account Number"/"Customer Name" search is not
+// possible here without fabricating a relationship the API doesn't have.
+const MATCHABLE_METER_FIELDS = ['meterNumber', 'simNumber', 'meterMake', 'model', 'sgcNumber'];
+const FULL_METER_FETCH_PAGE_LIMIT = 100; // the API's documented maximum
+const FULL_METER_FETCH_MAX_PAGES = 20; // safety cap (~2000 meters), same as AdminReports.jsx
+
+async function fetchAllMeters({ status, phaseType } = {}) {
+  const all = [];
+  let page = 1;
+  while (page <= FULL_METER_FETCH_MAX_PAGES) {
+    const params = { page, limit: FULL_METER_FETCH_PAGE_LIMIT };
+    if (status && status !== 'ALL') params.status = status;
+    if (phaseType && phaseType !== 'ALL') params.phaseType = phaseType;
+    const response = await JEDApiService.getMeters(params);
+    const pageData = unwrapListResponse(response);
+    if (pageData.length === 0) break;
+    all.push(...pageData);
+    const paginationData = response?.pagination || response?.data?.pagination || {};
+    const hasNext = paginationData.hasNext ?? (pageData.length === FULL_METER_FETCH_PAGE_LIMIT);
+    if (!hasNext) break;
+    page += 1;
+  }
+  return all;
+}
+
+function meterMatchesSearch(meter, lowerCaseTerm) {
+  return MATCHABLE_METER_FIELDS.some((field) => {
+    const value = meter?.[field];
+    return value && String(value).toLowerCase().includes(lowerCaseTerm);
+  });
+}
+
 // Shared hook for meter data fetching
 //
 // FIXED (2 issues):
@@ -152,15 +204,73 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
     ...initialFilters
   });
 
+  // Guards against a race where an in-flight request resolves after a
+  // *newer* one was already issued (e.g. the user searches "SIM1", then
+  // "SIM12" before the first full-dataset fetch above finishes) — without
+  // this, the slower, stale response could overwrite the newer one's
+  // results. Every fetchMeters call claims the next id; a response is only
+  // applied if its id is still the latest by the time it resolves.
+  const requestIdRef = useRef(0);
+  // Caches the last search's full matching dataset (before client-side
+  // pagination) so clicking Next/Prev while a search is active re-slices
+  // already-fetched data instead of re-running the full multi-page fetch
+  // on every page click. Invalidated automatically whenever the search
+  // term or status/phaseType filters change (the cache key changes too).
+  const searchCacheRef = useRef({ key: null, matches: [] });
+
   const fetchMeters = useCallback(async (page = 1, currentFilters = filters, pageLimit = null) => {
+    const limit = pageLimit || pagination.limit;
+    const searchTerm = currentFilters.searchTerm?.trim();
+    const requestId = ++requestIdRef.current;
+
+    // Search mode: the real API has no search parameter (see the comment
+    // above fetchAllMeters), so an active search fetches every
+    // status/phaseType-matching page, filters client-side, and paginates
+    // the filtered result itself — entirely separate from the normal
+    // single-page server-side path below.
+    if (searchTerm) {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // refreshSignal is part of the key so a mutation elsewhere in the
+        // app (e.g. a meter's status changing) invalidates the cache too,
+        // not just a changed search term/filter.
+        const cacheKey = JSON.stringify({ searchTerm, status: currentFilters.status, phaseType: currentFilters.phaseType, refreshSignal });
+        let matches;
+        if (searchCacheRef.current.key === cacheKey) {
+          matches = searchCacheRef.current.matches;
+        } else {
+          const all = await fetchAllMeters(currentFilters);
+          const term = searchTerm.toLowerCase();
+          matches = all.filter((m) => meterMatchesSearch(m, term));
+          searchCacheRef.current = { key: cacheKey, matches };
+        }
+
+        if (requestIdRef.current !== requestId) return; // a newer request superseded this one
+
+        const total = matches.length;
+        const pages = Math.max(1, Math.ceil(total / limit));
+        const safePage = Math.min(Math.max(1, page), pages);
+        const start = (safePage - 1) * limit;
+
+        setMeters(matches.slice(start, start + limit));
+        setPagination((prev) => ({ ...prev, page: safePage, limit, total, pages }));
+      } catch (err) {
+        if (requestIdRef.current !== requestId) return;
+        console.error('[MeterData] Error searching meters:', err);
+        setError(err.message || 'Failed to search meters');
+      } finally {
+        if (requestIdRef.current === requestId) setLoading(false);
+      }
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
-      const params = {
-        page,
-        limit: pageLimit || pagination.limit
-      };
+      const params = { page, limit };
 
       if (currentFilters.status !== 'ALL') {
         params.status = currentFilters.status;
@@ -170,11 +280,8 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
         params.phaseType = currentFilters.phaseType;
       }
 
-      if (currentFilters.searchTerm) {
-        params.search = currentFilters.searchTerm;
-      }
-
       const response = await JEDApiService.getMeters(params);
+      if (requestIdRef.current !== requestId) return; // a newer request superseded this one
 
       const payload = response?.data ?? response;
       const metersData = unwrapListResponse(response);
@@ -211,12 +318,13 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
         pages: totalPages
       }));
     } catch (err) {
+      if (requestIdRef.current !== requestId) return;
       console.error('[MeterData] Error fetching meters:', err);
       setError(err.message || 'Failed to load meters');
     } finally {
-      setLoading(false);
+      if (requestIdRef.current === requestId) setLoading(false);
     }
-  }, [pagination.limit, filters]);
+  }, [pagination.limit, filters, refreshSignal]);
 
   const updateFilters = useCallback((newFilters) => {
     setFilters(newFilters);
@@ -242,9 +350,13 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
       if (filters.phaseType !== 'ALL') {
         params.phaseType = filters.phaseType;
       }
-      if (filters.searchTerm) {
-        params.search = filters.searchTerm;
-      }
+      // No `search` param here — GET /meters/export only documents
+      // status/phaseType (confirmed against the live OpenAPI spec, same as
+      // GET /meters above). This export is generated entirely server-side,
+      // so an active on-screen search term can't be reflected in it without
+      // fetching+filtering client-side and generating the file ourselves —
+      // out of scope for the search fix; exporting still respects
+      // status/phaseType, just not a search term.
 
       const blob = await JEDApiService.exportMeters(params);
       const url = URL.createObjectURL(blob);
@@ -732,6 +844,13 @@ const MeterFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
               type="text"
               value={localSearchTerm}
               onChange={(e) => setLocalSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter commits immediately instead of waiting out the
+                // debounce — same eventual result, just without the delay.
+                if (e.key === 'Enter' && localSearchTerm !== filters.searchTerm) {
+                  onFilterChange({ ...filters, searchTerm: localSearchTerm });
+                }
+              }}
               placeholder="Search by Meter Number, SIM, SGC..."
               className="form-input w-full pl-10 pr-3 py-2 text-sm"
               disabled={loading}
@@ -832,6 +951,13 @@ const QueryFilterControls = ({ filters, onFilterChange, loading, onRefresh, onEx
               type="text"
               value={localSearchTerm}
               onChange={(e) => setLocalSearchTerm(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter commits immediately instead of waiting out the
+                // debounce — same eventual result, just without the delay.
+                if (e.key === 'Enter' && localSearchTerm !== filters.searchTerm) {
+                  onFilterChange({ ...filters, searchTerm: localSearchTerm });
+                }
+              }}
               placeholder="Search by Meter Number, SIM, SGC..."
               className="form-input w-full pl-10 pr-3 py-2 text-sm"
               disabled={loading}
@@ -1125,7 +1251,7 @@ const MeterInventory = ({ meterInventory, canManageSchedule }) => {
 
       {!loading && meters.length === 0 && (
         <EmptyState
-          hasFilters={filters.status !== 'ALL' || filters.phaseType !== 'ALL'}
+          hasFilters={filters.status !== 'ALL' || filters.phaseType !== 'ALL' || !!filters.searchTerm}
           searchTerm={filters.searchTerm}
           type="meters"
         />
