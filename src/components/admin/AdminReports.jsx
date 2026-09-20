@@ -20,6 +20,7 @@ import { formatDateTime } from '../../utils/date';
 import { formatCurrencyNGN } from '../../utils/currency';
 import { normalizeStatus } from '../../utils/statusBadge';
 import { downloadCsv } from '../../utils/csv';
+import { fetchAllRequests } from '../../utils/fetchAllRequests';
 import InfoModal from '../common/InfoModal';
 import StatusBadge from '../common/StatusBadge';
 
@@ -109,32 +110,11 @@ const rowMatchesFilters = (row, { query, status, dateFrom, dateTo }) => {
 // fetching only PAID/COMPLETED server-side (never INITIATED, which isn't a
 // qualifying transaction — see below) avoids pulling records that could
 // never count toward the average in the first place.
-const FULL_DATASET_PAGE_LIMIT = 100; // the API's documented maximum
-const FULL_DATASET_MAX_PAGES = 20; // safety cap (~2000 records) against an unbounded loop on a very large dataset
-
-// Loops GET /external/jed/requests across every page to build the complete
-// dataset instead of just the table's current 50-row page — shared by Avg
-// Transaction (status-scoped, below), and by Export CSV/Print to PDF
-// (unscoped: every status, then filtered client-side same as the table —
-// see buildFullFilteredRows). `status` is optional; the endpoint supports
-// server-side status filtering (confirmed: enum exactly
-// INITIATED/PAID/COMPLETED) but no date/search filter, so date-range and
-// text search still have to happen client-side regardless of which caller.
-async function fetchAllRequests(status) {
-  const all = [];
-  let page = 1;
-  while (page <= FULL_DATASET_MAX_PAGES) {
-    const params = { page, limit: FULL_DATASET_PAGE_LIMIT };
-    if (status) params.status = status;
-    const resp = await JEDApiService.getAllCustomerRequests(params);
-    const data = Array.isArray(resp?.data) ? resp.data : Array.isArray(resp) ? resp : [];
-    if (data.length === 0) break;
-    all.push(...data);
-    if (!resp?.pagination?.hasNext) break;
-    page += 1;
-  }
-  return all;
-}
+// The page-loop itself (`fetchAllRequests`, imported above from
+// utils/fetchAllRequests.js) is shared by Avg Transaction (status-scoped,
+// below), Export CSV/Print to PDF (unscoped: every status, then filtered
+// client-side same as the table — see buildFullFilteredRows) and the
+// Installations page.
 
 function AdminReports() {
   const { user } = useAuth();

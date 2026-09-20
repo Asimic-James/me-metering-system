@@ -71,4 +71,16 @@ export function formatDateOnly(value, localeOptions = {}) {
   }
 }
 
+// ISO `startDate`/`endDate` covering "the last N days including today" — the
+// documented date-range params of GET /external/jed/payments (start is local
+// midnight N-1 days ago, end is now). Same window AdminDashboard's trend
+// chart uses.
+export function getRecentDaysRange(days) {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - (days - 1));
+  startDate.setHours(0, 0, 0, 0);
+  return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+}
+
 export default { parseTimestamp, formatDateTime, formatDateOnly };

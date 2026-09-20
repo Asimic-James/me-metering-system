@@ -36,10 +36,13 @@ const MeterTypeSettings = () => {
       setLoading(true);
       setError(null);
 
+      // GET /settings/meter-type documents only `page` and `limit` — the
+      // previous `query` param was ignored by the server (and, being in the
+      // effect deps, re-fetched on every keystroke). Search is applied
+      // client-side by `filteredMeterTypes` below.
       const response = await jedApi.getMeterTypes({
         page: pagination.currentPage,
-        limit: pagination.limit,
-        query: searchTerm
+        limit: pagination.limit
       });
 
       // Handle different response structures from the API
@@ -77,7 +80,7 @@ const MeterTypeSettings = () => {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.currentPage, pagination.limit, searchTerm]);
+  }, [pagination.currentPage, pagination.limit]);
 
   useEffect(() => {
     fetchMeterTypes();

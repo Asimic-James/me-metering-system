@@ -29,14 +29,14 @@ import { unwrapListResponse } from '../../utils/unwrapListResponse';
 
 // Constants for better maintainability
 const PRIORITY_CONFIG = {
-  high: { bg: 'bg-red-100', text: 'text-red-800', label: 'High' },
-  medium: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Medium' },
-  low: { bg: 'bg-green-100', text: 'text-green-800', label: 'Low' }
+  high: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-800 dark:text-red-300', label: 'High' },
+  medium: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-800 dark:text-yellow-300', label: 'Medium' },
+  low: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-300', label: 'Low' }
 };
 
 const STATUS_CONFIG = {
-  pending: { bg: 'bg-brand-100', text: 'text-brand-800', icon: Clock },
-  completed: { bg: 'bg-green-100', text: 'text-green-800', icon: CheckCircle }
+  pending: { bg: 'bg-brand-100 dark:bg-brand-900/30', text: 'text-brand-800 dark:text-brand-300', icon: Clock },
+  completed: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-300', icon: CheckCircle }
 };
 
 const METER_STATUS_OPTIONS = [
@@ -52,69 +52,6 @@ const PHASE_TYPE_OPTIONS = [
   { value: 'SINGLE PHASE', label: 'Single Phase', icon: Zap },
   { value: 'THREE PHASE', label: 'Three Phase', icon: Cpu }
 ];
-
-const METER_STATISTICS_CONFIG = {
-  totalMeters: {
-    title: 'Total Meters',
-    icon: Database,
-    bgColor: 'bg-brand-100',
-    iconColor: 'text-brand-600'
-  },
-  available: {
-    title: 'Available',
-    icon: CheckCircle,
-    bgColor: 'bg-green-100',
-    iconColor: 'text-green-600'
-  },
-  installed: {
-    title: 'Installed',
-    icon: Wrench,
-    bgColor: 'bg-purple-100',
-    iconColor: 'text-purple-600'
-  },
-  faulty: {
-    title: 'Faulty',
-    icon: AlertTriangle,
-    bgColor: 'bg-red-100',
-    iconColor: 'text-red-600'
-  },
-  retired: {
-    title: 'Retired',
-    icon: Battery,
-    bgColor: 'bg-gray-100 dark:bg-gray-800/80',
-    iconColor: 'text-gray-800 dark:text-gray-200'
-  },
-  singlePhase: {
-    title: 'Single Phase',
-    icon: Zap,
-    bgColor: 'bg-yellow-100',
-    iconColor: 'text-yellow-600'
-  },
-  threePhase: {
-    title: 'Three Phase',
-    icon: Cpu,
-    bgColor: 'bg-indigo-100',
-    iconColor: 'text-indigo-600'
-  },
-  completed: {
-    title: 'Completed',
-    icon: CheckCircle,
-    bgColor: 'bg-green-100',
-    iconColor: 'text-green-600'
-  },
-  paid: {
-    title: 'Paid',
-    icon: CheckCircle,
-    bgColor: 'bg-teal-100',
-    iconColor: 'text-teal-600'
-  },
-  pending: {
-    title: 'Pending',
-    icon: Clock,
-    bgColor: 'bg-brand-100',
-    iconColor: 'text-brand-600'
-  }
-};
 
 const TABS = [
   { id: 'inventory', label: 'Meter Inventory' },
@@ -551,15 +488,15 @@ const MeterStatusBadge = ({ status }) => {
   const getStatusConfig = (status) => {
     switch (status) {
       case 'AVAILABLE':
-        return { bg: 'bg-green-100', text: 'text-green-800', label: 'Available' };
+        return { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-300', label: 'Available' };
       case 'INSTALLED':
-        return { bg: 'bg-brand-100', text: 'text-brand-800', label: 'Installed' };
+        return { bg: 'bg-brand-100 dark:bg-brand-900/30', text: 'text-brand-800 dark:text-brand-300', label: 'Installed' };
       case 'FAULTY':
-        return { bg: 'bg-red-100', text: 'text-red-800', label: 'Faulty' };
+        return { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-800 dark:text-red-300', label: 'Faulty' };
       case 'RETIRED':
-        return { bg: 'bg-gray-100 dark:bg-gray-800/80', text: 'text-gray-800 dark:text-gray-200', label: 'Retired' };
+        return { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-800 dark:text-gray-200', label: 'Retired' };
       default:
-        return { bg: 'bg-gray-100 dark:bg-gray-800/80', text: 'text-gray-800 dark:text-gray-200', label: status || 'Unknown' };
+        return { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-800 dark:text-gray-200', label: status || 'Unknown' };
     }
   };
 
@@ -578,11 +515,11 @@ const PhaseTypeBadge = ({ phaseType }) => {
       case 'SINGLE PHASE':
         // Cyan, not amber/gold — gold is now this app's brand colour (see
         // tailwind.config.js), so a phase-type badge doesn't collide with it.
-        return { bg: 'bg-cyan-100', text: 'text-cyan-800', icon: Zap, label: 'Single Phase' };
+        return { bg: 'bg-cyan-100 dark:bg-cyan-900/30', text: 'text-cyan-800 dark:text-cyan-300', icon: Zap, label: 'Single Phase' };
       case 'THREE PHASE':
-        return { bg: 'bg-indigo-100', text: 'text-indigo-800', icon: Cpu, label: 'Three Phase' };
+        return { bg: 'bg-indigo-100 dark:bg-indigo-900/30', text: 'text-indigo-800 dark:text-indigo-300', icon: Cpu, label: 'Three Phase' };
       default:
-        return { bg: 'bg-gray-100 dark:bg-gray-800/80', text: 'text-gray-800 dark:text-gray-200', icon: null, label: phaseType };
+        return { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-800 dark:text-gray-200', icon: null, label: phaseType };
     }
   };
 
@@ -771,18 +708,18 @@ const MeterLoadingSkeleton = () => (
       <div key={i} className="card p-4 sm:p-6 animate-pulse">
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
-            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-            <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div>
+            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <div className="h-6 bg-gray-200 rounded w-16"></div>
-            <div className="h-6 bg-gray-200 rounded w-20"></div>
+            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
           </div>
         </div>
         <div className="space-y-2">
-          <div className="h-3 bg-gray-200 rounded"></div>
-          <div className="h-3 bg-gray-200 rounded"></div>
-          <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
         </div>
       </div>
     ))}
@@ -1195,8 +1132,8 @@ const MeterInventory = ({ meterInventory, canManageSchedule }) => {
       />
 
       {(error || deleteError) && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-red-800">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-red-800 dark:text-red-300">
             <AlertCircle className="w-4 h-4" />
             <span className="text-sm">{error || deleteError}</span>
           </div>
@@ -1275,8 +1212,8 @@ const MeterQuery = ({ meterQuery }) => {
       />
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-red-800">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-red-800 dark:text-red-300">
             <AlertCircle className="w-4 h-4" />
             <span className="text-sm">{error}</span>
           </div>
@@ -1284,12 +1221,12 @@ const MeterQuery = ({ meterQuery }) => {
       )}
 
       {!loading && meters.length > 0 && (
-        <div className="bg-brand-50 border border-brand-200 rounded-lg p-4">
+        <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg p-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="text-sm text-brand-800">
+            <div className="text-sm text-brand-800 dark:text-brand-300">
               Found <span className="font-semibold">{pagination.total}</span> meters matching your criteria
             </div>
-            <div className="text-xs text-brand-600 flex items-center gap-2">
+            <div className="text-xs text-brand-600 dark:text-brand-400 flex items-center gap-2">
               <span>Page {pagination.page} of {pagination.pages}</span>
               <span>•</span>
               <span>Showing {((pagination.page - 1) * pagination.limit) + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)}</span>
@@ -1343,8 +1280,8 @@ function MeterSchedule() {
         title: 'Total Meters', 
         value: meterStats.totalMeters, 
         icon: Database, 
-        bgColor: 'bg-brand-100', 
-        iconColor: 'text-brand-600',
+        bgColor: 'bg-brand-100 dark:bg-brand-900/30', 
+        iconColor: 'text-brand-600 dark:text-brand-400',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1352,8 +1289,8 @@ function MeterSchedule() {
         title: 'Available', 
         value: meterStats.available, 
         icon: CheckCircle, 
-        bgColor: 'bg-green-100', 
-        iconColor: 'text-green-600',
+        bgColor: 'bg-green-100 dark:bg-green-900/30', 
+        iconColor: 'text-green-600 dark:text-green-400',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1361,8 +1298,8 @@ function MeterSchedule() {
         title: 'Installed', 
         value: meterStats.installed, 
         icon: Wrench, 
-        bgColor: 'bg-purple-100', 
-        iconColor: 'text-purple-600',
+        bgColor: 'bg-purple-100 dark:bg-purple-900/30', 
+        iconColor: 'text-purple-600 dark:text-purple-400',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1370,8 +1307,8 @@ function MeterSchedule() {
         title: 'Faulty', 
         value: meterStats.faulty, 
         icon: AlertTriangle, 
-        bgColor: 'bg-red-100', 
-        iconColor: 'text-red-600',
+        bgColor: 'bg-red-100 dark:bg-red-900/30', 
+        iconColor: 'text-red-600 dark:text-red-400',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1379,8 +1316,8 @@ function MeterSchedule() {
         title: 'Retired', 
         value: meterStats.retired, 
         icon: Battery, 
-        bgColor: 'bg-gray-100 dark:bg-gray-800/80', 
-        iconColor: 'text-gray-800 dark:text-gray-200',
+        bgColor: 'bg-gray-100 dark:bg-gray-700',
+        iconColor: 'text-gray-600 dark:text-gray-300',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1388,8 +1325,8 @@ function MeterSchedule() {
         title: 'Pending', 
         value: meterStats.pending, 
         icon: Clock, 
-        bgColor: 'bg-brand-100', 
-        iconColor: 'text-brand-600',
+        bgColor: 'bg-brand-100 dark:bg-brand-900/30', 
+        iconColor: 'text-brand-600 dark:text-brand-400',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1397,8 +1334,8 @@ function MeterSchedule() {
         title: 'Paid', 
         value: meterStats.paid, 
         icon: CheckCircle, 
-        bgColor: 'bg-teal-100', 
-        iconColor: 'text-teal-600',
+        bgColor: 'bg-teal-100 dark:bg-teal-900/30', 
+        iconColor: 'text-teal-600 dark:text-teal-400',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1406,8 +1343,8 @@ function MeterSchedule() {
         title: 'Single Phase',
         value: meterStats.singlePhase,
         icon: Zap,
-        bgColor: 'bg-cyan-100',
-        iconColor: 'text-cyan-600',
+        bgColor: 'bg-cyan-100 dark:bg-cyan-900/30',
+        iconColor: 'text-cyan-600 dark:text-cyan-400',
         loading: statsLoading,
         error: !!statsError
       },
@@ -1415,8 +1352,8 @@ function MeterSchedule() {
         title: 'Three Phase', 
         value: meterStats.threePhase, 
         icon: Cpu, 
-        bgColor: 'bg-indigo-100', 
-        iconColor: 'text-indigo-600',
+        bgColor: 'bg-indigo-100 dark:bg-indigo-900/30', 
+        iconColor: 'text-indigo-600 dark:text-indigo-400',
         loading: statsLoading,
         error: !!statsError
       }
@@ -1472,7 +1409,7 @@ function MeterSchedule() {
               className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-xs sm:text-sm ${
                 activeTab === tab.id
                   ? 'bg-brand-500 text-gray-900'
-                  : 'bg-gray-100 dark:bg-gray-800/80 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
               }`}
             >
               {tab.label}

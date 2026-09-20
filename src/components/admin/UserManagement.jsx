@@ -6,6 +6,7 @@ import InfoModal from '../common/InfoModal';
 import { usePermissions } from '../auth/usePermissions';
 import { ROLES, getRoleMetadata } from '../auth/permissions';
 import jedApi from '../services/api';
+import { fetchAllPages } from '../../utils/fetchAllPages';
 import {
   Users,
   UserPlus,
@@ -374,16 +375,13 @@ function UserManagement() {
       setLoading(true);
       setError(null);
 
-      const response = await jedApi.getUsers(
+      // GET /users defaults to 10 per page (max 100), so a single call
+      // silently hid every user past the tenth from the list and from the
+      // client-side search/role filters below — page through them all.
+      const usersData = await fetchAllPages(
+        (params) => jedApi.getUsers(params),
         permissions.isSuperAdmin ? {} : { role: ROLES.INSTALLER }
       );
-
-      // Handle different response formats
-      const usersData =
-        response?.data?.users ||
-        response?.data ||
-        response?.users ||
-        (Array.isArray(response) ? response : []);
 
       setUsers(usersData);
 

@@ -4,7 +4,7 @@ Documents the actual system architecture of jedc-meter-management ("ME Metering 
 
 ## System Overview
 
-This is a **frontend-only Single Page Application**. There is no backend code, database, or server process in this repository — it is a Vite-built React SPA that talks entirely to an external REST API (`https://pharez-api.onrender.com/api/v1`, the "Pharez API", configurable via `VITE_API_BASE_URL`). Three layers:
+This is a **frontend-only Single Page Application**. There is no backend code, database, or server process in this repository — it is a Vite-built React SPA that talks entirely to an external REST API (`https://api.memetering.com/api/v1`, the "Pharez API", configurable via `VITE_API_BASE_URL`). Three layers:
 
 1. **Presentation** — React components, role-gated routes, Tailwind-styled UI.
 2. **Application/state** — React Context for cross-cutting session/theme/refresh state; local component state for everything else.
@@ -88,7 +88,7 @@ No intermediate states exist between `PAID` and `COMPLETED` on the real API — 
 
 ## API Architecture
 
-- **Base URL:** `API_CONFIG.BASE_URL`, from `VITE_API_BASE_URL` (default `https://pharez-api.onrender.com`) + a fixed `/api/v1` version prefix.
+- **Base URL:** `API_CONFIG.BASE_URL`, from `VITE_API_BASE_URL` (default `https://api.memetering.com`) + a fixed `/api/v1` version prefix.
 - **Service organization:** one class (`JEDApiService`), one method per real endpoint, grouped by comment-delimited section (Auth, Verification, JED Integration, Admin/Dashboard, Meters, Uploads, Settings, API Keys, Users, Token/Storage, Health Check). `api.config.js` holds the endpoint path map (`ENDPOINTS.{AUTH,VERIFICATION,JED,APIKEYS,METERS,USERS,ADMIN,SETTINGS,UPLOADS}`) and shared utilities (`buildUrl`, `buildHeaders`, `buildQueryString`, retry/timeout policy).
 - **Request handling:** `makeRequest()` centralizes retry (max 2, exponential backoff, only on network errors or 502/503/504), timeout (`AbortController`, 30s default / 60s for export-upload endpoints), and optional in-memory response caching (30s TTL, keyed by a JSON-stringified param signature).
 - **Error handling:** `handleErrorResponse()` maps HTTP status to a typed, prefixed error string (`AUTH_ERROR:`, `VALIDATION_ERROR:`, `PERMISSION_ERROR:`, `NOT_FOUND:`, `SERVER_ERROR:`) and surfaces per-field validation messages when the real API returns a `{ errors: [{ field, message }] }` array. A 401 always clears local tokens as a side effect.

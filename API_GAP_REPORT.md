@@ -2,6 +2,75 @@
 
 This documents where the desired ME-Metering workflow cannot be fully implemented against the real Pharez API (`https://pharez-api.onrender.com/api-docs`, verified against its OpenAPI spec) — as opposed to places where the frontend was simply calling the API incorrectly (those were fixed directly, not listed here). These are backend feature requests, not frontend bugs.
 
+## Second re-audit 2026-09-20: full endpoint-vs-code comparison
+
+The live spec was pulled again from both hosts and is **byte-identical** to the snapshot taken earlier the same day (54 operations, no additions). Every one of the 40 `ENDPOINTS` entries in `api.config.js` was checked programmatically against the spec's paths (**40/40 match**), and every mutating/by-id client method was exercised against a mocked `fetch` and validated for method, path, auth mode (Bearer vs `X-API-Key`) and required body fields (30/33 clean; the other 3 were my test's dummy arguments, plus one real finding below).
+
+**Documented operations with no UI integration — all intentional, none newly integrated:**
+
+| Operation | Why it is not wired to a screen |
+|---|---|
+| `POST /external/jed/remita/webhook`, `POST /webhooks/remita/payment` | Server-to-server (Remita calls the backend). Not a frontend action. Manual replay UI was removed 2026-08-25. |
+| `GET /webhooks/verify-payment/{rrr}`, `GET /external/jed/status/order/{orderId}` | Diagnostic lookups removed 2026-08-25 as not needed for the admin workflow; `GET /status/rrr/{rrr}` still covers payment verification. |
+| `POST /uploads/excel-first-sheet`, `/uploads/excel-modified` | 404 on both hosts (see below). Reachable only via Upload Meters' secondary modes. |
+| `GET /meters/{id}`, `GET /meters/meter-number/{n}`, `GET /settings/meter-type/{id}`, `GET /apikeys/{id}` | Client methods exist; no screen needs them (the list endpoints already return full records). `GET /meters/meter-number/{n}` documents its 200 response only as "Meter details" with **no schema**, so it was not used to work around the missing meter search — backend please document it. |
+| `POST /auth/register` | Staff-only app; accounts are created through `POST /users`. |
+| `GET /users?search=`, `GET /apikeys?isActive=` | Available; not needed (user list is fetched in full and filtered client-side). |
+| `GET /external/jed/payments?rangePreset=` | Available (`today|thisMonth|thisYear`); the UI's 7/30/90-day ranges use the equally documented `startDate`/`endDate` instead. |
+
+**Real defects found — call sites disagreeing with the documented parameters (fixed):**
+
+1. **Payments tab** sent `days=`, which `GET /external/jed/payments` does not document (it takes `startDate`, `endDate`, `rangePreset`, `status`, `page`, `limit`). The server ignored it, so **every range button returned the same first 20 payments**. Now sends `startDate`/`endDate` and pages through the whole window (`utils/date.js` `getRecentDaysRange`, `utils/fetchAllPages.js`).
+2. **Dashboard → Export Data** offered "CSV" and sent `format=`, which no export endpoint documents (all four return `.xlsx` only). A "CSV" export was an xlsx file saved with a `.csv` name. The Format selector was removed, `format` is no longer sent, files are always `.xlsx`. The JED detailed export now sends the documented `exportAll=true`.
+3. **User Management** called `GET /users` with no `page`/`limit` (server default 10), so **only the first 10 users** were listed and searchable. Now pages through all users (limit 100).
+4. **Installer dashboard** called `GET /external/jed/requests/installer?limit=100` once (all statuses), capping the shared queue at 100 records including INITIATED ones it never displays. Now requests `status=PAID` and `status=COMPLETED` separately, each fully paged.
+5. **Meter Type Settings** sent an undocumented `query` param (ignored by the server, and — being in the effect deps — re-fetched on every keystroke). Removed; the existing client-side filter does the search.
+6. Removed dead `ENDPOINTS.JED.GET_REQUESTS_BY_DATE_RANGE` (invented `startDate`/`endDate` params on `/requests`, which documents only `page`, `limit`, `status`).
+
+**Needs backend clarification / live verification (NOT changed — could not be verified without an authenticated call, and changing working code on a guess would be worse):**
+- **`POST /apikeys`: the spec requires `keyName`, but Settings → API Keys sends `name`** (and `description`). Either the spec is out of date and the server accepts `name`, or API-key creation currently fails validation. **Please try creating a key in Settings → API Keys once** — if it succeeds, the spec is wrong; if it returns a validation error, the payload key must become `keyName`. (Generate-RRR depends on an API key, so this matters.)
+- `POST /auth/reset-password`: spec body is an untyped `{}`; the client sends `{ userId }`. Backend to document the body.
+- `POST /settings/meter-type`: spec documents only `name` and `amount`; the form can also send `description` (dropped silently if empty).
+- `POST /external/jed/complete-installation`: client also sends `installationDate`, `installerName`, `installerEmployeeId`, `notes` (undocumented; see the section below).
+
+## Full re-audit 2026-09-20: new host, spec unchanged, requested endpoints still don't exist
+
+**Base URL.** The backend dev said the API moved off Render to `https://api.me-metering.com`. That exact hostname (with a hyphen) does **not exist** — NXDOMAIN on the local resolver, `8.8.8.8` and `1.1.1.1`, as do `me-metering.com`, `www.me-metering.com` and `api.me-metering.ng`. **`https://api.memetering.com`** (no hyphen, matching the `memetering.com` brand domain) does resolve and serves the same PharezAPI v1.0.0: `GET /api/v1` returns `{"message":"PharezAPI v1.0.0", ...}`, `/api-docs` is served, protected routes return `401 Access token required`. Its `swagger-ui-init.js` is **byte-identical** (146,541 bytes, `cmp`) to Render's, and Render is still up and behaving identically. The frontend default now points at `api.memetering.com` (`api.config.js`, `vercel.json` CSP, `.env.example`); Render stays in the CSP only for the transition. **Inferred from live behavior, not confirmed by the backend dev — please confirm `api.memetering.com` is the intended production host and when Render will be decommissioned.** The spec's own `servers` block still lists only Render/localhost (docs on the new host weren't updated).
+
+**Endpoint count correction.** Earlier notes below say "exactly 45 endpoints". The path list printed in the 2026-08-25 section actually contains **54 operations**, and the spec today has **54 operations** — the identical set. No endpoint was added or removed; the "45" was a miscount.
+
+**Requested capabilities — none exist in the spec or on either live host** (searched the whole OpenAPI document for `assign|installer|supervisor|gps|lat|long|image|photo|picture|coord|location`; only hits are the `INSTALLER` role, the `activeInstallers` stat, and a JED `pendingInstallation` block):
+- **Meter assignment / installer assignment:** no path, no field (gaps #1 and #3 below stand). Guessed paths (`/external/jed/assign-installer`, `/assign-meter`, `/installers`, `/installations`, `/external/jed/requests/installer/assigned`) all return `404 Route not found` on both hosts; `GET /meters/assign` returns 401 only because it matches `GET /meters/{id}` behind auth (a false positive, not an endpoint). The assign actions remain explanatory modals.
+- **Validate Uploaded Paid Customers File:** the only candidate is the generic `POST /uploads/excel*`, which is documented but returns `404 {"success":false,"message":"Route not found"}` on **both** hosts (all three variants, re-probed today). Unchanged from the 2026-08-26 finding below.
+- **Paid-customer upload / bulk import:** still no bulk-create endpoint (gap #6).
+
+**Spec drift worth reporting to the backend:**
+- `GET /external/jed/requests`, `/requests/status/{status}` and `/requests/{accountNumber}` are documented with **no security requirement**, but `GET /requests/status/COMPLETED` returns `401 Access token required` live. (Good for PII exposure; the docs are just wrong.) This also meant real response records could not be inspected without a login, so this audit relies on the documented schemas.
+- `GET /external/jed/requests/installer` (INSTALLER role) returns only `id, accountNumber, custNames, gsm, email, address, meterRecommended, discoCode, requestRef, region, status, meterType, applicantName, phone1, dateRequested` — **no `meterNo`, `sealNo`, `dateCompleted`**. An installer's Completed list therefore cannot show the meter, seal or installation date; the detail page (`GET /requests/{accountNumber}`) does return them.
+- `POST /external/jed/complete-installation` is documented as accepting exactly `{ sealNo, meterNo, accountNumber }`. `InstallationDetail.jsx` additionally sends `installationDate`, `installerName`, `installerEmployeeId` and `notes`. It is **unknown whether the backend ignores, rejects or stores these** — they are not read back anywhere in the documented schemas. Left as-is (removing them could break a working flow); backend to confirm.
+
+### Completed Installation fields (UI added 2026-09-20)
+
+| Requested field | Real API source | Status |
+|---|---|---|
+| Installation Date | `JedCustomerRequest.dateCompleted` | **Shown** (detail page "Installation Details" card; Installed column/line on the Installations → Completed tab) |
+| Meter No. / Seal No. | `meterNo` / `sealNo` | **Shown** (already on the detail page; seal added to the Completed list) |
+| Installer name | — none | **Missing** — UI shows "Not recorded by the API yet" |
+| Supervisor | — none | **Missing** — same |
+| GPS coordinates | — none | **Missing** — same |
+| Installation photos | — none | **Missing** — same |
+
+**What's needed from the backend** (then wire the keys in `getCompletionFields()` in `src/components/installation/CompletionDetails.jsx`, the single mapping point — the GPS link and photo grid/preview components are already built and validated, and start rendering the moment that mapper returns data):
+1. Accept and persist on `POST /external/jed/complete-installation`: `installerId`/`installerName` (ideally derived server-side from the JWT rather than trusted from the client), `supervisor`, `latitude` + `longitude` (or a `gps: {latitude, longitude}` object), and installation photos (multipart upload, or an array of already-hosted image URLs).
+2. Return those fields on `JedCustomerRequest` (`GET /requests`, `/requests/{accountNumber}`) and, for installers, on `/requests/installer`, and document them in the OpenAPI schema.
+3. Photos must be servable to the browser: URLs reachable over `https` (or `data:image/*` URIs). **Infra note:** `vercel.json`'s CSP is `img-src 'self' data:`, so the image host must be added there; and if GPS is ever *captured* in the browser (`navigator.geolocation`) the `Permissions-Policy` header currently denies `geolocation` and `camera` and would need relaxing. Displaying stored coordinates needs neither (the map link is a plain `https://www.google.com/maps?q=lat,lng` anchor).
+
+No completion form fields for GPS/photos/supervisor were added — there is nothing for them to submit to.
+
+### Also fixed in this pass (frontend bug, not a backend gap)
+
+The Installations page (`AdminInstallations.jsx`) fetched each tab with `GET /requests/status/{status}` and no `page`/`limit`, so the server default of **10 records** silently truncated both tabs. It now pages through `GET /requests?status=` (limit 100, 20-page safety cap) via the shared `src/utils/fetchAllRequests.js` (extracted from `AdminReports.jsx`, which uses the identical loop). The Completed tab's date column previously showed `dateRequested`; it now shows `dateCompleted`. The then-unused `getCustomerRequestsByStatus()` / `ENDPOINTS.JED.GET_REQUESTS_BY_STATUS` were removed.
+
 ## Confirmed 2026-08-29: `GET /meters` (and `GET /meters/export`) have no search/query parameter
 
 Meter Schedule's search box was sending a `search` query param that the real API silently ignores — confirmed directly against the live OpenAPI spec: `GET /meters` documents exactly `page`, `limit` (max 100), `status` (enum), `phaseType` (enum); no search/query/free-text parameter exists. `GET /meters/export` documents only `status`/`phaseType`, same gap. Neither endpoint supports filtering by meter number, SIM number, or any other identifier server-side.

@@ -7,6 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import JEDApiService from '../services/api';
 import RequestInfoPanel from './RequestInfoPanel';
+import CompletionDetails from './CompletionDetails';
 import PaymentTimeline from '../common/PaymentTimeline';
 import GenerateRRRModal from '../common/GenerateRRRModal';
 import StatusBadge from '../common/StatusBadge';
@@ -289,13 +290,16 @@ function InstallationDetail() {
 
       {completed ? (
         // ---- Completed: read-only summary, no form ----
-        <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-6 text-center">
-          <CheckCircle className="w-10 h-10 text-green-600 mx-auto mb-2" />
-          <p className="text-green-800 dark:text-green-300 font-semibold">Installation Completed</p>
-          <p className="text-green-700 dark:text-green-400 text-sm mt-1">
-            This job has been marked as paid and completed. No further action needed.
-          </p>
-        </div>
+        <>
+          <CompletionDetails job={job} />
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-6 text-center">
+            <CheckCircle className="w-10 h-10 text-green-600 mx-auto mb-2" />
+            <p className="text-green-800 dark:text-green-300 font-semibold">Installation Completed</p>
+            <p className="text-green-700 dark:text-green-400 text-sm mt-1">
+              This job has been marked as paid and completed. No further action needed.
+            </p>
+          </div>
+        </>
       ) : submitted ? (
         <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-6 text-center">
           <CheckCircle className="w-10 h-10 text-green-600 mx-auto mb-2" />

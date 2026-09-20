@@ -46,17 +46,17 @@ const StatCard = ({ title, value, icon: Icon, change, changeType = 'neutral' }) 
   <div className="card p-4 sm:p-6 flex flex-col transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 dark:hover:shadow-black/30">
     <div className="flex items-center justify-between mb-3">
       <div className={`p-2 rounded-lg ${
-        changeType === 'positive' ? 'bg-green-100 text-green-600' :
-        changeType === 'negative' ? 'bg-red-100 text-red-600' :
-        'bg-brand-100 text-brand-600'
+        changeType === 'positive' ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' :
+        changeType === 'negative' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
+        'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400'
       }`}>
         <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
       </div>
       {change !== undefined && change !== 0 && (
         <div className={`flex items-center text-xs sm:text-sm font-medium ${
-          changeType === 'positive' ? 'text-green-600' :
-          changeType === 'negative' ? 'text-red-600' :
-          'text-brand-600'
+          changeType === 'positive' ? 'text-green-600 dark:text-green-400' :
+          changeType === 'negative' ? 'text-red-600 dark:text-red-400' :
+          'text-brand-600 dark:text-brand-400'
         }`}>
           {changeType === 'positive' ? <ArrowUpRight className="w-3 h-3 sm:w-4 sm:h-4" /> :
            changeType === 'negative' ? <ArrowDownRight className="w-3 h-3 sm:w-4 sm:h-4" /> : null}
@@ -199,7 +199,6 @@ const RecentInstallations = ({ installations, totalCount, onViewAll, onItemClick
 // Export Modal Component
 const ExportModal = ({ isOpen, onClose, onExport }) => {
   const [exportType, setExportType] = useState('all');
-  const [format, setFormat] = useState('excel');
   const [isExporting, setIsExporting] = useState(false);
 
   if (!isOpen) return null;
@@ -207,7 +206,7 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      await onExport(exportType, format);
+      await onExport(exportType);
       onClose();
     } catch (error) {
       console.error('Export failed:', error);
@@ -249,25 +248,15 @@ const ExportModal = ({ isOpen, onClose, onExport }) => {
                 under a misleading label instead of erroring. */}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Format
-            </label>
-            <select
-              value={format}
-              onChange={(e) => setFormat(e.target.value)}
-              className="form-input w-full px-3 py-2"
-            >
-              <option value="excel">Excel (.xlsx)</option>
-              <option value="csv">CSV (.csv)</option>
-            </select>
-          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Exports download as Excel (.xlsx) files.
+          </p>
 
           <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 pt-4">
             <button
               onClick={onClose}
               disabled={isExporting}
-              className="w-full sm:w-auto px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800/80 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
@@ -492,34 +481,40 @@ function AdminDashboard() {
     }
   }, [user, trendDays, fetchTrendData, refreshSignal, refreshKey]);
 
-  const handleExportData = async (exportType, format) => {
+  // Every export endpoint is documented as returning an Excel (.xlsx) file
+  // only — none accepts a `format` param. The modal used to offer a "CSV"
+  // option that sent an ignored `format=csv` and saved the (still xlsx)
+  // response under a `.csv` name, producing a mislabelled file; that option
+  // is gone and files are always named for what the API actually returns.
+  const handleExportData = async (exportType) => {
     try {
       let blob;
       let filename;
 
       switch (exportType) {
         case 'meters':
-          blob = await JEDApiService.exportMeters({ format });
-          filename = `meters_export_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
+          blob = await JEDApiService.exportMeters();
+          filename = `meters_export_${Date.now()}.xlsx`;
           break;
         case 'pending':
-          blob = await JEDApiService.exportCustomerRequests({ status: 'INITIATED', format });
-          filename = `pending_requests_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
+          blob = await JEDApiService.exportCustomerRequests({ status: 'INITIATED' });
+          filename = `pending_requests_${Date.now()}.xlsx`;
           break;
         case 'completed':
-          blob = await JEDApiService.exportCustomerRequests({ status: 'COMPLETED', format });
-          filename = `completed_requests_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
+          blob = await JEDApiService.exportCustomerRequests({ status: 'COMPLETED' });
+          filename = `completed_requests_${Date.now()}.xlsx`;
           break;
         case 'jed':
           // Activates the previously dormant JED-group export endpoint
           // (/external/jed/requests/export), distinct from the
-          // METERS-group exportCustomerRequests used above.
-          blob = await JEDApiService.exportJedRequests({ format });
-          filename = `jed_requests_detailed_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
+          // METERS-group exportCustomerRequests used above. `exportAll` is
+          // its documented "ignore pagination" switch.
+          blob = await JEDApiService.exportJedRequests({ exportAll: 'true' });
+          filename = `jed_requests_detailed_${Date.now()}.xlsx`;
           break;
         default:
-          blob = await JEDApiService.exportCustomerRequests({ format });
-          filename = `all_requests_${Date.now()}.${format === 'excel' ? 'xlsx' : 'csv'}`;
+          blob = await JEDApiService.exportCustomerRequests();
+          filename = `all_requests_${Date.now()}.xlsx`;
       }
 
       // Trigger download

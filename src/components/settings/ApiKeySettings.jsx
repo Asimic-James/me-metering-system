@@ -474,7 +474,7 @@ const ApiKeySettings = () => {
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                       usageModal.days === d
                         ? 'bg-brand-500 text-gray-900'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
                     Last {d} days

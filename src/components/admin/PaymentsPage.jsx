@@ -23,8 +23,8 @@ import StatusBadge from '../common/StatusBadge';
 import {
   CreditCard, RefreshCw, AlertCircle, Loader2, Calendar
 } from 'lucide-react';
-import { formatDateTime, parseTimestamp } from '../../utils/date';
-import { unwrapListResponse } from '../../utils/unwrapListResponse';
+import { formatDateTime, parseTimestamp, getRecentDaysRange } from '../../utils/date';
+import { fetchAllPages } from '../../utils/fetchAllPages';
 
 const TABS = [
   { id: 'payments', label: 'Payments' },
@@ -64,8 +64,14 @@ function PaymentsTab() {
     setLoading(true);
     setError(null);
     try {
-      const response = await jedApi.getPayments({ days: Number(days) });
-      const list = unwrapListResponse(response, ['payments', 'transactions']);
+      // GET /external/jed/payments documents startDate/endDate (ISO), not a
+      // `days` param — the previous `{ days }` call was silently ignored, so
+      // every range button returned the same first 20 payments. Pages
+      // through the whole window (limit 100/page) so the list is complete.
+      const list = await fetchAllPages(
+        (params) => jedApi.getPayments(params),
+        getRecentDaysRange(Number(days))
+      );
       setPayments(list);
       setHasFetched(true);
     } catch (err) {
@@ -99,7 +105,7 @@ function PaymentsTab() {
               key={p.id}
               onClick={() => handlePresetChange(p.id)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                preset === p.id ? 'bg-brand-500 text-gray-900' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+                preset === p.id ? 'bg-brand-500 text-gray-900' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
               }`}
             >
               {p.label}
@@ -240,7 +246,7 @@ function PaymentsPage() {
               className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap text-xs sm:text-sm ${
                 activeTab === tab.id
                   ? 'bg-brand-500 text-gray-900'
-                  : 'bg-gray-100 dark:bg-gray-800/80 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
               }`}
             >
               {tab.label}

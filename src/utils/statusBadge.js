@@ -20,13 +20,13 @@
 // `getStatusBadgeClass` call with any other string still falls back to
 // the same neutral gray below).
 export const STATUS_BADGE_STYLES = {
-  INITIATED: 'bg-slate-100 text-slate-700',
-  PENDING: 'bg-blue-100 text-blue-800',
-  PAID: 'bg-blue-100 text-blue-800',             // payment confirmed, ready to install
-  COMPLETED: 'bg-green-100 text-green-800',
-  PAID_COMPLETED: 'bg-green-100 text-green-800',
-  FAILED: 'bg-red-100 text-red-800',
-  CANCELLED: 'bg-gray-100 text-gray-800',
+  INITIATED: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+  PENDING: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+  PAID: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',             // payment confirmed, ready to install
+  COMPLETED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  PAID_COMPLETED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  FAILED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  CANCELLED: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200',
 };
 
 /**
@@ -40,7 +40,7 @@ export const normalizeStatus = (status) => String(status || '').toUpperCase().tr
  * implies success/failure.
  */
 export const getStatusBadgeClass = (status) =>
-  STATUS_BADGE_STYLES[normalizeStatus(status)] || 'bg-gray-100 text-gray-800';
+  STATUS_BADGE_STYLES[normalizeStatus(status)] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
 
 /**
  * Whether a status represents a finished installation. Used to split

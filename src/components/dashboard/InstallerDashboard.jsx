@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
 import JEDApiService from '../services/api';
 import { isCompletedStatus, isAwaitingInstallationStatus } from '../../utils/statusBadge';
-import { unwrapListResponse } from '../../utils/unwrapListResponse';
+import { fetchAllPages } from '../../utils/fetchAllPages';
 import StatusTabs from '../common/StatusTabs';
 import StatusBadge from '../common/StatusBadge';
 import {
@@ -153,9 +153,15 @@ function InstallerDashboard() {
       // token) and status — this is the shared queue every installer sees,
       // not a personally-assigned list (the real API has no per-installer
       // assignment field or endpoint; see API_GAP_REPORT.md).
-      const response = await JEDApiService.getMyInstallations({ limit: 100 });
-      const list = unwrapListResponse(response);
-      setAllJobs(list);
+      // Only the two statuses this dashboard shows are requested (the
+      // documented `status` filter), each paged in full — a single
+      // `{ limit: 100 }` call capped the shared queue at 100 records across
+      // all statuses, INITIATED ones this page never displays included.
+      const [paidList, completedList] = await Promise.all([
+        fetchAllPages((params) => JEDApiService.getMyInstallations(params), { status: 'PAID' }),
+        fetchAllPages((params) => JEDApiService.getMyInstallations(params), { status: 'COMPLETED' }),
+      ]);
+      setAllJobs([...paidList, ...completedList]);
     } catch (err) {
       console.error('[InstallerDashboard] Failed to load jobs:', err);
       setError('Unable to load installations. Pull down or tap refresh to try again.');

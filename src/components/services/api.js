@@ -568,7 +568,9 @@ class JEDApiService {
    * Distinct from exportCustomerRequests() below, which hits the METERS
    * group's /meters/customer-requests/export instead — kept separate
    * rather than merged, since they're genuinely different endpoints.
-   * @param {Object} params - filter/date-range params
+   * @param {Object} params - documented query params only:
+   *   { page, limit (default 10000), status, exportAll ('true' ignores pagination) }.
+   *   The response is always an .xlsx file — there is no `format` param.
    * @returns {Promise<Blob>}
    */
   async exportJedRequests(params = {}) {
@@ -591,7 +593,9 @@ class JEDApiService {
   /**
    * NEW: Get payments (paid or completed), with optional date range/presets.
    * GET /external/jed/payments (admin-locked per API docs).
-   * @param {Object} params - { startDate, endDate, preset, page, limit }
+   * @param {Object} params - documented query params only:
+   *   { page, limit (max 100, default 20), status (PAID|COMPLETED),
+   *     startDate, endDate (ISO date-time), rangePreset (today|thisMonth|thisYear) }
    */
   async getPayments(params = {}) {
     const url = this.utils.buildUrlWithParams(
@@ -621,15 +625,6 @@ class JEDApiService {
     }
     const url = this.buildUrl(this.endpoints.JED.CHECK_STATUS_BY_RRR(rrr));
     return await this.makeRequest(url, { method: 'GET', apiKey });
-  }
-
-  async getCustomerRequestsByStatus(status) {
-    const url = this.buildUrl(this.endpoints.JED.GET_REQUESTS_BY_STATUS(status));
-    return await this.makeRequest(url, {
-      method: 'GET',
-      useCache: true,
-      cacheKey: `requests-status-${status}`
-    });
   }
 
   /**

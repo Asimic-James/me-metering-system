@@ -1,19 +1,22 @@
 /**
  * Optimized API Configuration for JED Integration
- * Base URL: https://pharez-api.onrender.com/api/v1
- * API Documentation: https://pharez-api.onrender.com/api-docs
- * 
+ * Base URL: https://api.memetering.com/api/v1
+ * API Documentation: https://api.memetering.com/api-docs
+ *
+ * Migrated from https://pharez-api.onrender.com (Render) — the new host serves
+ * the identical PharezAPI v1.0.0 spec. Override with VITE_API_BASE_URL.
+ *
  * Enhanced with verification endpoints and better environment handling
  */
 
 // Environment Configuration with validation
 const getEnvConfig = () => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://pharez-api.onrender.com';
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://api.memetering.com';
   
   // Validate URL format
   if (!baseUrl.startsWith('http')) {
     console.warn('[API Config] Invalid BASE_URL format, using default');
-    return 'https://pharez-api.onrender.com';
+    return 'https://api.memetering.com';
   }
   
   return baseUrl;
@@ -119,7 +122,6 @@ export const ENDPOINTS = {
     // Request Management
     GET_REQUEST_BY_ACCOUNT: (accountNumber) => `/requests/${accountNumber}`,
     GET_ALL_REQUESTS: '/requests',
-    GET_REQUESTS_BY_STATUS: (status) => `/requests/status/${status}`,
     // CONFIRMED against the real OpenAPI spec: "Get customer requests for
     // installers (non-sensitive fields only)" — GET /external/jed/requests/installer,
     // filterable by status only (no per-installer scoping exists on the
@@ -129,8 +131,6 @@ export const ENDPOINTS = {
     // Export customer requests to Excel (admin-locked per docs). Distinct
     // from METERS.CUSTOMER_REQUESTS_EXPORT (/meters/customer-requests/export).
     EXPORT_REQUESTS: '/requests/export',
-    GET_REQUESTS_BY_DATE_RANGE: (startDate, endDate) =>
-      `/requests?startDate=${startDate}&endDate=${endDate}`,
 
     // Payment status check by RRR — confirmed real endpoint, used by
     // ConfirmPaymentTab.jsx's optional RRR lookup. Requires ApiKeyAuth (a
@@ -387,7 +387,7 @@ export const API_UTILS = {
       '/meters/customer-requests/export',
       '/uploads/',
       '/requests/export',
-      // The real API (pharez-api.onrender.com) is hosted on Render's free
+      // The previous API host (pharez-api.onrender.com) was on Render's free
       // tier, which spins the instance down after a period of inactivity
       // and takes 30-60s to cold-start the next request. Login is usually
       // the first request of a session, so it's the one most likely to hit

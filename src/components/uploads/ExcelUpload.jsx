@@ -288,7 +288,7 @@ function ExcelUpload() {
                   </div>
                   <div className="max-h-60 overflow-y-auto">
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                      <thead className="bg-gray-100 dark:bg-gray-800/80">
+                      <thead className="bg-gray-100 dark:bg-gray-900/50">
                         <tr>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Row</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Meter Number</th>
@@ -313,12 +313,12 @@ function ExcelUpload() {
 
           {/* Messages and Errors */}
           {message && !uploadResult && (
-            <div className="mt-4 p-3 bg-brand-50 border border-brand-200 rounded-lg text-brand-700 text-sm">
+            <div className="mt-4 p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg text-brand-700 dark:text-brand-300 text-sm">
               {message}
             </div>
           )}
           {error && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm">
               {error}
             </div>
           )}
@@ -332,15 +332,15 @@ function ExcelUpload() {
 const StatCard = ({ icon: Icon, label, value, color = 'gray' }) => {
   const colors = {
     gray: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700',
-    green: 'text-green-700 bg-green-50 border-green-200',
-    red: 'text-red-700 bg-red-50 border-red-200',
-    blue: 'text-brand-700 bg-brand-50 border-brand-200',
+    green: 'text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
+    red: 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
+    blue: 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/20 border-brand-200 dark:border-brand-800',
   };
   const textColors = {
     gray: 'text-gray-900 dark:text-white',
-    green: 'text-green-700',
-    red: 'text-red-700',
-    blue: 'text-brand-700',
+    green: 'text-green-700 dark:text-green-300',
+    red: 'text-red-700 dark:text-red-300',
+    blue: 'text-brand-700 dark:text-brand-300',
   }
   return (
     <div className={`flex items-center p-3 rounded-lg border ${colors[color]}`}>

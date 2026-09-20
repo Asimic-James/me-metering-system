@@ -22,7 +22,7 @@ import StatusTabs from '../common/StatusTabs';
 import StatusBadge from '../common/StatusBadge';
 import { isCompletedStatus } from '../../utils/statusBadge';
 import { formatDateOnly } from '../../utils/date';
-import { unwrapListResponse } from '../../utils/unwrapListResponse';
+import { fetchAllRequests } from '../../utils/fetchAllRequests';
 import {
   ClipboardList,
   Clock,
@@ -35,7 +35,16 @@ import {
   X,
 } from 'lucide-react';
 
-function JobRow({ job, onClick, selectable, selected, onToggleSelect, onAssignOne }) {
+// Completed tab: the date that matters is when the install was completed
+// (`dateCompleted`), not when the request was submitted. Neither an installer
+// name nor a supervisor exists on the real JedCustomerRequest schema, so the
+// "Installer" cell says so instead of showing a bare dash — see
+// API_GAP_REPORT.md ("Completed Installation fields").
+function getDisplayDate(job, completedView) {
+  return completedView ? job.dateCompleted : job.dateRequested;
+}
+
+function JobRow({ job, onClick, selectable, selected, onToggleSelect, onAssignOne, completedView }) {
   return (
     <div className="w-full p-4 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors flex items-start gap-3">
       {selectable && (
@@ -72,9 +81,10 @@ function JobRow({ job, onClick, selectable, selected, onToggleSelect, onAssignOn
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
           Acct: {job.accountNumber} &middot; Meter: {job.meterNo || 'N/A'}
+          {completedView && <> &middot; Seal: {job.sealNo || 'N/A'}</>}
         </p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-          {formatDateOnly(job.dateRequested)}
+          {completedView ? 'Installed ' : ''}{formatDateOnly(getDisplayDate(job, completedView))}
         </p>
         {selectable && (
           <button
@@ -92,7 +102,7 @@ function JobRow({ job, onClick, selectable, selected, onToggleSelect, onAssignOn
   );
 }
 
-function JobTableRow({ job, onClick, selectable, selected, onToggleSelect, onAssignOne }) {
+function JobTableRow({ job, onClick, selectable, selected, onToggleSelect, onAssignOne, completedView }) {
   return (
     <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
       {selectable && (
@@ -109,10 +119,13 @@ function JobTableRow({ job, onClick, selectable, selected, onToggleSelect, onAss
       <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white cursor-pointer" onClick={() => onClick(job)}>{job.accountNumber}</td>
       <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 cursor-pointer" onClick={() => onClick(job)}>{job.custNames || '-'}</td>
       <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 font-mono cursor-pointer" onClick={() => onClick(job)}>{job.meterNo || 'N/A'}</td>
+      {completedView && (
+        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 font-mono cursor-pointer" onClick={() => onClick(job)}>{job.sealNo || 'N/A'}</td>
+      )}
       <td className="px-4 py-3 cursor-pointer" onClick={() => onClick(job)}>
         <StatusBadge status={job.status} label={isCompletedStatus(job.status) ? 'Completed' : job.status || 'PAID'} />
       </td>
-      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 cursor-pointer" onClick={() => onClick(job)}>{formatDateOnly(job.dateRequested)}</td>
+      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 cursor-pointer" onClick={() => onClick(job)}>{formatDateOnly(getDisplayDate(job, completedView))}</td>
       <td className="px-4 py-3">
         {selectable ? (
           <button
@@ -124,7 +137,7 @@ function JobTableRow({ job, onClick, selectable, selected, onToggleSelect, onAss
             Assign Installer
           </button>
         ) : (
-          <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+          <span className="text-xs italic text-gray-400 dark:text-gray-500">Not recorded</span>
         )}
       </td>
       <td className="px-4 py-3 text-right cursor-pointer" onClick={() => onClick(job)}>
@@ -134,7 +147,7 @@ function JobTableRow({ job, onClick, selectable, selected, onToggleSelect, onAss
   );
 }
 
-function JobList({ jobs, onRowClick, emptyIcon: EmptyIcon, emptyMessage, selectable, selectedSet, onToggleSelect, onAssignOne }) {
+function JobList({ jobs, onRowClick, emptyIcon: EmptyIcon, emptyMessage, selectable, selectedSet, onToggleSelect, onAssignOne, completedView }) {
   if (jobs.length === 0) {
     return (
       <div className="py-16 text-center">
@@ -156,6 +169,7 @@ function JobList({ jobs, onRowClick, emptyIcon: EmptyIcon, emptyMessage, selecta
             selected={selectedSet.has(job.accountNumber)}
             onToggleSelect={onToggleSelect}
             onAssignOne={onAssignOne}
+            completedView={completedView}
           />
         ))}
       </div>
@@ -168,8 +182,9 @@ function JobList({ jobs, onRowClick, emptyIcon: EmptyIcon, emptyMessage, selecta
               <th className="px-4 py-3 font-semibold">Account</th>
               <th className="px-4 py-3 font-semibold">Customer</th>
               <th className="px-4 py-3 font-semibold">Meter No.</th>
+              {completedView && <th className="px-4 py-3 font-semibold">Seal No.</th>}
               <th className="px-4 py-3 font-semibold">Status</th>
-              <th className="px-4 py-3 font-semibold">Date</th>
+              <th className="px-4 py-3 font-semibold">{completedView ? 'Installed' : 'Date'}</th>
               <th className="px-4 py-3 font-semibold">Installer</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -184,6 +199,7 @@ function JobList({ jobs, onRowClick, emptyIcon: EmptyIcon, emptyMessage, selecta
                 selected={selectedSet.has(job.accountNumber)}
                 onToggleSelect={onToggleSelect}
                 onAssignOne={onAssignOne}
+                completedView={completedView}
               />
             ))}
           </tbody>
@@ -213,13 +229,13 @@ function AdminInstallations() {
       setLoading(true);
       setError(null);
 
-      const [paidResponse, completedResponse] = await Promise.all([
-        JEDApiService.getCustomerRequestsByStatus('PAID'),
-        JEDApiService.getCustomerRequestsByStatus('COMPLETED'),
+      // Every page, not just the server's default page of 10 — the
+      // previous per-status call sent no page/limit and so silently
+      // truncated both tabs to 10 records.
+      const [paidList, completedList] = await Promise.all([
+        fetchAllRequests('PAID'),
+        fetchAllRequests('COMPLETED'),
       ]);
-
-      const paidList = unwrapListResponse(paidResponse);
-      const completedList = unwrapListResponse(completedResponse);
 
       setAwaitingJobs(paidList);
       setCompletedJobs(completedList);
@@ -375,6 +391,7 @@ function AdminInstallations() {
               : 'No completed installations yet'
           }
           selectable={activeTab === 'awaiting'}
+          completedView={activeTab === 'completed'}
           selectedSet={selected}
           onToggleSelect={handleToggleSelect}
           onAssignOne={handleAssignOne}
