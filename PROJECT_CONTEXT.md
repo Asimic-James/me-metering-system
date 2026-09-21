@@ -9,7 +9,7 @@
 This is **not** a customer self-service portal. There are three roles, matching the real API's `User.role` enum exactly (uppercase):
 - **SUPERADMIN** — everything ADMIN has, plus the only role permitted to create/edit ADMIN or SUPERADMIN accounts (enforced both client-side and by the backend).
 - **ADMIN** — manages users (except privileged roles), generates/confirms payments, runs reports, configures meter types/settings/API keys, manages meter inventory.
-- **INSTALLER** — sees a shared "Awaiting Installation" (paid) / "Completed" queue, submits new installation requests, completes installs.
+- **INSTALLER** — sees a shared "Awaiting Installation" (paid) / "Completed" queue, completes installs, and can fill in the Complaint Form (`/complaints`). No access to Uploads, Meter Schedule or any admin page (2026-09-21).
 
 There is no backend code in this repository — it is a frontend-only client that talks to an external REST API.
 
@@ -81,6 +81,15 @@ jedc-meter-management/
 - **Mobile-first collapsible sidebar** and a redesigned split-screen dark Login page (dot-grid + glow-orb brand panel, "Masters Energy" branding).
 - **PWA conversion:** installable app shell, standalone display, network-only caching for API calls.
 
+- **Multi-disco installation flow (2026-09-21)** — 31 new endpoints integrated, a second installation domain alongside JED (see the table in `CLAUDE.md`; `InstallationRequest`, not `JedCustomerRequest`). New pages:
+  - **`/imports`** (`ImportsPage.jsx`, admin) — import a disco's customer sheet or meter+SIM inventory, download blank templates, batch history with per-row errors. Idempotent; partial success surfaced via `BatchResultSummary`.
+  - **`/assignments`** (`AssignmentsPage.jsx`, admin) — dispatch meter serials to an installer, browse dispatch batches, return meters to stock.
+  - **`/installation-requests`** (`InstallationRequests.jsx`, admin) — imported jobs with real status counts (`GET /installations/statistics`), server-side disco/status/search filters, **real backend-persisted installer assignment**, unassign, cancel, and the XLSX response sheet back to the disco (preview vs. `markExported`).
+  - **`/my-jobs`** (`MyJobs.jsx`, Installer only) — the jobs actually dispatched to that installer and the meters in their hands, with Start / Report / Can't-install actions driven by the status lifecycle. The report form (`ReportInstallationModal.jsx`) captures meter (picker filtered to the job's phase type), seal, plain-date installation date, GPS (with "Use my location"), photo link and disco supervisor.
+  - Shared: `utils/installationStatus.js` (statuses, lifecycle, partial-success parsing), `utils/downloadBlob.js`, `hooks/useDiscoOptions.js`, `components/installations/{InstallerSelect,BatchResultSummary}.jsx`.
+  - **Breaking changes handled:** user ids are now UUIDs, and every pre-migration JWT is dead (`jedApi.purgeStaleSession()` clears it once per browser). `Permissions-Policy` now allows `geolocation=(self)` so installers can capture GPS.
+  - The JED screens are untouched; the sidebar item was relabelled **"Installations (JED)"** purely to distinguish it from the new "Installation Requests" (same route, same component, same behaviour).
+
 ## 6. Pending / Incomplete Features
 
 - **No installer-assignment mechanism** — for either customer requests *or* individual meters. The real API has no `installerId`/`assignedTo` field on a customer request or on a `Meter` record, and no assign/unassign endpoint (single or bulk) — `GET /external/jed/requests/installer` only filters by status, not by installer, and there is no equivalent "meters for this installer" endpoint at all. Every installer sees the same shared "Awaiting Installation" queue. The Installations page (`/installations`) has real, working multi-select and an "Assign Installer" action, and Meter Schedule has a per-meter "Assign" action, but both open an explanatory modal rather than persisting anything — a client-side/localStorage-only version was explicitly considered and declined twice (2026-08-25, re-confirmed 2026-08-27 when an Installer-facing "Assigned Meters" view was requested) since it would violate the requirement that assignment be authoritative and cross-device. See `API_GAP_REPORT.md`.
@@ -88,7 +97,7 @@ jedc-meter-management/
 - **No queue/awaiting-installation status distinct from `PAID`.** The real `JedCustomerRequest.status` enum is only `INITIATED / PAID / COMPLETED` — there's no richer installation-lifecycle state machine on the backend.
 - **No pre-completion meter-assignment step.** `meterNo`/`sealNo` are only submitted together, in one shot, at `POST /external/jed/complete-installation`. Meter Schedule has a similar "not yet available" Assign affordance on `AVAILABLE` meters for the same reason.
 - **No bulk "create/import paid customers" endpoint.** There's no way to batch-create `JedCustomerRequest` records at all — Upload Paid Customers works only for customers whose request already exists (created via Generate RRR) and who have genuinely paid, by looping the real single-record confirm endpoints.
-- **No `/complaints` endpoint.** The Complaint submission feature was removed entirely (not left broken in the UI) — see `API_GAP_REPORT.md`.
+- **No complaints/issues/incident endpoint on the API** (re-verified 2026-09-21 against the spec and by probing the production host). The earlier Complaint feature was removed entirely; on 2026-09-21 an **Installer-only Complaint Form** (`/complaints`, `src/components/complaints/ComplaintForm.jsx`, logic in `src/utils/complaint.js`) was added as the safe UI structure the API allows: real job list (the installer's shared `PAID` queue), full validation, accessible + responsive + dark-theme, and on submit an explicit "**not sent**" notice with a copyable summary — never a fake success, never a `localStorage` record. It becomes a real submit once the backend supplies an endpoint (requirements in `API_GAP_REPORT.md`). No admin complaint-review page exists for the same reason.
 - **No customer self-service portal.** Intentional scope boundary (staff-only tool), not a gap.
 
 ## 7. API Integrations

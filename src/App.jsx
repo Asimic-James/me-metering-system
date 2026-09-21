@@ -41,6 +41,14 @@ const PaymentsPage = lazy(() => import('./components/admin/PaymentsPage'));
 const MeterSchedule = lazy(() => import('./components/schedule/MeterSchedule'));
 const UserManagement = lazy(() => import('./components/admin/UserManagement'));
 const ExcelUpload = lazy(() => import('./components/uploads/ExcelUpload'));
+// Installer-only complaint form (report a problem that blocks/delays a job).
+const ComplaintForm = lazy(() => import('./components/complaints/ComplaintForm'));
+// Multi-disco installation flow (2026-09-21). A separate domain from the JED
+// screens above — see API_GAP_REPORT.md and utils/installationStatus.js.
+const ImportsPage = lazy(() => import('./components/admin/ImportsPage'));
+const AssignmentsPage = lazy(() => import('./components/admin/AssignmentsPage'));
+const InstallationRequests = lazy(() => import('./components/admin/InstallationRequests'));
+const MyJobs = lazy(() => import('./components/installations/MyJobs'));
 // Tabbed Settings page (Meter Types + API Keys) — replaces direct
 // MeterTypeSettings mount so both settings resources live under one route.
 const SettingsPage = lazy(() => import('./components/settings/SettingsPage'));
@@ -200,7 +208,24 @@ function AppContent() {
                 />
                 <Route path="/schedule" element={permissions.isAdmin || permissions.canViewSchedule ? <MeterSchedule /> : <AccessDenied />} />
                 <Route path="/users" element={permissions.isAdmin ? <UserManagement /> : <AccessDenied />} />
-                <Route path="/uploads" element={permissions.isAdmin || permissions.canUploadExcel ? <ExcelUpload /> : <AccessDenied />} />
+                {/* Uploads: admin-tier only. `canUploadExcel` is the
+                    permission-model check (Installer no longer holds
+                    UPLOADS.EXCEL); ExcelUpload repeats it internally as a
+                    second layer. Direct URL access as Installer renders
+                    AccessDenied here, before the page module even loads. */}
+                <Route path="/uploads" element={permissions.canUploadExcel ? <ExcelUpload /> : <AccessDenied />} />
+                {/* Complaint form — Installer only. No admin equivalent yet:
+                    there is no complaints API to review (API_GAP_REPORT.md). */}
+                <Route path="/complaints" element={permissions.canSubmitComplaints ? <ComplaintForm /> : <AccessDenied />} />
+                {/* ---- Multi-disco installation flow ----
+                    Admin: import the disco's spreadsheets, dispatch meters and
+                    jobs, then export the response sheet. Installer: the jobs
+                    dispatched to them and the meters in their hands. Distinct
+                    from the JED routes above, which are unchanged. */}
+                <Route path="/imports" element={permissions.canRunImports ? <ImportsPage /> : <AccessDenied />} />
+                <Route path="/assignments" element={permissions.canManageAssignments ? <AssignmentsPage /> : <AccessDenied />} />
+                <Route path="/installation-requests" element={permissions.canViewInstallationRequests ? <InstallationRequests /> : <AccessDenied />} />
+                <Route path="/my-jobs" element={permissions.canViewMyJobs ? <MyJobs /> : <AccessDenied />} />
                 <Route path="/reports" element={permissions.isAdmin ? <AdminReports /> : <AccessDenied />} />
                 <Route path="/payments" element={permissions.isAdmin ? <PaymentsPage /> : <AccessDenied />} />
                 <Route path="/settings" element={permissions.isAdmin ? <SettingsPage /> : <AccessDenied />} />

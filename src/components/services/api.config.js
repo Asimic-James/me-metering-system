@@ -117,10 +117,10 @@ export const ENDPOINTS = {
     COMPLETE_INSTALLATION: '/complete-installation',
     // Admin fallback — manually confirm a payment by RRR if the Remita
     // webhook was missed.
-    CONFIRM_PAYMENT_MANUAL: (rrr) => `/confirm-payment/manual/${rrr}`,
+    CONFIRM_PAYMENT_MANUAL: (rrr) => `/confirm-payment/manual/${encodeURIComponent(rrr)}`,
     
     // Request Management
-    GET_REQUEST_BY_ACCOUNT: (accountNumber) => `/requests/${accountNumber}`,
+    GET_REQUEST_BY_ACCOUNT: (accountNumber) => `/requests/${encodeURIComponent(accountNumber)}`,
     GET_ALL_REQUESTS: '/requests',
     // CONFIRMED against the real OpenAPI spec: "Get customer requests for
     // installers (non-sensitive fields only)" — GET /external/jed/requests/installer,
@@ -141,15 +141,15 @@ export const ENDPOINTS = {
     // "RRR / Order Lookup" and "Webhook Replay" diagnostic tabs they
     // exclusively supported — see API_GAP_REPORT.md.
     GET_PAYMENTS: '/payments',
-    CHECK_STATUS_BY_RRR: (rrr) => `/status/rrr/${rrr}`,
+    CHECK_STATUS_BY_RRR: (rrr) => `/status/rrr/${encodeURIComponent(rrr)}`,
   },
 
   // ==================== API KEYS ENDPOINTS (root-level, auth required) ====================
   APIKEYS: {
     BASE: '/apikeys',
-    BY_ID: (id) => `/apikeys/${id}`,
-    DEACTIVATE: (id) => `/apikeys/${id}/deactivate`,
-    USAGE: (id) => `/apikeys/${id}/usage`,
+    BY_ID: (id) => `/apikeys/${encodeURIComponent(id)}`,
+    DEACTIVATE: (id) => `/apikeys/${encodeURIComponent(id)}/deactivate`,
+    USAGE: (id) => `/apikeys/${encodeURIComponent(id)}/usage`,
   },
   
   // ==================== METERS ENDPOINTS ====================
@@ -159,8 +159,8 @@ export const ENDPOINTS = {
     TEMPLATE: '/meters/template',
     EXPORT: '/meters/export',
     STATISTICS: '/meters/statistics',
-    BY_NUMBER: (meterNumber) => `/meters/meter-number/${meterNumber}`,
-    BY_ID: (id) => `/meters/${id}`,
+    BY_NUMBER: (meterNumber) => `/meters/meter-number/${encodeURIComponent(meterNumber)}`,
+    BY_ID: (id) => `/meters/${encodeURIComponent(id)}`,
     CUSTOMER_REQUESTS_EXPORT: '/meters/customer-requests/export',
   },
   
@@ -172,7 +172,7 @@ export const ENDPOINTS = {
   // this at the wrong path (/auth/users) and has been removed.
   USERS: {
     BASE: '/users',
-    BY_ID: (userId) => `/users/${userId}`,
+    BY_ID: (userId) => `/users/${encodeURIComponent(userId)}`,
   },
 
   // ==================== ADMIN ENDPOINTS ====================
@@ -188,7 +188,7 @@ export const ENDPOINTS = {
   SETTINGS: {
     METER_TYPES: {
       BASE: '/settings/meter-type',
-      BY_ID: (id) => `/settings/meter-type/${id}`,
+      BY_ID: (id) => `/settings/meter-type/${encodeURIComponent(id)}`,
     }
   },
 
@@ -197,6 +197,57 @@ export const ENDPOINTS = {
     EXCEL: '/uploads/excel',
     EXCEL_FIRST_SHEET: '/uploads/excel-first-sheet',
     EXCEL_MODIFIED: '/uploads/excel-modified',
+  },
+
+  // ==================== MULTI-DISCO INSTALLATION FLOW ====================
+  // Added 2026-09-21 from the backend's "Multi-Disco Installation Flow —
+  // Frontend Integration Guide" (v1.0.0), verified live against
+  // GET /api-docs/swagger.json on api.memetering.com: 85 operations, of which
+  // these 31 are new. They are a SEPARATE domain from the JED/Remita flow —
+  // `InstallationRequest` (integer id, disco-scoped) is not `JedCustomerRequest`.
+  // The JED endpoints and screens are untouched.
+  //
+  // All full paths (no group prefix) — call via buildApiUrl/buildUrlWithParams
+  // with no group argument, same as METERS/USERS/SETTINGS/APIKEYS.
+  DISCOS: {
+    BASE: '/discos',
+    BY_CODE: (code) => `/discos/${encodeURIComponent(code)}`,
+    IMPORT_MAPPING: (code) => `/discos/${encodeURIComponent(code)}/import-mapping`,
+    EXPORT_TEMPLATE: (code) => `/discos/${encodeURIComponent(code)}/export-template`,
+  },
+
+  IMPORTS: {
+    BASE: '/imports',
+    BY_ID: (id) => `/imports/${encodeURIComponent(id)}`,
+    PENDING_INSTALLATIONS: (discoCode) => `/imports/${encodeURIComponent(discoCode)}/pending-installations`,
+    PENDING_INSTALLATIONS_TEMPLATE: (discoCode) => `/imports/${encodeURIComponent(discoCode)}/pending-installations/template`,
+    METERS: (discoCode) => `/imports/${encodeURIComponent(discoCode)}/meters`,
+    METERS_TEMPLATE: (discoCode) => `/imports/${encodeURIComponent(discoCode)}/meters/template`,
+  },
+
+  ASSIGNMENTS: {
+    BASE: '/assignments',
+    BY_ID: (id) => `/assignments/${encodeURIComponent(id)}`,
+    METERS: '/assignments/meters',
+    METERS_RETURN: '/assignments/meters/return',
+    INSTALLATIONS: '/assignments/installations',
+    INSTALLATIONS_UNASSIGN: '/assignments/installations/unassign',
+  },
+
+  INSTALLATIONS: {
+    BASE: '/installations',
+    BY_ID: (id) => `/installations/${encodeURIComponent(id)}`,
+    STATISTICS: '/installations/statistics',
+    // Installer-scoped by the caller's JWT — there is no installer id to pass.
+    MY_JOBS: '/installations/me/jobs',
+    MY_METERS: '/installations/me/meters',
+    START: (id) => `/installations/${encodeURIComponent(id)}/start`,
+    REPORT: (id) => `/installations/${encodeURIComponent(id)}/report`,
+    FAIL: (id) => `/installations/${encodeURIComponent(id)}/fail`,
+    CANCEL: (id) => `/installations/${encodeURIComponent(id)}/cancel`,
+    EXPORT: (discoCode) => `/installations/export/${encodeURIComponent(discoCode)}`,
+    EXPORT_MARK_SENT: (discoCode) => `/installations/export/${encodeURIComponent(discoCode)}/mark-sent`,
+    EXPORTS: '/installations/exports',
   },
 };
 

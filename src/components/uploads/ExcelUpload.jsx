@@ -5,6 +5,7 @@ import jedApi from '../services/api';
 import { ENDPOINTS } from '../services/api.config.js';
 import { downloadCsv } from '../../utils/csv';
 import { validateUploadFile } from '../../utils/fileValidation';
+import { getErrorMessage } from '../../utils/errorMessage';
 import { AlertCircle, Upload, Download, FileCheck2, FileX2, Percent, List, FileDown } from 'lucide-react';
 
 const UPLOAD_MODES = {
@@ -110,11 +111,10 @@ function ExcelUpload() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      
-      const storedUser = jedApi.getStoredUser();
-      if (storedUser?.id) {
-        formData.append('installerId', storedUser.id);
-      }
+      // Only `file` is documented for POST /meters/upload and /uploads/* —
+      // an `installerId` field used to be appended here from the stored
+      // (client-editable) user record; it is undocumented, and uploads are
+      // no longer an Installer feature, so it is gone.
 
       let response;
       if (selectedMode.apiGroup === 'METERS') {
@@ -150,8 +150,7 @@ function ExcelUpload() {
       } else if (err?.status === 401) {
         setError('Your session has expired. Please log in again.');
       } else {
-        const errorMessage = err.message?.includes(':') ? err.message.split(':')[1].trim() : err.message;
-        setError(errorMessage || 'An unknown error occurred during upload.');
+        setError(getErrorMessage(err, 'An unknown error occurred during upload.'));
       }
       setMessage(null);
     } finally {
@@ -280,7 +279,7 @@ function ExcelUpload() {
                     <h4 className="font-medium text-gray-900 dark:text-white">Error Details ({uploadResult.errors.length})</h4>
                     <button
                       onClick={() => exportErrorsToCSV(uploadResult.errors)}
-                      className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white"
+                      className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                     >
                       <FileDown className="w-4 h-4" />
                       Export Errors

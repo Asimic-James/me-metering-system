@@ -3,6 +3,7 @@ import jedApi from '../services/api';
 import ConfirmationModal from '../common/ConfirmationModal';
 import { CheckCircle, AlertCircle, Loader2, Search, ArrowDownToLine } from 'lucide-react';
 import { formatDateTime } from '../../utils/date';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 // Same defensive field-name handling used elsewhere for unconfirmed
 // response shapes — tries the most plausible variants for an account
@@ -39,7 +40,7 @@ function ConfirmPaymentTab() {
       setRrrResult(response?.data || response);
     } catch (err) {
       console.error('[ConfirmPayment] RRR status check failed:', err);
-      setRrrError(String(err?.message || 'RRR status check failed'));
+      setRrrError(getErrorMessage(err, 'RRR status check failed'));
     } finally {
       setRrrLoading(false);
     }
@@ -53,8 +54,14 @@ function ConfirmPaymentTab() {
     }
   };
 
+  // Account numbers are numeric-only (business rule).
+  const accountValid = /^\d+$/.test(accountNumber.trim());
+
   const handleConfirm = async () => {
-    if (!accountNumber.trim()) return;
+    // Re-entry guard: confirming a payment is money-adjacent, and the modal
+    // closes the moment this starts — without this a second click on
+    // "Confirm Payment" while the request is in flight sent a duplicate.
+    if (confirming || !accountValid) return;
 
     // Close immediately on click rather than waiting for the request to
     // finish — the page shows loading/success/error state directly
@@ -84,7 +91,7 @@ function ConfirmPaymentTab() {
       setSuccessMessage('Payment confirmed successfully.');
     } catch (err) {
       console.error('[ConfirmPayment] Failed to confirm payment:', err);
-      setError(String(err?.message || 'Failed to confirm payment'));
+      setError(getErrorMessage(err, 'Failed to confirm payment'));
     } finally {
       setConfirming(false);
     }
@@ -110,14 +117,21 @@ function ConfirmPaymentTab() {
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value)}
               placeholder="Enter account number"
+              inputMode="numeric"
+              aria-invalid={accountNumber.trim() !== '' && !accountValid}
               className="form-input w-full px-4 py-2"
             />
+            {accountNumber.trim() !== '' && !accountValid && (
+              <p role="alert" className="text-xs text-red-600 dark:text-red-400 mt-1">
+                Account numbers contain digits only.
+              </p>
+            )}
           </div>
 
           <div className="flex items-end gap-3">
             <button
               type="button"
-              disabled={!accountNumber.trim()}
+              disabled={!accountValid || confirming}
               onClick={() => setConfirmOpen(true)}
               className="w-full sm:w-auto px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:bg-amber-400 disabled:cursor-not-allowed text-sm font-medium"
             >

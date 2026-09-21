@@ -15,11 +15,12 @@
 import {
   LayoutDashboard, Database, Users, BarChart3,
   Upload, Settings, X, CreditCard, ChevronsLeft, ChevronsRight,
-  ClipboardList
+  ClipboardList, MessageSquareWarning, ClipboardCheck, FileSpreadsheet, Send, Wrench
 } from 'lucide-react';
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import InfoModal from './InfoModal';
+import { ROLES, canAccessPage } from '../auth/permissions';
 
 // Role strings match the real API's User.role enum (uppercase).
 const isAdminTierRole = (role) => role === 'ADMIN' || role === 'SUPERADMIN';
@@ -43,12 +44,46 @@ const NAVIGATION_CONFIG = {
       accessible: () => true,
     },
     {
+      id: 'my-jobs',
+      label: 'My Jobs',
+      path: '/my-jobs',
+      icon: Wrench,
+      description: 'Jobs dispatched to you and your meters',
+      // Installer only — GET /installations/me/* is scoped to the caller's
+      // own token, so it would be empty for an admin-tier account.
+      accessible: (userRole) => userRole === ROLES.INSTALLER && canAccessPage(userRole, 'my-jobs'),
+    },
+    {
       id: 'installations',
-      label: 'Installations',
+      label: 'Installations (JED)',
       path: '/installations',
       icon: ClipboardList,
-      description: 'Awaiting installation & completed, assign installers',
+      description: 'JED paid requests awaiting installation & completed',
       accessible: (userRole) => isAdminTierRole(userRole),
+    },
+    {
+      id: 'installation-requests',
+      label: 'Installation Requests',
+      path: '/installation-requests',
+      icon: ClipboardCheck,
+      description: 'Imported jobs, installer dispatch & disco export',
+      accessible: (userRole) => canAccessPage(userRole, 'installation-requests'),
+    },
+    {
+      id: 'imports',
+      label: 'Imports',
+      path: '/imports',
+      icon: FileSpreadsheet,
+      description: 'Import disco customer & meter spreadsheets',
+      accessible: (userRole) => canAccessPage(userRole, 'imports'),
+    },
+    {
+      id: 'assignments',
+      label: 'Assignments',
+      path: '/assignments',
+      icon: Send,
+      description: 'Dispatch meters to installers',
+      accessible: (userRole) => canAccessPage(userRole, 'assignments'),
     },
     {
       id: 'schedule',
@@ -57,8 +92,7 @@ const NAVIGATION_CONFIG = {
       icon: Database,
       description: 'View and query meter inventory',
       // Admin/Super Admin only — Installer must not see or reach this page
-      // (a distinct, separate feature from Uploads below, which Installer
-      // does use for bulk Excel meter registration).
+      // (nor Uploads below — see that item).
       accessible: (userRole) => isAdminTierRole(userRole),
     },
     {
@@ -91,7 +125,22 @@ const NAVIGATION_CONFIG = {
       path: '/uploads',
       icon: Upload,
       description: 'Upload meter data',
-      accessible: (userRole) => isAdminTierRole(userRole) || userRole === 'INSTALLER'
+      // Driven by the permission model (auth/permissions.js), not a
+      // hard-coded role list, so it can't drift from the route guard in
+      // App.jsx and ExcelUpload's own check: Installer no longer holds
+      // UPLOADS.EXCEL, so this is Admin/Super Admin only.
+      accessible: (userRole) => canAccessPage(userRole, 'uploads')
+    },
+    {
+      id: 'complaints',
+      label: 'Complaints',
+      path: '/complaints',
+      icon: MessageSquareWarning,
+      description: 'Report a problem with a job',
+      // Installer only — a complaint must be attributable to the installer
+      // who raised it (admin-tier accounts bypass canAccessPage, so the
+      // role is checked explicitly).
+      accessible: (userRole) => userRole === ROLES.INSTALLER && canAccessPage(userRole, 'complaints')
     },
     {
       id: 'settings',

@@ -76,7 +76,7 @@ DATABASE
 - **MIME-type/content sniffing:** not attempted client-side (a spoofed MIME type or a renamed file extension would defeat it trivially) — real content validation belongs entirely to the backend, which is documented in the OpenAPI spec as owning file parsing (`POST /uploads/excel`, `POST /meters/upload`).
 - **CSV/formula injection — fixed this pass:** all three of this app's own CSV *export* functions (`AdminReports.jsx`, `BulkConfirmPaymentsTab.jsx`, `ExcelUpload.jsx`) were independently hand-rolled, and none fully escaped their cells — two left a user/uploaded-file-controlled column (an error-report "Identifier"/"Meter Number" sourced directly from an uploaded spreadsheet) completely unquoted, so a value containing a comma would have corrupted the CSV's column structure, and none of the three guarded against a leading `=`/`+`/`-`/`@` character, which Excel/Google Sheets/LibreOffice will evaluate as a formula on open regardless of CSV quoting. **Fix:** centralized in `src/utils/csv.js` (`sanitizeCsvCell`/`buildCsv`/`downloadCsv`), which quotes every cell and prefixes a formula-trigger leading character with an apostrophe (Excel's own "force text" convention) before it's ever written. All three export sites now use it. This only protects whoever opens a CSV *this app generates* — it has no bearing on what the backend does with an *uploaded* file.
 - **Duplicate uploads:** not de-duplicated client-side or server-side as far as this review could observe from outside — re-uploading the same file re-processes every row. Given every row still requires a genuinely-existing, genuinely-paid backend record to succeed (see Payment Security), a duplicate upload can at worst re-confirm an already-paid record (idempotent in effect) rather than fabricate a new one — but this wasn't independently verified against the live backend's own idempotency handling, since doing so would require a real duplicate mutation attempt against production data.
-- **Authentication/authorization on upload endpoints:** Bearer JWT attached automatically like every other call; `Upload Paid Customers`/`Upload Meters (Excel)` are both reachable only by Admin-tier (+ Installer for the meters-upload page specifically, per `PROJECT_CONTEXT.md`'s documented scope) via the existing route/nav gates.
+- **Authentication/authorization on upload endpoints:** Bearer JWT attached automatically like every other call; `Upload Paid Customers`/`Upload Meters (Excel)` are both reachable only by Admin-tier via the route/nav gates (Installer's `UPLOADS.EXCEL` permission was removed 2026-09-21 — see "Hardening pass 2026-09-21" below). Client-side only: whether the backend rejects an Installer's JWT on `POST /meters/upload` / `/uploads/*` is **unverified** (no Installer credentials were available to test).
 - **Backend gap (documented, not fixable from here):** whether the backend enforces its own file-size limit, validates cell-level content (e.g. rejecting a formula-looking value in an *uploaded* file before it's ever persisted or re-exported by some other tool), or de-duplicates uploads was not independently observable from the frontend — see "Backend Gaps" in the final report.
 
 ## API Security
@@ -173,6 +173,50 @@ found 0 vulnerabilities
 | 12 | CSV/formula injection (CWE-1236) + unescaped/unquoted cells in this app's own CSV exports (`AdminReports.jsx`, `BulkConfirmPaymentsTab.jsx`, `ExcelUpload.jsx`) — one of them exported an uploaded file's own content completely unquoted | MEDIUM | **Fixed this pass** — centralized in `src/utils/csv.js`; all three exports now quote every cell and neutralize a leading `=`/`+`/`-`/`@` |
 | 13 | Dev-dependency vulnerabilities (11 advisories, transitive build tooling — never shipped to production) | LOW (dev-only) | **Fixed this pass** — `npm audit fix`, now 0 vulnerabilities including dev deps |
 | 14 | No double-submit guard on `InstallationDetail.jsx`'s "Mark as Complete" beyond the button's own `disabled` attribute | LOW | **Fixed this pass** — explicit `if (submitting) return;` added for defense in depth (button-disabled already prevented this in practice) |
+
+## Hardening pass 2026-09-21 (full-system audit)
+
+Method: read the auth/permission/routing/API layers, then drove the **real `App`** in jsdom against a mocked API that decides roles from the JWT (the way a real backend would) — every role, direct URLs, refresh, tampered storage, expired token, offline start, duplicate clicks — 78 checks, plus 26 unit checks on the new helpers. The three API-layer bugs below were also reproduced against the original committed code before being fixed. No real credentials were available, so **nothing below was verified against the live backend**.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| 15 | **UI trusted a client-editable role.** `AuthContext` restored `localStorage.jedUser` on load and took its `role` at face value — editing it to `SUPERADMIN` in devtools unlocked the Admin UI after a refresh. (The backend still authorizes each API call by JWT, so this exposed UI/routes, not data — but the UI must not trust it.) | HIGH | **Fixed** — startup now calls `GET /auth/profile` (`jedApi.verifySession`, never cached) and uses only the server's answer; the stored user is overwritten with it. Fails **closed**: an expired token, network failure or malformed reply lands on the login screen (token kept on network failure so a reload can retry). |
+| 16 | **A 400/404/500 whose message merely contained the digits `401` logged the user out** (`enhanceError` did `message.includes('401')` — account numbers, 12-digit RRRs and amounts can contain it). Reproduced on the original code. | MEDIUM | **Fixed** — already-classified errors pass through; only a genuine un-parsed `HTTP 401` ends the session. |
+| 17 | **Session end via 401 left the response cache intact** (cache is keyed by URL, not user), so the next sign-in within 30 s could be served the previous user's cached responses. `logout()` cleared it; a 401 and the admin idle-timeout path via `clearTokens()` did not. Reproduced on the original code. | MEDIUM | **Fixed** — `clearTokens()` and `login()` clear the cache. |
+| 18 | **An Installer could trigger "Generate Reference" and would send the browser's stored Admin API key.** The key deliberately outlives logout (shown once, at creation), so on a shared device a later Installer login could reuse it. Reproduced on the original code. | MEDIUM | **Fixed** — the button is admin-tier only, and `generatePaymentReference`/`checkRemitaStatusByRRR` refuse unless the signed-in user is admin-tier. **Residual:** the key is still readable from `localStorage` on that device (see #5). |
+| 19 | **Route parameter injected into an API path.** `/installations/:accountNumber` fed `getCustomerRequest()` raw, so `/installations/..%2F..%2F..%2Fusers` made the signed-in user's browser send an authenticated `GET /users`. Reproduced in the real app. | LOW | **Fixed** — path params are `encodeURIComponent`-ed centrally in the endpoint builders, and the route param must be numeric (business rule) or no request is made. |
+| 20 | **Installer access to Uploads.** `ROLE_PERMISSIONS[INSTALLER]` held `UPLOADS.EXCEL`, plus a hard-coded `|| userRole === 'INSTALLER'` in the sidebar. | per requirement | **Removed** — permission dropped (one place), nav item now permission-driven, `/uploads` route gate and `ExcelUpload`'s own check both deny. Also dropped the undocumented `installerId` field appended to uploads. Admin/Super Admin unchanged. **Client-side only:** a prior pass verified the backend rejects an Installer JWT on `GET/DELETE /meters*`; `POST /meters/upload` and `/uploads/*` were **not** tested. |
+| 21 | **Confirm Payment had no re-entry guard** — the modal closes immediately, and the button stayed enabled during the request, so a second click sent a duplicate `POST /confirm-payment`. Account number was also unvalidated (documented rule: digits only). | LOW | **Fixed** — guarded and disabled while in flight; digits-only validation. |
+| 22 | Shared `InfoModal`/`ConfirmationModal` had no dialog role, no Escape, no focus management (keyboard users stayed on the page behind the overlay). | LOW (a11y) | **Fixed** — `role=dialog`/`alertdialog`, `aria-modal`, labelled, Escape closes (never mid-request), focus moves in (Cancel first on the confirm dialog). |
+| 23 | Deleted a dead `src/components/auth/permissions.jsx` — a self-referential re-export shadowing the real `permissions.js`. Vite masked it by preferring `.js`; a tool with a different extension order failed to resolve every permission import. Hazard in a security file, never a bypass. | LOW | **Removed.** |
+
+**Verified clean (no change needed):** no `dangerouslySetInnerHTML`/`innerHTML`/`eval`/`document.write`; the one `target="_blank"` has `rel="noopener noreferrer"`; no hard-coded credentials/keys; console logging of PII/secrets is dev-only and redacted (see #1, #11); mutating forms (Login, users, API keys, meter types, profile/password, RRR, meter delete, uploads, complete-installation) all disable while submitting.
+
+### Addendum 2026-09-21 — multi-disco flow
+
+- **`Permissions-Policy` now allows `geolocation=(self)`** (was `geolocation=()`). GPS is a real
+  field on `POST /installations/{id}/report`, so installers must be able to capture it. Scoped to
+  this origin only; `camera`, `microphone` and `payment` remain fully denied. The browser still
+  prompts for consent, and the form works without it (coordinates can be typed in).
+- **`img-src 'self' data:` is unchanged, deliberately.** `installationPhotoUrl` is an arbitrary
+  third-party URL (Drive/S3/Cloudinary). Photos are rendered as outbound links with
+  `rel="noopener noreferrer"`, never as `<img>`, so no untrusted image host is loaded by the app
+  and the CSP stays tight.
+- **Dead-token purge.** Every JWT issued before the UUID migration is invalid;
+  `jedApi.purgeStaleSession()` drops a pre-migration token/user once per browser rather than
+  letting it fail mid-session.
+- **Installer scoping is server-side.** `GET /installations/me/jobs|meters` are scoped to the
+  caller's own JWT — the client never sends an installer id for them, so one installer cannot
+  request another's queue by tampering with a parameter.
+- **Not verified against the live backend:** no credentials were available (the guide states the
+  test passwords are the backend's `DEFAULT_PASSWORD` and deliberately does not print them), so no
+  authenticated call was made. Role enforcement on the 31 new endpoints is assumed from the guide's
+  role table, not observed.
+
+**Residual risks / not fixable from this repo:**
+- Frontend gating is a UX layer. **Please have the backend confirm** it authorizes by role on `POST /meters/upload`, `POST /uploads/*`, and the JED endpoints. In particular the spec documents `GET /external/jed/requests/{accountNumber}` with **no** security and returns the full request (RRR, amount, phone, email) — which the Installer detail page uses — while `/requests/installer` deliberately strips those fields. Live, that route returns 401 without a token (spec is wrong), but any authenticated Installer can read the sensitive fields for any account number.
+- JWT in `localStorage`, admin API key in `localStorage`, no server-side revocation on logout, no refresh endpoint (see #5, #7). Role changes made by an admin take effect in a user's UI at their next page load (the check is at startup, not continuous); the backend enforces immediately.
+- The Installer session has no idle timeout (a documented product decision — admin-tier only).
 
 ## What This Review Did Not Do
 

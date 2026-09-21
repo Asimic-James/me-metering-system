@@ -1,6 +1,91 @@
 # API Gap Report
 
+> **2026-09-21 — most of the long-standing gaps below are now CLOSED.** The backend shipped a
+> **multi-disco installation flow** (31 new endpoints, verified live on `api.memetering.com`:
+> `GET /api-docs/swagger.json` now serves **85 operations**, up from 54). Installer assignment,
+> meter assignment, and the GPS/photo/supervisor/installer-name fields all exist now — as a
+> **new resource**, not as changes to the JED endpoints. Read the section directly below before
+> the older gap entries, several of which are now historical.
+
+## 2026-09-21: multi-disco installation flow — gaps #1, #3 and the Completed-Installation fields are resolved
+
+**Verified, not assumed:** the live spec was pulled from `https://api.memetering.com/api-docs/swagger.json`
+and diffed against the previous snapshot — 85 operations, exactly 31 new, in four groups
+(Discos 6, Imports 6, Assignments 6, Installations 13). The same paths return `401` on
+`api.memetering.com` (they exist, behind auth) and `404 Route not found` on the old Render host,
+which independently confirms the host migration recorded below was correct and necessary. The 13
+JED operations are byte-identical to before — **no JED screen changed.**
+
+### What this closes
+
+| Previously reported gap | Status now | Real endpoint |
+|---|---|---|
+| **#1 No installer-assignment field or endpoint** (open since 2026-08-25, declined twice as a localStorage fake) | **CLOSED** | `POST /assignments/installations` (+ `/unassign`); `assignedTo`/`assigneeName` on the record; `GET /installations/me/jobs` is genuinely per-installer |
+| **#3 No pre-completion meter-assignment step** | **CLOSED** | `POST /assignments/meters` (+ `/return`); `GET /installations/me/meters` |
+| **Completed Installation: no installer name, supervisor, GPS or photos** | **CLOSED for the new flow** | `POST /installations/{id}/report` accepts `latitude`, `longitude`, `installationPhotoUrl`, `discoSupervisor`, `sealNumber`, `installationDate`; the record returns them plus `installerName`, `reportedAt` |
+| **#6 No bulk paid-customer/spreadsheet import** | **CLOSED for installations and meters** | `POST /imports/{discoCode}/pending-installations`, `POST /imports/{discoCode}/meters` — real, idempotent, per-row error reporting |
+| **#2 No richer installation lifecycle than PAID** | **CLOSED for the new flow** | `PENDING → ASSIGNED → IN_PROGRESS → INSTALLED → EXPORTED`, plus `FAILED`/`CANCELLED` |
+
+**Important scoping note:** these are a *different resource*. `InstallationRequest` (integer id,
+disco-scoped) is not `JedCustomerRequest` (accountNumber-keyed, `INITIATED/PAID/COMPLETED`). The JED
+flow still has none of these fields, so the "Not recorded by the API yet" placeholders on the JED
+completed-installation card (`CompletionDetails.jsx`) remain accurate **for JED**. The gaps are
+closed by the new flow existing alongside it, not by JED changing.
+
+### Breaking changes handled
+
+1. **`users.id` is now a UUID, not an integer.** Route params, `installerId` and cached user objects
+   are all UUID strings; sending the old integer form returns a 400. Audited the codebase for
+   `Number()`/`parseInt()` on ids — there were none; ids are passed through as opaque strings and
+   are `encodeURIComponent`-ed in the endpoint builders.
+2. **Every JWT issued before the migration is dead.** `jedApi.purgeStaleSession()` drops a
+   pre-migration token/user once per browser (keyed on a `jedStorageVersion` marker) so a stale
+   token can't fail mid-session; `AuthContext.verifySession()` already fails closed to the login
+   screen on a 401.
+
+### Remaining gaps / open questions in the new flow
+
+- **No image upload endpoint.** `installationPhotoUrl` is a URL string the client must obtain from
+  its own storage (S3/Cloudinary/Drive) first. **Backend decision needed:** where installers upload,
+  and whether the backend should later proxy or validate those links. The UI therefore renders a
+  photo as an outbound *link*, not an `<img>` — which also avoids loading an untrusted third-party
+  image and keeps the CSP `img-src 'self' data:` unchanged.
+- **No offline/bulk response upload.** Reporting is API-only; there is no endpoint to upload a
+  filled-in response spreadsheet. Flag if field connectivity makes that necessary.
+- **Phase matching is strict.** A three-phase meter on a single-phase job is rejected outright. If
+  installers legitimately substitute in the field, an override path is needed. (The UI avoids the
+  error by filtering the meter picker to the job's `meterType`.)
+- **`limit` maxes at 100** and the meter list is ~6,200 rows, so any meter-wide browsing must use
+  server-side search rather than loading everything.
+- **`GET /installations` documents `discoCode`/`status`/`installerId`/`search` but not
+  `page`/`limit`,** although the guide documents them and the response carries `pagination`. The app
+  sends them; if the backend ever rejects unknown query params this needs revisiting.
+- **Disco configuration UI was deliberately not built.** `PUT /discos/{code}/import-mapping` and
+  `/export-template` **replace the whole object** — a partial PUT silently truncates the disco's
+  configuration and breaks later imports. A half-built JSON editor is a genuine footgun, so the
+  endpoints are wired in the API layer (`replaceDiscoImportMapping`/`replaceDiscoExportTemplate`,
+  with that warning in their docblock) but no screen calls them. Creating/editing discos remains a
+  SUPERADMIN back-office task. Disco *reading* is used throughout (import/assign/export pickers).
+- Still open from before: `POST /apikeys` wants `keyName` while the UI sends `name` (unverified);
+  `/uploads/excel*` still 404 on both hosts.
+
+
 This documents where the desired ME-Metering workflow cannot be fully implemented against the real Pharez API (`https://pharez-api.onrender.com/api-docs`, verified against its OpenAPI spec) — as opposed to places where the frontend was simply calling the API incorrectly (those were fixed directly, not listed here). These are backend feature requests, not frontend bugs.
+
+## Complaints / issue reporting — re-verified 2026-09-21: still no endpoint (Installer Complaint Form added as UI-only)
+
+**Searched:** the full OpenAPI document (paths, summaries, descriptions, tags, schemas) for `complain|issue|incident|ticket|support|blocker|report|feedback|dispute|remark|comment|note|attachment` — no operation matches (the only `upload` hits are the meter/Excel routes). Tags are exactly: API Keys, Authentication, Dashboard, JED Integration, Meters, Settings, Uploads, Users, Verification, Webhooks. Schemas: `User`, `UserCreate`, `UserUpdate`, `ChangePassword`, `LoginRequest`, `LoginResponse`, `Success`, `Error`, `ValidationError`, `JedCustomerRequest`. Live probes of `/complaints`, `/complaint`, `/issues`, `/incidents`, `/tickets`, `/support`, `/feedback` on `api.memetering.com` all return `404 Route not found`. The spec is unchanged since 2026-09-20.
+
+**What was built instead** (CLAUDE.md rule 12 — real parts real, unsupported action never faked): an **Installer-only Complaint Form** (`/complaints`, `ComplaintForm.jsx`, logic in `src/utils/complaint.js`). Real: the job picker (the installer's shared `PAID` queue from `GET /external/jed/requests/installer?status=PAID`, fully paged), customer/address shown from the selected job, full client-side validation, accessibility, mobile/dark-theme support, `?job=<account>` preselect from a job's detail page. **Not real, and stated plainly on the page:** submitting cannot record anything — it opens a "Complaint not sent" notice with a copyable plain-text summary. No `localStorage` record, no fake success, no invented request. There is no admin review page, no "my complaints" list, no status/updates and no attachment upload, because each needs backend support that does not exist.
+
+**What the backend needs to provide** (then `ComplaintForm.handleSubmit` becomes one call, and Admin/SuperAdmin pages can be added):
+1. `POST /complaints` (Installer JWT) — body along the lines of `accountNumber` (optional/nullable), `category` (enum: Customer Unavailable, Incorrect Customer Information, Location/Address Issue, Meter or Equipment Issue, Safety Concern, Network/Technical Issue, Access Restriction, Missing Materials, Other), `priority` (`LOW|MEDIUM|HIGH|CRITICAL`), `impact` (`BLOCKING|DELAYING|NONE`), `issueAt` (date-time, not in the future), `description` (10–1000 chars), `remarks` (≤500, optional). The installer id **must be taken from the JWT server-side**, never trusted from the body. These names are the UI's, not a contract — the backend should define the real schema.
+2. `GET /complaints` — Installer sees only their own; Admin/SuperAdmin see all, with filters `status`, `priority`, `installerId`, date range, `accountNumber`, and pagination (`page`, `limit` ≤ 100).
+3. `PATCH /complaints/{id}` (Admin/SuperAdmin only) — `status` (e.g. `OPEN|IN_REVIEW|RESOLVED`), `resolutionNotes`/`adminRemarks`. A timeline/updates field so an Installer can see progress.
+4. Optional attachments (multipart or hosted URLs) — and, if images are served to the browser, the CSP `img-src` in `vercel.json` must allow the host (see the Completed Installation notes below).
+5. Documented in the OpenAPI schema with the same `bearerAuth` + role rules as the rest of the API.
+
+**Related backend items found in this audit** (details and evidence in `Security.md`, "Hardening pass 2026-09-21"): confirm role enforcement on `POST /meters/upload` and `POST /uploads/*` for the Installer role (the Uploads tab is now hidden/blocked client-side for Installers, but this was not tested against the backend); `GET /external/jed/requests/{accountNumber}` is documented as unauthenticated (it 401s live) and returns RRR/amount/contact fields to any authenticated user including Installers, unlike `/requests/installer`; `POST /apikeys` requires `keyName` per the spec but the UI sends `name`.
 
 ## Second re-audit 2026-09-20: full endpoint-vs-code comparison
 

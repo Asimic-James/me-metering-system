@@ -21,9 +21,14 @@ There is no ORM, no server-side rendering, no edge functions — `vercel.json` c
   - `/dashboard` → `AdminDashboard` (admin-tier) or `InstallerDashboard` (installer) — same URL, different component by role
   - `/installations` → `AdminInstallations` (admin-tier only)
   - `/installations/:accountNumber` → `InstallationDetail` (any role with view access) — the single click-through detail/completion view
-  - `/schedule` → `MeterSchedule` (meter inventory — all roles)
+  - `/schedule` → `MeterSchedule` (meter inventory — admin-tier only)
   - `/users` → `UserManagement` (admin-tier only)
-  - `/uploads` → `ExcelUpload` (admin-tier + installer)
+  - `/uploads` → `ExcelUpload` (admin-tier only — Installer removed 2026-09-21)
+  - `/imports` → `ImportsPage` (admin-tier) — multi-disco spreadsheet import
+  - `/assignments` → `AssignmentsPage` (admin-tier) — dispatch meters to installers
+  - `/installation-requests` → `InstallationRequests` (admin-tier) — imported jobs, installer dispatch, disco export
+  - `/my-jobs` → `MyJobs` (Installer only) — jobs dispatched to them + their meters
+  - `/complaints` → `ComplaintForm` (Installer only; no backend endpoint yet — validates and produces a copyable summary, nothing is stored)
   - `/reports` → `AdminReports` (admin-tier only)
   - `/payments` → `PaymentsPage` (admin-tier only)
   - `/settings` → `SettingsPage` (admin-tier only)

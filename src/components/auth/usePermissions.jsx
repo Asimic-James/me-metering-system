@@ -74,6 +74,20 @@ export function usePermissions() {
     // Upload permissions
     canUploadExcel: hasPermission(userRole, PERMISSIONS.UPLOADS.EXCEL),
     canUploadFiles: isAdmin || hasPermission(userRole, PERMISSIONS.UPLOADS.FILES),
+
+    // Complaint form — Installer only (a complaint must be attributable to
+    // the installer who raised it; admin-tier accounts bypass hasPermission()
+    // for every permission, so the role is checked explicitly here).
+    canSubmitComplaints: userRole === ROLES.INSTALLER && hasPermission(userRole, PERMISSIONS.COMPLAINTS.CREATE),
+
+    // Multi-disco installation flow (2026-09-21).
+    // "My Jobs" is Installer-only: the API scopes /installations/me/* to the
+    // caller's token, so an admin-tier account would get an empty list rather
+    // than an overview — admins use the Installation Requests page instead.
+    canViewMyJobs: userRole === ROLES.INSTALLER && hasPermission(userRole, PERMISSIONS.INSTALLATIONS.FIELD_JOBS),
+    canRunImports: isAdmin || hasPermission(userRole, PERMISSIONS.IMPORTS.RUN),
+    canManageAssignments: isAdmin || hasPermission(userRole, PERMISSIONS.ASSIGNMENTS.MANAGE),
+    canViewInstallationRequests: isAdmin || hasPermission(userRole, PERMISSIONS.INSTALLATIONS.VIEW_ALL),
   }), [userRole, isAdmin]);
 
   return {

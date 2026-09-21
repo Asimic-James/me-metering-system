@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { formatDateTime, parseTimestamp, getRecentDaysRange } from '../../utils/date';
 import { fetchAllPages } from '../../utils/fetchAllPages';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 const TABS = [
   { id: 'payments', label: 'Payments' },
@@ -76,7 +77,7 @@ function PaymentsTab() {
       setHasFetched(true);
     } catch (err) {
       console.error('[Payments] Failed to fetch:', err);
-      setError(String(err?.message || 'Failed to load payments'));
+      setError(getErrorMessage(err, 'Failed to load payments'));
     } finally {
       setLoading(false);
     }

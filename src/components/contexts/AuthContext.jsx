@@ -36,22 +36,43 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // Initialize auth state from localStorage on mount
+  // Initialize auth state on mount. The stored user object (localStorage
+  // `jedUser`) is client-editable — changing its `role` to SUPERADMIN in
+  // devtools would otherwise unlock the Admin UI after a refresh — so it is
+  // only a hint that a session MIGHT exist. The session is restored from the
+  // server's answer to GET /auth/profile (JWT verified server-side), and the
+  // role used for every UI/route permission check comes from that response,
+  // never from storage. Fails closed: if the check can't complete (expired
+  // token, network failure, malformed reply) the user lands on the login
+  // screen instead of being shown UI for an unverified role. The backend
+  // still enforces authorization on every API call regardless.
   useEffect(() => {
+    let cancelled = false;
+
     const initializeAuth = async () => {
       try {
         setError(null);
-        
+
         // Check for both user and token
         const storedUser = JEDApiService.getStoredUser();
         const token = JEDApiService.getAuthToken();
 
         if (storedUser && token) {
-          const normalizedUser = normalizeUser(storedUser);
+          let normalizedUser = null;
+          try {
+            normalizedUser = normalizeUser(await JEDApiService.verifySession());
+          } catch (verifyError) {
+            // A 401 already cleared the stored session in the API layer; any
+            // other failure leaves the token in place so a reload can retry.
+            console.warn('[AuthContext] Session could not be verified — signing in again is required.');
+            if (import.meta.env.DEV) console.warn(verifyError);
+          }
+
+          if (cancelled) return;
 
           // Phone number is PII — only logged in dev.
-          if (import.meta.env.DEV) {
-            console.log('[AuthContext] User restored:', {
+          if (normalizedUser && import.meta.env.DEV) {
+            console.log('[AuthContext] Session verified:', {
               id: normalizedUser.id,
               phone: normalizedUser.phone,
               role: normalizedUser.role
@@ -81,11 +102,12 @@ export const AuthProvider = ({ children }) => {
         
         setUser(null);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     initializeAuth();
+    return () => { cancelled = true; };
   }, [normalizeUser]);
 
   // FIXED: a 401 anywhere in the app calls jedApi.clearTokens(), which
@@ -223,7 +245,7 @@ export const AuthProvider = ({ children }) => {
       console.error('[AuthContext] Error refreshing user:', error);
       
       // If refresh fails with auth error, logout
-      if (error.message?.includes('AUTH_ERROR') || error.message?.includes('401')) {
+      if (String(error.message || '').startsWith('AUTH_ERROR')) {
         console.warn('[AuthContext] Auth error during refresh, logging out');
         await logout();
       } else {

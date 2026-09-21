@@ -3,8 +3,9 @@
 // recent installations). Pending jobs show the Complete Installation form;
 // completed jobs show a read-only "Paid & Completed" summary.
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { usePermissions } from '../auth/usePermissions';
 import JEDApiService from '../services/api';
 import RequestInfoPanel from './RequestInfoPanel';
 import CompletionDetails from './CompletionDetails';
@@ -18,6 +19,7 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
+  MessageSquareWarning,
 } from 'lucide-react';
 
 // isCompletedStatus previously lived here as a local, lowercase-only copy.
@@ -28,6 +30,7 @@ function InstallationDetail() {
   const { accountNumber } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const permissions = usePermissions();
 
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +49,17 @@ function InstallationDetail() {
   const [genGeneratedAt, setGenGeneratedAt] = useState(null);
 
   const fetchDetail = useCallback(async () => {
+    // `accountNumber` comes straight from the URL. Account numbers are
+    // numeric-only (business rule), so anything else is rejected here
+    // without calling the API — a crafted link like
+    // /installations/..%2F..%2Fusers used to make the signed-in user's
+    // browser send an authenticated request to an unrelated endpoint.
+    if (!/^\d+$/.test(accountNumber || '')) {
+      setJob(null);
+      setError('Unable to load this installation. It may not exist or you may not have access.');
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -240,14 +254,31 @@ function InstallationDetail() {
       {/* Customer / request info — shared panel */}
       <RequestInfoPanel data={job} />
 
+      {/* Installer-only shortcut to the Complaint Form for this job */}
+      {permissions.canSubmitComplaints && !completed && (
+        <div className="flex justify-end">
+          <Link
+            to={`/complaints?job=${encodeURIComponent(accountNumber)}`}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 dark:text-brand-400 hover:underline"
+          >
+            <MessageSquareWarning className="w-4 h-4" />
+            Report a problem with this job
+          </Link>
+        </div>
+      )}
+
           {/* Generate payment reference (RRR) — only offered when this
               request genuinely has none yet (an INITIATED record that
               somehow never got one). "Regenerate Reference" was removed:
               once a reference exists, the customer may already have paid
               against it, so silently replacing it here was a real risk —
               see the completed-installation workflow instead for the
-              normal path once a request has actually been paid. */}
-          {!completed && !(job.rrr || job.paymentReference || job.paymentRef) && (
+              normal path once a request has actually been paid.
+              Admin/Super Admin only: this calls the ApiKeyAuth-only
+              generate-ref endpoint with the browser's stored admin API key
+              (Settings → API Keys), which an Installer neither has nor should
+              be able to borrow on a shared device. */}
+          {permissions.isAdmin && !completed && !(job.rrr || job.paymentReference || job.paymentRef) && (
             <div className="card p-4 sm:p-6">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Payment Reference</h3>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

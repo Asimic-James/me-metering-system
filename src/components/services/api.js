@@ -59,6 +59,36 @@ class JEDApiService {
     // Request cache for deduplication
     this.requestCache = new Map();
     this.cacheTimeout = 30000; // 30 seconds
+
+    this.purgeStaleSession();
+  }
+
+  /**
+   * One-time storage purge after the 2026-09-21 backend migration that turned
+   * `users.id` from an integer into a UUID. Every JWT issued before it carries
+   * the old integer userId and no longer resolves, and any cached user object
+   * still holds a numeric id. Rather than let a stale token fail somewhere
+   * mid-session, drop it on first load so the user simply logs in again.
+   *
+   * Keyed by a stored schema version, so this runs exactly once per browser
+   * and costs nothing afterwards. (`verifySession()` would also catch a dead
+   * token via its 401, but only after a wasted round trip — and a user record
+   * with a numeric id should never reach the UI in the first place.)
+   */
+  purgeStaleSession() {
+    const CURRENT = '2'; // 2 = post-UUID-migration
+    try {
+      if (localStorage.getItem('jedStorageVersion') === CURRENT) return;
+      const stored = localStorage.getItem('jedUser');
+      if (stored || localStorage.getItem('jedAuthToken')) {
+        localStorage.removeItem('jedAuthToken');
+        localStorage.removeItem('jedUser');
+        localStorage.removeItem('jedAdminSessionDeadline');
+      }
+      localStorage.setItem('jedStorageVersion', CURRENT);
+    } catch {
+      // Storage unavailable (private mode / blocked) — nothing to purge.
+    }
   }
 
   // Enhanced request method with caching and better error handling
@@ -264,8 +294,19 @@ class JEDApiService {
     // Safely check error message
     const errorMsg = error?.message || '';
     const errorMsgStr = String(errorMsg).toLowerCase();
-    
-    if (errorMsgStr.includes('401')) {
+
+    // handleErrorResponse already classified this error (and, for a real
+    // 401, already cleared the session) — pass it through untouched. This
+    // early return also fixes a real bug: the check below used to be a bare
+    // `message.includes('401')`, so ANY server message that merely
+    // contained those digits (an account number, a 12-digit RRR, an
+    // amount…) on an unrelated 400/404/500 silently logged the user out.
+    const alreadyClassified = Object.values(this.errorTypes).some((t) => String(errorMsg).startsWith(`${t}:`));
+    if (alreadyClassified) return error;
+
+    // Only a genuine, un-parsed HTTP 401 (e.g. an HTML error page from a
+    // proxy, which handleResponse throws as "HTTP 401: …") ends the session.
+    if (/^HTTP 401\b/.test(String(errorMsg))) {
       this.clearTokens();
       return new Error('Authentication required. Please login again.');
     }
@@ -352,6 +393,8 @@ class JEDApiService {
       });
     }
 
+    // A new session never inherits the previous session's cached responses.
+    this.clearCache();
     this.storeTokens({ token });
     this.storeUser(userData);
 
@@ -421,6 +464,25 @@ class JEDApiService {
   }
 
   // ==================== USER MANAGEMENT METHODS ====================
+  /**
+   * Server-side check of the current session: GET /auth/profile with the
+   * stored JWT, never cached. The role in `localStorage.jedUser` is
+   * client-editable, so AuthContext calls this on startup and trusts ONLY
+   * what the server returns (the JWT is verified server-side). Rejects on
+   * 401 (session already cleared by handleErrorResponse), on network
+   * failure, or on a malformed response.
+   */
+  async verifySession() {
+    const url = this.buildUrl(this.endpoints.AUTH.PROFILE, true);
+    const response = await this.makeRequest(url, { method: 'GET' });
+    const userRecord = response?.data || response?.user;
+    if (!userRecord || !userRecord.id || !userRecord.role) {
+      throw new Error(`${this.errorTypes.VALIDATION}:Invalid profile response`);
+    }
+    this.storeUser(userRecord);
+    return userRecord;
+  }
+
   async getProfile() {
     const url = this.buildUrl(this.endpoints.AUTH.PROFILE, true);
     const response = await this.makeRequest(url, {
@@ -506,6 +568,7 @@ class JEDApiService {
   }
 
   async generatePaymentReference(meterData) {
+    this.assertAdminTierForApiKey();
     const apiKey = this.getActiveApiKey();
     if (!apiKey) {
       throw new Error(
@@ -616,6 +679,7 @@ class JEDApiService {
    */
   async checkRemitaStatusByRRR(rrr) {
     if (!rrr) throw new Error('checkRemitaStatusByRRR requires an rrr');
+    this.assertAdminTierForApiKey();
     const apiKey = this.getActiveApiKey();
     if (!apiKey) {
       throw new Error(
@@ -1002,6 +1066,277 @@ class JEDApiService {
     return response;
   }
 
+  // ==================== MULTI-DISCO INSTALLATION FLOW ====================
+  // Added 2026-09-21. Separate domain from the JED/Remita flow above:
+  // `InstallationRequest` (integer id, disco-scoped, PENDING→…→EXPORTED) is
+  // NOT `JedCustomerRequest` (accountNumber-keyed, INITIATED→PAID→COMPLETED).
+  // Nothing here touches the JED methods. See API_GAP_REPORT.md.
+  //
+  // Every endpoint here is bearerAuth (JWT) — the X-API-Key scheme is only
+  // for the external JED partner endpoints and is never used in this group.
+
+  /**
+   * Shared binary download for this group. Per the integration guide, these
+   * endpoints return an XLSX body on success but a JSON error on failure, so
+   * the content type is what decides — never assume a blob.
+   * @returns {Promise<{blob: Blob, filename: string|null}>}
+   */
+  async downloadFile(url, fallbackMessage) {
+    const headers = this.utils.buildHeaders();
+    delete headers['Content-Type'];
+
+    const response = await fetch(url, { method: 'GET', headers });
+    const contentType = response.headers.get('content-type') || '';
+
+    if (!response.ok) {
+      if (response.status === 401) this.clearTokens();
+      if (contentType.includes('application/json')) {
+        const data = await response.json().catch(() => null);
+        throw new Error(`${this.errorTypes.NOT_FOUND}:${data?.message || fallbackMessage}`);
+      }
+      throw new Error(`${this.errorTypes.SERVER}:${fallbackMessage} (${response.status})`);
+    }
+
+    // A JSON body on a 200 still means "no file" rather than a spreadsheet.
+    if (contentType.includes('application/json')) {
+      const data = await response.json().catch(() => null);
+      throw new Error(`${this.errorTypes.NOT_FOUND}:${data?.message || fallbackMessage}`);
+    }
+
+    const filename = (response.headers.get('Content-Disposition') || '')
+      .match(/filename="?([^";]+)"?/)?.[1] || null;
+    return { blob: await response.blob(), filename };
+  }
+
+  // ---------- Discos ----------
+  async getDiscos(params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.DISCOS.BASE, params);
+    return await this.makeRequest(url, { method: 'GET', useCache: true, cacheKey: `discos-${JSON.stringify(params)}` });
+  }
+
+  async getDisco(code) {
+    if (!code) throw new Error('getDisco requires a disco code');
+    const url = this.buildApiUrl(this.endpoints.DISCOS.BY_CODE(code));
+    return await this.makeRequest(url, { method: 'GET', useCache: true, cacheKey: `disco-${code}` });
+  }
+
+  async createDisco(data) {
+    const url = this.buildApiUrl(this.endpoints.DISCOS.BASE);
+    const response = await this.makeRequest(url, { method: 'POST', body: JSON.stringify(data) });
+    this.clearCache();
+    return response;
+  }
+
+  async updateDisco(code, data) {
+    const url = this.buildApiUrl(this.endpoints.DISCOS.BY_CODE(code));
+    const response = await this.makeRequest(url, { method: 'PATCH', body: JSON.stringify(data) });
+    this.clearCache();
+    return response;
+  }
+
+  /**
+   * NOTE: both of these REPLACE the whole object — anything omitted is
+   * dropped. Always read the disco first, edit what comes back, and send it
+   * complete (the guide is explicit that a partial PUT silently truncates the
+   * disco's configuration and breaks later imports).
+   */
+  async replaceDiscoImportMapping(code, mapping) {
+    const url = this.buildApiUrl(this.endpoints.DISCOS.IMPORT_MAPPING(code));
+    const response = await this.makeRequest(url, { method: 'PUT', body: JSON.stringify(mapping) });
+    this.clearCache();
+    return response;
+  }
+
+  async replaceDiscoExportTemplate(code, template) {
+    const url = this.buildApiUrl(this.endpoints.DISCOS.EXPORT_TEMPLATE(code));
+    const response = await this.makeRequest(url, { method: 'PUT', body: JSON.stringify(template) });
+    this.clearCache();
+    return response;
+  }
+
+  // ---------- Imports ----------
+  async getImportBatches(params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.IMPORTS.BASE, params);
+    return await this.makeRequest(url, { method: 'GET', useCache: true, cacheKey: `imports-${JSON.stringify(params)}` });
+  }
+
+  /** One batch WITH every per-row error (the list endpoint omits `errors`). */
+  async getImportBatch(id) {
+    const url = this.buildApiUrl(this.endpoints.IMPORTS.BY_ID(id));
+    return await this.makeRequest(url, { method: 'GET' });
+  }
+
+  /**
+   * Partial success is normal here: a 201 can still carry rejected rows, and
+   * a 200 means nothing landed. Callers must read data.created/skipped/failed
+   * and data.errors rather than treating 2xx as "all good".
+   */
+  async importPendingInstallations(discoCode, formData) {
+    const url = this.buildApiUrl(this.endpoints.IMPORTS.PENDING_INSTALLATIONS(discoCode));
+    const response = await this.makeRequest(url, { method: 'POST', body: formData });
+    this.clearCache();
+    return response;
+  }
+
+  async importMeterInventory(discoCode, formData) {
+    const url = this.buildApiUrl(this.endpoints.IMPORTS.METERS(discoCode));
+    const response = await this.makeRequest(url, { method: 'POST', body: formData });
+    this.clearCache();
+    return response;
+  }
+
+  async downloadPendingInstallationsTemplate(discoCode) {
+    const url = this.buildApiUrl(this.endpoints.IMPORTS.PENDING_INSTALLATIONS_TEMPLATE(discoCode));
+    return await this.downloadFile(url, 'Failed to download the pending-installations template');
+  }
+
+  async downloadMeterInventoryTemplate(discoCode) {
+    const url = this.buildApiUrl(this.endpoints.IMPORTS.METERS_TEMPLATE(discoCode));
+    return await this.downloadFile(url, 'Failed to download the meter-inventory template');
+  }
+
+  // ---------- Assignments ----------
+  /** @param {Object} data - { discoCode, installerId (UUID), meterNumbers[], note?, dispatchRef? } */
+  async assignMeters(data) {
+    const url = this.buildApiUrl(this.endpoints.ASSIGNMENTS.METERS);
+    const response = await this.makeRequest(url, { method: 'POST', body: JSON.stringify(data) });
+    this.clearCache();
+    return response;
+  }
+
+  async returnMeters(meterNumbers) {
+    const url = this.buildApiUrl(this.endpoints.ASSIGNMENTS.METERS_RETURN);
+    const response = await this.makeRequest(url, { method: 'POST', body: JSON.stringify({ meterNumbers }) });
+    this.clearCache();
+    return response;
+  }
+
+  /**
+   * @param {Object} data - { discoCode, installerId (UUID), note?, dispatchRef? }
+   *   plus EXACTLY ONE of accountNumbers[] or ids[] — sending both is a 400.
+   */
+  async assignInstallations(data) {
+    const url = this.buildApiUrl(this.endpoints.ASSIGNMENTS.INSTALLATIONS);
+    const response = await this.makeRequest(url, { method: 'POST', body: JSON.stringify(data) });
+    this.clearCache();
+    return response;
+  }
+
+  async unassignInstallations(data) {
+    const url = this.buildApiUrl(this.endpoints.ASSIGNMENTS.INSTALLATIONS_UNASSIGN);
+    const response = await this.makeRequest(url, { method: 'POST', body: JSON.stringify(data) });
+    this.clearCache();
+    return response;
+  }
+
+  async getAssignmentBatches(params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.ASSIGNMENTS.BASE, params);
+    return await this.makeRequest(url, { method: 'GET', useCache: true, cacheKey: `assignments-${JSON.stringify(params)}` });
+  }
+
+  /** One batch including its items (the list endpoint omits them). */
+  async getAssignmentBatch(id) {
+    const url = this.buildApiUrl(this.endpoints.ASSIGNMENTS.BY_ID(id));
+    return await this.makeRequest(url, { method: 'GET' });
+  }
+
+  // ---------- Installations (admin) ----------
+  async getInstallations(params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.INSTALLATIONS.BASE, params);
+    return await this.makeRequest(url, { method: 'GET', useCache: true, cacheKey: `installations-${JSON.stringify(params)}` });
+  }
+
+  async createInstallation(data) {
+    const url = this.buildApiUrl(this.endpoints.INSTALLATIONS.BASE);
+    const response = await this.makeRequest(url, { method: 'POST', body: JSON.stringify(data) });
+    this.clearCache();
+    return response;
+  }
+
+  async getInstallationStatistics(params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.INSTALLATIONS.STATISTICS, params);
+    return await this.makeRequest(url, { method: 'GET', useCache: true, cacheKey: `installation-stats-${JSON.stringify(params)}` });
+  }
+
+  async getInstallation(id) {
+    const url = this.buildApiUrl(this.endpoints.INSTALLATIONS.BY_ID(id));
+    return await this.makeRequest(url, { method: 'GET' });
+  }
+
+  async cancelInstallation(id, reason) {
+    const url = this.buildApiUrl(this.endpoints.INSTALLATIONS.CANCEL(id));
+    const response = await this.makeRequest(url, { method: 'PATCH', body: JSON.stringify(reason ? { reason } : {}) });
+    this.clearCache();
+    return response;
+  }
+
+  // ---------- Installations (installer app) ----------
+  // Both /me/* endpoints scope to the caller's token — there is no installer
+  // id to pass, and none should ever be sent.
+  async getMyJobs(params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.INSTALLATIONS.MY_JOBS, params);
+    return await this.makeRequest(url, { method: 'GET', useCache: true, cacheKey: `my-jobs-${JSON.stringify(params)}` });
+  }
+
+  async getMyMeters(params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.INSTALLATIONS.MY_METERS, params);
+    return await this.makeRequest(url, { method: 'GET', useCache: true, cacheKey: `my-meters-${JSON.stringify(params)}` });
+  }
+
+  async startInstallation(id) {
+    const url = this.buildApiUrl(this.endpoints.INSTALLATIONS.START(id));
+    const response = await this.makeRequest(url, { method: 'PATCH' });
+    this.clearCache();
+    return response;
+  }
+
+  /**
+   * @param {Object} data - { meterNumber (required, must be assigned to the
+   *   caller), sealNumber?, installationDate? ('YYYY-MM-DD' plain date —
+   *   never an ISO timestamp), latitude?, longitude?, installationPhotoUrl?
+   *   (a URL; the API accepts no image uploads), discoSupervisor?, notes? }
+   * Marks the request INSTALLED and the meter USED/INSTALLED in one
+   * transaction, so refresh both the job list and the meter list afterwards.
+   */
+  async reportInstallation(id, data) {
+    const url = this.buildApiUrl(this.endpoints.INSTALLATIONS.REPORT(id));
+    const response = await this.makeRequest(url, { method: 'POST', body: JSON.stringify(data) });
+    this.clearCache();
+    return response;
+  }
+
+  async failInstallation(id, reason) {
+    const url = this.buildApiUrl(this.endpoints.INSTALLATIONS.FAIL(id));
+    const response = await this.makeRequest(url, { method: 'POST', body: JSON.stringify({ reason }) });
+    this.clearCache();
+    return response;
+  }
+
+  // ---------- Export (response sheet back to the disco) ----------
+  /**
+   * `markExported: true` moves the included rows to EXPORTED in the same
+   * transaction — only pass it when the file is genuinely being sent.
+   * Default (omitted) is a safe preview; rows stay INSTALLED.
+   */
+  async exportInstallations(discoCode, params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.INSTALLATIONS.EXPORT(discoCode), params);
+    const result = await this.downloadFile(url, 'No installations found to export');
+    if (params.markExported) this.clearCache();
+    return result;
+  }
+
+  async markExportSent(discoCode, exportBatchId) {
+    const url = this.buildApiUrl(this.endpoints.INSTALLATIONS.EXPORT_MARK_SENT(discoCode));
+    const response = await this.makeRequest(url, { method: 'POST', body: JSON.stringify({ exportBatchId }) });
+    this.clearCache();
+    return response;
+  }
+
+  async getExportBatches(params = {}) {
+    const url = this.utils.buildUrlWithParams(this.endpoints.INSTALLATIONS.EXPORTS, params);
+    return await this.makeRequest(url, { method: 'GET', useCache: true, cacheKey: `export-batches-${JSON.stringify(params)}` });
+  }
+
   // ==================== TOKEN & STORAGE MANAGEMENT ====================
   // Note: there is no /auth/refresh-token endpoint on the real API, so
   // there is no refresh token to store or read — the app relies on the
@@ -1024,6 +1359,11 @@ class JEDApiService {
     localStorage.removeItem('jedAuthToken');
     localStorage.removeItem('jedUser');
     this.clearSessionDeadline();
+    // The response cache is keyed by URL/params, not by user — without
+    // this, a session that ended via a 401 (expiry) rather than logout()
+    // left the previous user's cached responses (e.g. the 'user-profile'
+    // entry) servable to whoever signed in next within the 30s TTL.
+    this.clearCache();
     // FIXED: clearing storage alone left a real gap — a 401 mid-session
     // wiped the token from localStorage, but AuthContext's in-memory
     // `user`/`isAuthenticated` React state stayed stale until the next
@@ -1102,6 +1442,18 @@ class JEDApiService {
   // reuse — deliberately a separate localStorage slot from the JWT.
   getActiveApiKey() {
     return localStorage.getItem('jedActiveApiKey');
+  }
+
+  // The active key is a browser-level secret that outlives logout (it is
+  // shown only once, at creation, so it can't simply be wiped every session).
+  // On a shared device that would let a later Installer login reuse an
+  // Admin's key for the ApiKeyAuth endpoints, so the two methods that send it
+  // refuse unless the signed-in user is admin-tier. UX/defense-in-depth only —
+  // the backend remains the real authorization boundary for the key itself.
+  assertAdminTierForApiKey() {
+    if (!this.isAdmin()) {
+      throw new Error(`${this.errorTypes.PERMISSION}:Only an Administrator can use the API key for this action.`);
+    }
   }
 
   setActiveApiKey(key, name = null) {

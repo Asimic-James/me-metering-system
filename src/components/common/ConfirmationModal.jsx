@@ -1,11 +1,31 @@
+import { useEffect, useRef } from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, loading, confirmText = 'Confirm' }) => {
+  const cancelRef = useRef(null);
+
+  // Accessibility: Escape cancels (never while the action is in flight), and
+  // focus starts on Cancel — the safe choice for a destructive/confirming
+  // dialog — instead of staying on the page behind the overlay.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    cancelRef.current?.focus();
+    const onKeyDown = (e) => { if (e.key === 'Escape' && !loading) onClose?.(); };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose, loading]);
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        aria-describedby="modal-message"
+        className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-2xl max-w-md w-full overflow-hidden"
+      >
         <div className="p-6">
           <div className="sm:flex sm:items-start">
             <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 sm:mx-0 sm:h-10 sm:w-10">
@@ -16,7 +36,7 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, loading
                 {title}
               </h3>
               <div className="mt-2">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p id="modal-message" className="text-sm text-gray-600 dark:text-gray-400">
                   {message}
                 </p>
               </div>
@@ -25,6 +45,7 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, loading
         </div>
         <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 sm:px-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
           <button
+            ref={cancelRef}
             type="button"
             onClick={onClose}
             disabled={loading}

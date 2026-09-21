@@ -47,6 +47,46 @@ Versions below are read directly from `package.json` — verify there before ass
 - **Dark theme (class-based, `dark:`):** every light tint needs its dark pair — pastel icon tiles/badges use `bg-{hue}-100 dark:bg-{hue}-900/30` with `text-{hue}-600 dark:text-{hue}-400` (badge text `-800` → `dark:...-300`), alert boxes use `bg-{hue}-50 dark:bg-{hue}-900/20 border-{hue}-200 dark:border-{hue}-800`, and neutral chips/buttons on a `gray-800` card/modal use `dark:bg-gray-700` (never `dark:bg-gray-800/80` — it's invisible on that surface; that's what made the Retired card icon look broken). Table header rows use `dark:bg-gray-900/50`. The Header's dropdown and profile modals are intentionally white in both themes.
 - Reuse `ConfirmationModal`/`InfoModal` for new modals rather than hand-rolling another modal shell. Reuse the existing tab pattern (see `PaymentsPage.jsx`, `MeterSchedule.jsx`, `AdminInstallations.jsx`) for any new tabbed page.
 
+## Two installation domains — do not conflate them
+
+As of 2026-09-21 the API serves **two separate installation resources**. Mixing them up is the
+easiest way to break this app.
+
+| | **JED / Remita flow** (original) | **Multi-disco flow** (added 2026-09-21) |
+|---|---|---|
+| Resource | `JedCustomerRequest` | `InstallationRequest` |
+| Key | `accountNumber` | integer `id` (disco-scoped) |
+| Statuses | `INITIATED → PAID → COMPLETED` | `PENDING → ASSIGNED → IN_PROGRESS → INSTALLED → EXPORTED` (+ `FAILED`, `CANCELLED`) |
+| Endpoints | `/external/jed/*` | `/discos`, `/imports`, `/assignments`, `/installations` |
+| Installer view | `/dashboard` — a **shared** queue every installer sees | `/my-jobs` — genuinely **assigned** to that installer |
+| Admin routes | `/installations` ("Installations (JED)") | `/installation-requests`, `/imports`, `/assignments` |
+| Status helpers | `isAwaitingInstallationStatus`/`isCompletedStatus` (`utils/statusBadge.js`) | `getAvailableActions`/`installationStatusLabel` (`utils/installationStatus.js`) |
+
+The JED endpoints and screens are **unchanged** — don't "unify" the two without a backend decision.
+
+**Rules specific to the multi-disco flow:**
+
+1. **`installationDate` is a plain `YYYY-MM-DD` calendar date, not an instant.** Never put it
+   through `new Date(...).toISOString()` — that shifts it a day earlier in any negative-offset
+   timezone (proven: `new Date('2026-09-07')` renders as the 6th in America/Los_Angeles). Use
+   `toDateInputValue`/`formatPlainDate` from `utils/date.js`. `createdAt`/`assignedAt`/`reportedAt`
+   *are* real ISO instants — use `formatDateTime` for those.
+2. **Check the body, not the status code.** Imports and assignments are *partial success*: a 201 can
+   still carry rejected rows, and a 200 means nothing landed. Always render through
+   `BatchResultSummary` / `summarizeBatchResult()` so per-row errors reach the operator.
+3. **Only offer transitions the current status allows** (`getAvailableActions`). There is no force
+   flag; an illegal transition is a 400.
+4. **Meter and account numbers are strings** — `"0239110006909"` loses its leading zero if coerced
+   with `Number()`. SIM serials are 19 digits, beyond JS's safe-integer range.
+5. **A meter has two independent axes:** `status` (`AVAILABLE`…, shared with the JED flow) and
+   `assignmentStatus` (`UNASSIGNED/ASSIGNED/USED/…`, who holds it). A meter out with an installer is
+   still `AVAILABLE`. For "is it in the installer's hands?", read `assignmentStatus`.
+6. **User ids are UUIDs** (since 2026-09-21) — opaque strings, never coerced to numbers.
+7. **Meters and jobs are dispatched separately** — there is no meter-to-job pairing. The installer
+   names the meter they used at report time.
+8. **`PUT /discos/{code}/import-mapping|export-template` replace the entire object.** Read first,
+   edit, send it whole — a partial PUT truncates the disco's config and breaks later imports.
+
 ## Business workflow
 
 Only these statuses exist on the real backend — do not invent intermediate ones:
@@ -63,7 +103,7 @@ Exactly three, matching the real API's `User.role` enum (uppercase, used as-is):
 
 - **SUPERADMIN** — everything `ADMIN` has, plus the only role permitted to create/edit `ADMIN` or `SUPERADMIN` accounts (enforced client-side in `UserManagement.jsx` **and** by the real backend).
 - **ADMIN** — manages users (except privileged roles), confirms/reconciles payments, runs reports, configures meter types/settings/API keys, manages meter inventory, manages installations.
-- **INSTALLER** — sees the shared "Awaiting Installation"/"Completed" queue (`InstallerDashboard.jsx`, mounted at `/dashboard` for this role), completes installs, uploads Excel files. Cannot reach `/installations`, `/users`, `/reports`, `/payments`, `/settings` — those routes are gated to `permissions.isAdmin` in `App.jsx`. The Admin/Super Admin 3-minute idle-session timeout (`src/hooks/useAdminIdleTimeout.js`) explicitly does **not** apply to Installer.
+- **INSTALLER** — sees the shared "Awaiting Installation"/"Completed" queue (`InstallerDashboard.jsx`, mounted at `/dashboard` for this role), completes installs, and reports problems through the Complaint Form (`/complaints`, Installer-only — see "Pending" in `PROJECT_CONTEXT.md`: the backend has no complaints API yet, so it validates and produces a copyable summary but cannot record anything). **Installer does NOT have Uploads** (removed 2026-09-21: `UPLOADS.EXCEL` is no longer in the Installer permission set, so the sidebar item, the `/uploads` route guard and `ExcelUpload`'s own check all deny it). Cannot reach `/installations`, `/schedule`, `/uploads`, `/users`, `/reports`, `/payments`, `/settings` — gated in `App.jsx` (`permissions.isAdmin`, or `canUploadExcel`/`canViewSchedule`, which only admin-tier holds). The session's role is **verified server-side on every load** (`AuthContext` calls `GET /auth/profile` and trusts only that response — never the client-editable `localStorage.jedUser`). The Admin/Super Admin 3-minute idle-session timeout (`src/hooks/useAdminIdleTimeout.js`) explicitly does **not** apply to Installer.
 
 ## Development rules
 

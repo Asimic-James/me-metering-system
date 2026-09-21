@@ -36,7 +36,26 @@ export const PERMISSIONS = Object.freeze({
     VIEW: 'installations:view',
     VIEW_ALL: 'installations:view_all',
     MANAGE: 'installations:manage',
-    COMPLETE: 'installations:complete'
+    COMPLETE: 'installations:complete',
+    // Multi-disco flow (2026-09-21): an Installer's own assigned jobs and the
+    // meters in their hands (GET /installations/me/*, scoped by their JWT).
+    // Distinct from VIEW/COMPLETE above, which cover the JED queue.
+    FIELD_JOBS: 'installations:field_jobs'
+  },
+
+  // Multi-disco flow — admin-tier operations. Disco *configuration*
+  // (create/mapping/export-template) is SUPERADMIN-only per the API and is
+  // gated with `permissions.isSuperAdmin` at the point of use, the same way
+  // privileged user creation is — not as a permission here, because
+  // hasPermission() short-circuits to true for the whole admin tier.
+  IMPORTS: {
+    VIEW: 'imports:view',
+    RUN: 'imports:run'
+  },
+
+  ASSIGNMENTS: {
+    VIEW: 'assignments:view',
+    MANAGE: 'assignments:manage'
   },
   
   // User management permissions
@@ -81,6 +100,16 @@ export const PERMISSIONS = Object.freeze({
   PAYMENTS: {
     VIEW: 'payments:view',
     MANAGE: 'payments:manage'
+  },
+
+  // Complaints — an Installer reports a problem with a job. CREATE and
+  // VIEW_OWN are the Installer's; MANAGE (review/triage/resolve everyone's)
+  // is admin-tier and is reserved for when the backend provides a complaints
+  // API — there is nothing for it to act on yet.
+  COMPLAINTS: {
+    CREATE: 'complaints:create',
+    VIEW_OWN: 'complaints:view_own',
+    MANAGE: 'complaints:manage'
   }
 });
 
@@ -129,7 +158,18 @@ const ADMIN_TIER_PERMISSIONS = [
 
   // Payments - Full access
   PERMISSIONS.PAYMENTS.VIEW,
-  PERMISSIONS.PAYMENTS.MANAGE
+  PERMISSIONS.PAYMENTS.MANAGE,
+
+  // Complaints - review/manage (see PERMISSIONS.COMPLAINTS)
+  PERMISSIONS.COMPLAINTS.CREATE,
+  PERMISSIONS.COMPLAINTS.VIEW_OWN,
+  PERMISSIONS.COMPLAINTS.MANAGE,
+
+  // Multi-disco flow - spreadsheet import and installer dispatch
+  PERMISSIONS.IMPORTS.VIEW,
+  PERMISSIONS.IMPORTS.RUN,
+  PERMISSIONS.ASSIGNMENTS.VIEW,
+  PERMISSIONS.ASSIGNMENTS.MANAGE
 ];
 
 // Role-based permissions mapping
@@ -160,9 +200,26 @@ const ROLE_PERMISSIONS = Object.freeze({
     // canViewSchedule permission, so removing it here blocks direct-URL
     // access too.)
 
-    // Installer does use Uploads (bulk Excel meter registration) — a
-    // separate feature from Meter Schedule.
-    PERMISSIONS.UPLOADS.EXCEL
+    // Uploads (bulk Excel meter registration) is deliberately NOT granted to
+    // Installer either (removed 2026-09-20 — it used to hold
+    // UPLOADS.EXCEL). Same mechanism as Meter Schedule above: the sidebar
+    // item, the /uploads route guard (App.jsx) and ExcelUpload's own
+    // component-level check all read this one permission, so omitting it
+    // here removes the tab, blocks direct-URL access and blocks rendering
+    // the page in one place. Client-side only — see Security.md for the
+    // backend-enforcement caveat on POST /meters/upload and /uploads/*.
+
+    // Complaint form (report a problem that blocks/delays an installation).
+    // Installer-only by design: a complaint must be attributable to the
+    // installer who raised it. The backend has no complaints endpoint yet
+    // (API_GAP_REPORT.md), so this only gates the form itself.
+    PERMISSIONS.COMPLAINTS.CREATE,
+    PERMISSIONS.COMPLAINTS.VIEW_OWN,
+
+    // Multi-disco flow: the installer's own dispatched jobs and meters. The
+    // API scopes both to the caller's token, so this grants no visibility of
+    // anyone else's work.
+    PERMISSIONS.INSTALLATIONS.FIELD_JOBS
   ])
 });
 
@@ -176,7 +233,13 @@ const PAGE_ACCESS = Object.freeze({
   settings: [PERMISSIONS.SETTINGS.VIEW],
   // Admin-only by omission from the installer Set above — same pattern
   // already used for users/reports/settings, no special-casing needed.
-  payments: [PERMISSIONS.PAYMENTS.VIEW]
+  payments: [PERMISSIONS.PAYMENTS.VIEW],
+  complaints: [PERMISSIONS.COMPLAINTS.CREATE],
+  // Multi-disco flow
+  imports: [PERMISSIONS.IMPORTS.VIEW],
+  assignments: [PERMISSIONS.ASSIGNMENTS.VIEW],
+  'installation-requests': [PERMISSIONS.INSTALLATIONS.VIEW_ALL],
+  'my-jobs': [PERMISSIONS.INSTALLATIONS.FIELD_JOBS]
 });
 
 // Permission check with caching
@@ -317,7 +380,15 @@ export const getPermissionDisplayName = (permission) => {
     [PERMISSIONS.UPLOADS.EXCEL]: 'Upload Excel Files',
     [PERMISSIONS.UPLOADS.FILES]: 'Upload Files',
     [PERMISSIONS.PAYMENTS.VIEW]: 'View Payments',
-    [PERMISSIONS.PAYMENTS.MANAGE]: 'Manage Payments'
+    [PERMISSIONS.PAYMENTS.MANAGE]: 'Manage Payments',
+    [PERMISSIONS.COMPLAINTS.CREATE]: 'Submit Complaints',
+    [PERMISSIONS.COMPLAINTS.VIEW_OWN]: 'View Own Complaints',
+    [PERMISSIONS.COMPLAINTS.MANAGE]: 'Manage Complaints',
+    [PERMISSIONS.INSTALLATIONS.FIELD_JOBS]: 'View Own Dispatched Jobs',
+    [PERMISSIONS.IMPORTS.VIEW]: 'View Imports',
+    [PERMISSIONS.IMPORTS.RUN]: 'Run Spreadsheet Imports',
+    [PERMISSIONS.ASSIGNMENTS.VIEW]: 'View Assignments',
+    [PERMISSIONS.ASSIGNMENTS.MANAGE]: 'Assign Meters and Jobs'
   };
   
   return names[permission] || permission;

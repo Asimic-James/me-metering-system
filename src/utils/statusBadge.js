@@ -27,6 +27,24 @@ export const STATUS_BADGE_STYLES = {
   PAID_COMPLETED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   FAILED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
   CANCELLED: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200',
+
+  // Multi-disco installation flow (2026-09-21). PENDING/FAILED/CANCELLED are
+  // shared with the entries above — same meaning, same colour. Same rule as
+  // the rest of this map: never gold/amber (the brand hue), and the
+  // progression reads left-to-right dispatched → working → done → delivered.
+  ASSIGNED: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300',
+  IN_PROGRESS: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300',
+  INSTALLED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  EXPORTED: 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300',
+
+  // Meter assignmentStatus (who holds the meter) + stock status.
+  UNASSIGNED: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200',
+  USED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  RETURNED: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+  LOST: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  AVAILABLE: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  FAULTY: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  RETIRED: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200',
 };
 
 /**

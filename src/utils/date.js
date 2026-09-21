@@ -83,4 +83,37 @@ export function getRecentDaysRange(days) {
   return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
 }
 
-export default { parseTimestamp, formatDateTime, formatDateOnly };
+// ---------------------------------------------------------------------------
+// PLAIN DATES ('YYYY-MM-DD', no timezone)
+//
+// The multi-disco installation flow's `installationDate` is a calendar date,
+// not an instant. Running one through `new Date(...).toISOString()` shifts it
+// to the previous day in WAT (+01:00) and anywhere else east of UTC, so these
+// two helpers keep such values in local calendar terms and never convert.
+// Use parseTimestamp/formatDateTime for real timestamps (createdAt, assignedAt,
+// reportedAt); use these for date-only fields.
+// ---------------------------------------------------------------------------
+
+/** Today (or a given Date) as 'YYYY-MM-DD' in LOCAL time — for <input type="date">. */
+export function toDateInputValue(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Display a 'YYYY-MM-DD' plain date without any timezone conversion. */
+export function formatPlainDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ''));
+  if (!match) return value ? formatDateOnly(value) : '-';
+  const [, y, m, d] = match;
+  // Constructed in local time (not Date.parse, which reads a bare
+  // 'YYYY-MM-DD' as UTC midnight and can render as the day before).
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
+  if (Number.isNaN(date.getTime())) return '-';
+  try {
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
+  } catch {
+    return `${y}-${m}-${d}`;
+  }
+}
+
+export default { parseTimestamp, formatDateTime, formatDateOnly, toDateInputValue, formatPlainDate };
