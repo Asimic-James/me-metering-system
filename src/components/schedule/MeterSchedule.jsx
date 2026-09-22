@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import { formatDateOnly } from '../../utils/date';
 import { unwrapListResponse } from '../../utils/unwrapListResponse';
+import { getErrorMessage } from '../../utils/errorMessage';
+import { downloadServerXlsx } from '../../utils/xlsx';
 
 // Constants for better maintainability
 const PRIORITY_CONFIG = {
@@ -196,7 +198,7 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
       } catch (err) {
         if (requestIdRef.current !== requestId) return;
         console.error('[MeterData] Error searching meters:', err);
-        setError(err.message || 'Failed to search meters');
+        setError(getErrorMessage(err, 'Failed to search meters'));
       } finally {
         if (requestIdRef.current === requestId) setLoading(false);
       }
@@ -257,7 +259,7 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
     } catch (err) {
       if (requestIdRef.current !== requestId) return;
       console.error('[MeterData] Error fetching meters:', err);
-      setError(err.message || 'Failed to load meters');
+      setError(getErrorMessage(err, 'Failed to load meters'));
     } finally {
       if (requestIdRef.current === requestId) setLoading(false);
     }
@@ -296,14 +298,9 @@ const useMeterData = (initialFilters = {}, enabled = true) => {
       // status/phaseType, just not a search term.
 
       const blob = await JEDApiService.exportMeters(params);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `meters-export-${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      // Meter/SIM numbers stored as numbers by the server are rewritten as
+      // text before saving (utils/xlsx.js) — no scientific notation in Excel.
+      await downloadServerXlsx(blob, `meters-export-${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (err) {
       console.error('[MeterData] Export failed:', err);
       setError('Failed to export meters');
@@ -403,7 +400,7 @@ const useMeterStatistics = () => {
         console.warn('[MeterSchedule] Meter statistics endpoint not found');
         setError('Meter statistics service unavailable');
       } else {
-        setError(err.message || 'Failed to load meter statistics');
+        setError(getErrorMessage(err, 'Failed to load meter statistics'));
       }
     } finally {
       setLoading(false);
@@ -1115,7 +1112,7 @@ const MeterInventory = ({ meterInventory, canManageSchedule }) => {
       setMeterToDelete(null);
     } catch (err) {
       console.error('[MeterInventory] Failed to delete meter:', err);
-      setDeleteError(err.message || 'Failed to delete meter');
+      setDeleteError(getErrorMessage(err, 'Failed to delete meter'));
     } finally {
       setDeletingNumber(null);
     }
@@ -1153,11 +1150,10 @@ const MeterInventory = ({ meterInventory, canManageSchedule }) => {
       <InfoModal
         isOpen={!!meterToAssign}
         onClose={() => setMeterToAssign(null)}
-        title="Meter Assignment Not Available Yet"
+        title="Assign meters from Assignments"
       >
         <p>
-          Meter assignment isn't available yet. A meter is linked to a job automatically
-          when an installer completes the installation.
+          Go to Assignments to dispatch this meter to an installer.
         </p>
       </InfoModal>
 

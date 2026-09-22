@@ -401,11 +401,10 @@ function AdminInstallations() {
       <InfoModal
         isOpen={!!assignTarget}
         onClose={() => setAssignTarget(null)}
-        title="Installer Assignment Not Available Yet"
+        title="JED requests can't be assigned yet"
       >
         <p>
-          Installer assignment isn't available yet. Every installer currently sees the
-          same shared "Awaiting Installation" queue.
+          All installers can see and complete JED requests from the Awaiting Installation queue.
         </p>
       </InfoModal>
     </div>

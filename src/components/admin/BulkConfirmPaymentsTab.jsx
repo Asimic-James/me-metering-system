@@ -25,10 +25,11 @@
 import { useState } from 'react';
 import jedApi from '../services/api';
 import { ENDPOINTS } from '../services/api.config.js';
-import { downloadCsv } from '../../utils/csv';
+import { downloadXlsx, COLUMN_TYPES } from '../../utils/xlsx';
 import { validateUploadFile } from '../../utils/fileValidation';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
 import ConfirmationModal from '../common/ConfirmationModal';
+import { getErrorMessage } from '../../utils/errorMessage';
 import {
   UploadCloud, AlertCircle, CheckCircle, XCircle, FileDown, Loader2,
   Info, ListChecks
@@ -116,11 +117,17 @@ function StatCard({ icon: Icon, label, value, color = 'gray' }) {
   );
 }
 
-const exportErrorsToCSV = (errorRows) => {
-  const headers = ['Row', 'Identifier', 'Error'];
-  const rows = errorRows.map((r) => [r.index + 1, r.identifier || '', r.error || '']);
-  downloadCsv('bulk_confirm_errors.csv', headers, rows);
-};
+// Excel, not CSV: the identifier is an account number or 12-digit RRR, which
+// Excel would otherwise strip of leading zeros or show in scientific notation.
+const exportErrorsToExcel = (errorRows) => downloadXlsx('bulk_confirm_errors.xlsx', [{
+  name: 'Errors',
+  columns: [
+    { header: 'Row', key: 'row', type: COLUMN_TYPES.NUMBER },
+    { header: 'Account Number / RRR', key: 'identifier', type: COLUMN_TYPES.TEXT },
+    { header: 'Error', key: 'error', type: COLUMN_TYPES.TEXT },
+  ],
+  rows: errorRows.map((r) => ({ row: r.index + 1, identifier: r.identifier || '', error: r.error || '' })),
+}]).catch((err) => console.error('[BulkConfirmPayments] Error export failed:', err));
 
 function BulkConfirmPaymentsTab() {
   const { notifyDataChanged } = useDataRefresh();
@@ -216,7 +223,7 @@ function BulkConfirmPaymentsTab() {
       } else if (String(err?.message || '').toLowerCase().includes('network')) {
         setParseError('Network error — check your connection and try again.');
       } else {
-        setParseError(err?.message || 'Failed to parse the uploaded file. Please check the file and try again.');
+        setParseError(getErrorMessage(err, "Couldn't read this file. Check it and try again."));
       }
     } finally {
       setParsing(false);
@@ -248,8 +255,8 @@ function BulkConfirmPaymentsTab() {
         }
         rowResults.push({ ...row, success: true });
       } catch (err) {
-        const message = String(err?.message || 'Failed to confirm payment');
-        rowResults.push({ ...row, success: false, error: message });
+        const message = String(err?.message || '');
+        rowResults.push({ ...row, success: false, error: getErrorMessage(err, "Couldn't confirm this payment.") });
 
         // The session's JWT is gone (jedApi already cleared it) — further
         // calls will just fail identically, so stop the batch instead of
@@ -476,7 +483,7 @@ function BulkConfirmPaymentsTab() {
                   <h4 className="font-medium text-gray-900 dark:text-white text-sm">Failed Rows ({errorRows.length})</h4>
                   <button
                     type="button"
-                    onClick={() => exportErrorsToCSV(errorRows)}
+                    onClick={() => exportErrorsToExcel(errorRows)}
                     className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                   >
                     <FileDown className="w-4 h-4" />

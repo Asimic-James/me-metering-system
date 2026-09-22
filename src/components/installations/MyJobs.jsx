@@ -31,14 +31,19 @@ import {
   installationStatusLabel,
   getCoordinates,
   isOpenJob,
+  isInstalledStatus,
 } from '../../utils/installationStatus';
 
+// "Awaiting installation" and "Completed" use the same definitions as the
+// Installer Dashboard cards (summarizeInstallerJobs). Completed includes
+// EXPORTED — previously an exported job appeared under no filter at all.
+const byStatus = (s) => (j) => String(j.status).toUpperCase() === s;
 const JOB_FILTERS = [
-  { id: 'OPEN', label: 'To do' },
-  { id: INSTALLATION_STATUS.ASSIGNED, label: 'Assigned' },
-  { id: INSTALLATION_STATUS.IN_PROGRESS, label: 'In Progress' },
-  { id: INSTALLATION_STATUS.INSTALLED, label: 'Installed' },
-  { id: INSTALLATION_STATUS.FAILED, label: 'Failed' },
+  { id: 'OPEN', label: 'Awaiting installation', match: (j) => isOpenJob(j.status) },
+  { id: INSTALLATION_STATUS.ASSIGNED, label: 'Assigned', match: byStatus(INSTALLATION_STATUS.ASSIGNED) },
+  { id: INSTALLATION_STATUS.IN_PROGRESS, label: 'In Progress', match: byStatus(INSTALLATION_STATUS.IN_PROGRESS) },
+  { id: 'COMPLETED', label: 'Completed', match: (j) => isInstalledStatus(j.status) },
+  { id: INSTALLATION_STATUS.FAILED, label: 'Failed', match: byStatus(INSTALLATION_STATUS.FAILED) },
 ];
 
 // ---- Fail modal (reason is required by the API) ----
@@ -286,20 +291,23 @@ function MyJobs() {
   }, [refreshKey, refreshSignal]);
 
   const visibleJobs = useMemo(() => {
-    const byStatus = filter === 'OPEN'
-      ? jobs.filter((j) => isOpenJob(j.status))
-      : jobs.filter((j) => String(j.status).toUpperCase() === filter);
+    const match = (JOB_FILTERS.find((f) => f.id === filter) || JOB_FILTERS[0]).match;
+    const filtered = jobs.filter(match);
 
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return byStatus;
-    return byStatus.filter((j) =>
+    if (!term) return filtered;
+    return filtered.filter((j) =>
       [j.accountNumber, j.customerName, j.meterNumber, j.customerAddress]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(term))
     );
   }, [jobs, filter, searchTerm]);
 
-  const openCount = useMemo(() => jobs.filter((j) => isOpenJob(j.status)).length, [jobs]);
+  const filterCounts = useMemo(
+    () => Object.fromEntries(JOB_FILTERS.map((f) => [f.id, jobs.filter(f.match).length])),
+    [jobs]
+  );
+  const openCount = filterCounts.OPEN;
   const heldMeters = useMemo(
     () => meters.filter((m) => String(m.assignmentStatus || '').toUpperCase() !== 'USED'),
     [meters]
@@ -445,7 +453,7 @@ function MyJobs() {
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
-                    {f.label}
+                    {f.label} ({filterCounts[f.id]})
                   </button>
                 ))}
               </div>

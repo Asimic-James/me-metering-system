@@ -11,6 +11,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import JEDApiService from '../services/api';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 const VerificationModal = ({ 
   isOpen, 
@@ -96,7 +97,7 @@ const VerificationModal = ({
       setCountdown(60); // 60 seconds cooldown
     } catch (err) {
       console.error('[Verification] Failed to send OTP:', err);
-      setError(err.message || 'Failed to send OTP');
+      setError(getErrorMessage(err, 'Failed to send OTP'));
     } finally {
       setResending(false);
     }
@@ -152,7 +153,7 @@ const VerificationModal = ({
       } else if (errorMsg.includes('expired')) {
         setError('OTP has expired. Please request a new one.');
       } else {
-        setError(errorMsg);
+        setError(getErrorMessage(err, 'Verification failed. Please try again.'));
       }
       
       // Clear OTP on error

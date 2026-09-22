@@ -7,6 +7,7 @@ import { usePermissions } from '../auth/usePermissions';
 import { ROLES, getRoleMetadata } from '../auth/permissions';
 import jedApi from '../services/api';
 import { fetchAllPages } from '../../utils/fetchAllPages';
+import { getErrorMessage } from '../../utils/errorMessage';
 import {
   Users,
   UserPlus,
@@ -441,7 +442,7 @@ function UserManagement() {
       await fetchUsers();
     } catch (err) {
       console.error('[UserManagement] Error creating user:', err);
-      setError(err.message || 'Failed to create user');
+      setError(getErrorMessage(err, 'Failed to create user'));
     } finally {
       setActionLoading(null);
     }
@@ -476,7 +477,7 @@ function UserManagement() {
       await fetchUsers();
     } catch (err) {
       console.error('[UserManagement] Error updating user:', err);
-      setError(err.message || 'Failed to update user');
+      setError(getErrorMessage(err, 'Failed to update user'));
     } finally {
       setActionLoading(null);
     }
@@ -500,7 +501,7 @@ function UserManagement() {
       setUserToDelete(null); // Close modal on success
     } catch (err) {
       console.error('[UserManagement] Error deleting user:', err);
-      setError(err.message || 'Failed to delete user');
+      setError(getErrorMessage(err, 'Failed to delete user'));
       // Keep the modal open on error so the user sees the message
     } finally {
       setActionLoading(null);
@@ -517,7 +518,7 @@ function UserManagement() {
       setViewUserDetail(response?.data || response?.user || response || null);
     } catch (err) {
       console.error('[UserManagement] Error fetching user detail:', err);
-      setViewUserError(err.message || 'Failed to load user details');
+      setViewUserError(getErrorMessage(err, 'Failed to load user details'));
     } finally {
       setViewUserLoading(false);
     }
@@ -545,7 +546,7 @@ function UserManagement() {
       setUserToResetPassword(null); // Close modal on success
     } catch (err) {
       console.error('[UserManagement] Error resetting password:', err);
-      setError(err.message || 'Failed to reset password');
+      setError(getErrorMessage(err, 'Failed to reset password'));
       // Keep the modal open on error so the user sees the message
     } finally {
       setActionLoading(null);

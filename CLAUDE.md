@@ -25,7 +25,8 @@ Versions below are read directly from `package.json` — verify there before ass
 | Icons | lucide-react 0.548.0 |
 | PWA | vite-plugin-pwa 1.3.0 (Workbox-generated service worker) |
 | Linting | ESLint 9.36.0, flat config (`eslint.config.js`), React Hooks + React Refresh plugins |
-| Testing | **None.** No test runner, no test files, anywhere in this repo. See `CodeBaseAudit.md` for the risk this creates |
+| Testing | Vitest 3 + React Testing Library + jsdom (dev-only, added 2026-09-21). `npm test` runs `src/**/__tests__/*.test.{js,jsx}`: unit tests for the installation-scope, meter-capacity, meter-inventory, payment-summary, error-message, xlsx, completed-report and pagination utils, plus component tests for Installation Requests, Assignments, InstallationDetail, Report Installation and the installer job summary, all against a mocked `jedApi`. `scripts/excel-check/` generates sample workbooks with the real export code and checks them in Microsoft Excel over COM (Windows with Excel only). Coverage is still narrow; see `CodeBaseAudit.md` for the untested high-risk areas |
+| Spreadsheets | ExcelJS 4 (lazy-loaded chunk, excluded from the PWA precache), with an npm `overrides` pin of `uuid` ≥ 11.1.1 for a moderate advisory in ExcelJS's own `uuid` dependency |
 | Other | `sharp` (dev-only, PWA icon generation script) |
 
 ## Architecture
@@ -63,6 +64,24 @@ easiest way to break this app.
 | Status helpers | `isAwaitingInstallationStatus`/`isCompletedStatus` (`utils/statusBadge.js`) | `getAvailableActions`/`installationStatusLabel` (`utils/installationStatus.js`) |
 
 The JED endpoints and screens are **unchanged** — don't "unify" the two without a backend decision.
+
+**Installation Requests shows both, side by side (2026-09-21).** `/installation-requests` loads
+`InstallationRequest`s *and* `JedCustomerRequest`s. Each row keeps its own real status, and the two status
+sets don't overlap, so one filter covers both. Scoping, attribution, filtering and sorting live in
+`utils/installationScope.js`. A Remita request belongs to a registered disco only when its own
+`discoCode` exactly matches that disco's code. Otherwise it's JED's. The dropdown adds a separate
+"JED (Remita requests)" entry only when no registered disco code starts with `JED`. Only imported
+jobs can be assigned. JED rows open the explanatory modal instead.
+
+**Money and meter figures come from pure utils, never ad hoc:** `utils/paymentSummary.js`
+(collected = PAID+COMPLETED, revenue due = COMPLETED only, deduped by RRR/id/account, invalid amounts
+skipped). Only Remita requests carry `amount`; imported jobs have none. `utils/meterCapacity.js`: one
+meter per open job, minus meters the installer holds. Dispatch may be partial but never over. This is
+enforced client-side only, because the API doesn't cap it. `utils/meterInventory.js` decides which
+meters are dispatchable: `status` AVAILABLE and `assignmentStatus` not ASSIGNED/USED/LOST. The
+Assignments picker offers only those. Installer job counts (Installer Dashboard cards, My Jobs
+filters) both come from `summarizeInstallerJobs` in `utils/installationStatus.js`:
+awaiting = ASSIGNED+IN_PROGRESS, completed = INSTALLED+EXPORTED.
 
 **Rules specific to the multi-disco flow:**
 
@@ -109,7 +128,7 @@ Exactly three, matching the real API's `User.role` enum (uppercase, used as-is):
 
 1. **Read `PROJECT_CONTEXT.md` before starting any non-trivial task.** It documents what's actually implemented, what's a real API gap vs. a frontend bug already fixed, and why specific design decisions were made.
 2. **Inspect existing code before creating a new component, hook, or service method.** This app has already had multiple duplicate-removal passes (see `API_GAP_REPORT.md`'s "Cleaned up" sections) — check `Grep` for an existing implementation before writing a new one.
-3. **Reuse existing components** — `ConfirmationModal`/`InfoModal` for modals, the shared tab pattern, `statusBadge.js` for any status-to-color mapping, `currency.js`/`date.js` for formatting, `csv.js` (`downloadCsv`/`buildCsv`/`sanitizeCsvCell`) for any CSV export, `fileValidation.js` (`validateUploadFile`) for any file-picker upload. Don't reinvent formatting, badge logic, CSV building, or upload validation per-page — the CSV/upload-validation ones specifically exist because three independent, differently-buggy copies (missing escaping, no size limit) were found and consolidated during the 2026-08-26 security pass; a fourth hand-rolled copy would reintroduce exactly that.
+3. **Reuse existing components** — `ConfirmationModal`/`InfoModal` for modals, the shared tab pattern, `statusBadge.js` for any status-to-color mapping, `currency.js`/`date.js` for formatting, `xlsx.js` (`downloadXlsx` with typed columns, `downloadServerXlsx` for files the API returns) for **every** spreadsheet export, `errorMessage.js` (`getErrorMessage`) for every error shown to a user, `fileValidation.js` (`validateUploadFile`) for any file-picker upload. Don't reinvent formatting, badge logic, export building, error text or upload validation per-page. **Exports are `.xlsx`, never CSV** (since 2026-09-21; `csv.js` was removed). Excel reads CSV cells untyped, dropping leading zeros from meter/account numbers and showing SIM serials in scientific notation. Identifier columns must use `COLUMN_TYPES.TEXT`; amounts use `CURRENCY` and GPS uses `COORDINATE`. Show users `getErrorMessage(err, 'Short fallback.')`, never `err.message`: it drops server 500 bodies, validation internals and technical text, and callers still `console.error` the full error.
 4. **Do not invent API endpoints.** Every endpoint this app calls is listed in `src/components/services/api.config.js` and cross-referenced against the live OpenAPI spec (`https://api.memetering.com/api-docs`, embedded JSON at `/api-docs/swagger-ui-init.js` — there's no separate `/api-docs.json`). If a feature needs an endpoint that doesn't exist, that's an API gap — document it in `API_GAP_REPORT.md`, don't fabricate a plausible-looking path.
 5. **Do not fabricate API data.** Every stat, badge, or field shown must trace back to a real API response field. If a field the UI wants doesn't exist on the real schema, either drop it or clearly mark it as unavailable — don't compute a fake percentage or invent a plausible-looking value.
 6. **Do not duplicate business logic.** Status-to-label mapping lives in `statusBadge.js`. Currency formatting lives in `utils/currency.js`. Role/permission checks go through `usePermissions()`, never a re-derived `user.role === 'ADMIN'` check scattered across components.
@@ -117,7 +136,7 @@ Exactly three, matching the real API's `User.role` enum (uppercase, used as-is):
 8. **Do not use browser storage as a replacement for backend persistence.** `localStorage` here is used only for session/preference state that's legitimately client-side (JWT, active API key, theme, sidebar-collapsed, idle-session deadline) — never for business data that needs to be authoritative or cross-device (installer assignment was explicitly *not* implemented this way, twice, for exactly this reason — see `API_GAP_REPORT.md`).
 9. **Preserve role-based access control.** Any new route needs an inline permission gate in `App.jsx` matching the existing pattern; any new nav item needs an `accessible(userRole)` check in `Navigation.jsx`'s `NAVIGATION_CONFIG`.
 10. **Remove obsolete code when functionality is intentionally retired** — the route, the nav item, the component file(s), the now-unused permission constants, and any now-dead API method/endpoint config exclusive to that feature. Verify with a repo-wide search first; keep anything still used elsewhere (see the several "was X used elsewhere before deleting?" passes documented in `API_GAP_REPORT.md` and `PROJECT_CONTEXT.md`).
-11. **Run lint and build after any non-trivial change** (`npm run lint`, `npm run build`) — there is no test suite or type checker to catch regressions otherwise, so these two commands are the only automated safety net this repo has.
+11. **Run lint, tests and build after any non-trivial change** (`npm run lint`, `npm test`, `npm run build`). There's no type checker, and the test suite only covers the areas listed under Technology, so lint + build are still the only safety net for everything else. When you add business logic, put it in a pure util and add a test beside the existing ones.
 12. **When adding a feature the real API doesn't support**, follow the pattern already established for installer/meter assignment: build the real, working parts (selection UI, forms, validation), and make the unsupported action open a clear explanatory modal instead of a fake success state or a `localStorage`-backed simulation.
 
 ## Where to look next

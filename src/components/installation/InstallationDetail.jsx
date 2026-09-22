@@ -4,8 +4,8 @@
 // completed jobs show a read-only "Paid & Completed" summary.
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../auth/usePermissions';
+import { useDataRefresh } from '../contexts/DataRefreshContext';
 import JEDApiService from '../services/api';
 import RequestInfoPanel from './RequestInfoPanel';
 import CompletionDetails from './CompletionDetails';
@@ -13,7 +13,8 @@ import PaymentTimeline from '../common/PaymentTimeline';
 import GenerateRRRModal from '../common/GenerateRRRModal';
 import StatusBadge from '../common/StatusBadge';
 import { buildRrrPayload } from '../../utils/rrrPayload';
-import { isCompletedStatus } from '../../utils/statusBadge';
+import { isCompletedStatus, isAwaitingInstallationStatus } from '../../utils/statusBadge';
+import { getErrorMessage } from '../../utils/errorMessage';
 import {
   ArrowLeft,
   CheckCircle,
@@ -26,11 +27,26 @@ import {
 // Now imported from the shared, case-insensitive src/utils/statusBadge.js
 // so this stays consistent with AdminDashboard and InstallerDashboard.
 
+/**
+ * Short user-facing reason for a failed completion. The backend's own
+ * payment-confirmation check (POST /external/jed/complete-installation
+ * documents a 400 for "payment not confirmed") becomes a plain "not yet";
+ * the full server message stays in the console. The app has no confirmation
+ * rule of its own and cannot bypass the server's (see API_GAP_REPORT.md).
+ */
+function describeCompletionError(err) {
+  const message = getErrorMessage(err, "Couldn't complete this installation. Please try again.");
+  if (/confirm/i.test(message) && /pay/i.test(message)) {
+    return 'Installation cannot be completed yet. Payment confirmation is still pending.';
+  }
+  return message;
+}
+
 function InstallationDetail() {
   const { accountNumber } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const permissions = usePermissions();
+  const { notifyDataChanged } = useDataRefresh();
 
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -145,7 +161,7 @@ function InstallationDetail() {
       }
     } catch (err) {
       console.error('[InstallationDetail] generate payment reference failed:', err);
-      setGenError(err.message || 'Failed to generate payment reference');
+      setGenError(getErrorMessage(err, 'Failed to generate payment reference'));
     } finally {
       setGenLoading(false);
     }
@@ -160,7 +176,7 @@ function InstallationDetail() {
 
   const validate = () => {
     const errs = {};
-    if (!formData.actualMeterNo || String(formData.actualMeterNo).length !== 13) {
+    if (!/^\d{13}$/.test(String(formData.actualMeterNo || '').trim())) {
       errs.actualMeterNo = 'Meter Number must be exactly 13 digits';
     }
     if (!formData.actualSealNo || !String(formData.actualSealNo).trim()) {
@@ -172,27 +188,40 @@ function InstallationDetail() {
 
   const handleComplete = async () => {
     if (submitting || !validate()) return;
+    // Eligibility is payment, nothing else: any PAID request can be completed.
+    // JED's own confirmation step is not a precondition on this side.
+    if (!isAwaitingInstallationStatus(job?.status)) {
+      setSubmitError('Only paid requests can be completed. This request has not been paid yet.');
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
 
     try {
-      await JEDApiService.completeInstallation({
-        sealNo: formData.actualSealNo,
-        meterNo: formData.actualMeterNo,
-        accountNumber,
-        installationDate: new Date().toISOString(),
-        installerName: user?.name,
-        installerEmployeeId: user?.employeeId || user?.staffId || user?.id,
-        notes: formData.notes || 'Installation completed via installer app',
+      // Exactly the documented body of POST /external/jed/complete-installation
+      // (sealNo, meterNo, accountNumber — all required strings). This used to
+      // also send installationDate/installerName/installerEmployeeId/notes,
+      // none of which the endpoint accepts; extra keys risk a validation 400
+      // on a strict schema and were never stored anyway.
+      const response = await JEDApiService.completeInstallation({
+        sealNo: String(formData.actualSealNo).trim(),
+        meterNo: String(formData.actualMeterNo).trim(),
+        accountNumber: String(accountNumber),
       });
+      if (response?.success === false) {
+        throw new Error(response.message || 'The server did not confirm the installation.');
+      }
 
       setSubmitted(true);
-      setJob((prev) => (prev ? { ...prev, status: 'completed' } : prev));
+      // Show the status the API now reports rather than assuming it.
+      JEDApiService.clearCache();
+      fetchDetail();
+      notifyDataChanged();
 
-      setTimeout(() => navigate('/dashboard'), 1500);
+      setTimeout(() => navigate(permissions.isAdmin ? '/installations' : '/dashboard'), 1500);
     } catch (err) {
       console.error('[InstallationDetail] Failed to complete installation:', err);
-      setSubmitError(err.message || 'Failed to submit installation. Please try again.');
+      setSubmitError(describeCompletionError(err));
     } finally {
       setSubmitting(false);
     }
@@ -335,7 +364,20 @@ function InstallationDetail() {
         <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-6 text-center">
           <CheckCircle className="w-10 h-10 text-green-600 mx-auto mb-2" />
           <p className="text-green-800 dark:text-green-300 font-semibold">Installation submitted!</p>
-          <p className="text-green-700 dark:text-green-400 text-sm mt-1">Redirecting to your dashboard...</p>
+          <p className="text-green-700 dark:text-green-400 text-sm mt-1">
+            Confirmed by the server. Redirecting…
+          </p>
+        </div>
+      ) : !isAwaitingInstallationStatus(job.status) ? (
+        // ---- Not paid yet: nothing to complete ----
+        <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 rounded-lg p-4 sm:p-6 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Awaiting payment</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              This request can be completed as soon as its payment is recorded (status Paid). Nothing else is required first.
+            </p>
+          </div>
         </div>
       ) : (
         // ---- Pending: the actual "execute and mark complete" form ----

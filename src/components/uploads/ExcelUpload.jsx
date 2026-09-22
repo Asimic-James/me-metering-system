@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { PERMISSIONS, hasPermission } from '../auth/permissions';
 import jedApi from '../services/api';
 import { ENDPOINTS } from '../services/api.config.js';
-import { downloadCsv } from '../../utils/csv';
+import { downloadXlsx, COLUMN_TYPES } from '../../utils/xlsx';
 import { validateUploadFile } from '../../utils/fileValidation';
 import { getErrorMessage } from '../../utils/errorMessage';
 import { AlertCircle, Upload, Download, FileCheck2, FileX2, Percent, List, FileDown } from 'lucide-react';
@@ -278,7 +278,7 @@ function ExcelUpload() {
                   <div className="flex justify-between items-center mb-2">
                     <h4 className="font-medium text-gray-900 dark:text-white">Error Details ({uploadResult.errors.length})</h4>
                     <button
-                      onClick={() => exportErrorsToCSV(uploadResult.errors)}
+                      onClick={() => exportErrorsToExcel(uploadResult.errors)}
                       className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                     >
                       <FileDown className="w-4 h-4" />
@@ -352,10 +352,15 @@ const StatCard = ({ icon: Icon, label, value, color = 'gray' }) => {
   );
 };
 
-const exportErrorsToCSV = (errors) => {
-  const headers = ['Row', 'Meter Number', 'Error'];
-  const rows = errors.map(e => [e.row + 1, e.meterNumber, e.error]);
-  downloadCsv('upload_errors.csv', headers, rows);
-};
+// Excel, not CSV — meter numbers keep their leading zeros (see utils/xlsx.js).
+const exportErrorsToExcel = (errors) => downloadXlsx('upload_errors.xlsx', [{
+  name: 'Errors',
+  columns: [
+    { header: 'Row', key: 'row', type: COLUMN_TYPES.NUMBER },
+    { header: 'Meter Number', key: 'meterNumber', type: COLUMN_TYPES.TEXT },
+    { header: 'Error', key: 'error', type: COLUMN_TYPES.TEXT },
+  ],
+  rows: errors.map((e) => ({ row: e.row + 1, meterNumber: e.meterNumber, error: e.error })),
+}]).catch((err) => console.error('[ExcelUpload] Error export failed:', err));
 
 export default ExcelUpload;

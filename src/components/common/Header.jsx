@@ -6,6 +6,7 @@ import VerificationModal from '../auth/VerificationModal';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { getRoleMetadata } from '../auth/permissions';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 // Header-specific constants
 const HEADER_STYLES = {
@@ -83,7 +84,7 @@ const EditProfileForm = ({ profileData, onCancel, onSaved }) => {
       const response = await JEDApiService.updateProfile(form);
       onSaved(response?.data || response?.user || { ...profileData, ...form });
     } catch (err) {
-      setFormError(err.message || 'Failed to update profile');
+      setFormError(getErrorMessage(err, 'Failed to update profile'));
     } finally {
       setSubmitting(false);
     }
@@ -215,7 +216,7 @@ const ChangePasswordForm = ({ onCancel, onSaved }) => {
       });
       onSaved();
     } catch (err) {
-      setFormError(err.message || 'Failed to change password');
+      setFormError(getErrorMessage(err, 'Failed to change password'));
     } finally {
       setSubmitting(false);
     }
@@ -440,7 +441,7 @@ function Header({ user, onLogout, onMenuToggle, isMenuOpen }) {
       }
     } catch (err) {
       console.error('Failed to fetch profile:', err);
-      setProfileError(err.message || 'Could not load profile data.');
+      setProfileError(getErrorMessage(err, 'Could not load profile data.'));
     } finally {
       setProfileLoading(false);
     }

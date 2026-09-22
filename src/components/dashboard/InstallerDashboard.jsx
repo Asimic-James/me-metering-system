@@ -1,5 +1,7 @@
 // src/components/dashboard/InstallerDashboard.jsx
-// Installer-facing dashboard: tabbed Pending / Completed installations.
+// Installer-facing dashboard: summary cards for the installer's own assigned
+// jobs (InstallerJobSummary — same data and definitions as My Jobs), then the
+// tabbed Pending / Completed JED shared queue.
 // Mobile-first: card list by default, table layout from sm: breakpoint up.
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -10,6 +12,7 @@ import { isCompletedStatus, isAwaitingInstallationStatus } from '../../utils/sta
 import { fetchAllPages } from '../../utils/fetchAllPages';
 import StatusTabs from '../common/StatusTabs';
 import StatusBadge from '../common/StatusBadge';
+import InstallerJobSummary from './InstallerJobSummary';
 import {
   Wrench,
   Clock,
@@ -244,6 +247,8 @@ function InstallerDashboard() {
           <span className="hidden sm:inline text-sm font-medium">Refresh</span>
         </button>
       </div>
+
+      <InstallerJobSummary />
 
       {error && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 p-3 sm:p-4 rounded-r-lg flex items-start gap-3">

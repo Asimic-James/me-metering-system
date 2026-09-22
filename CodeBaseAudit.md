@@ -106,14 +106,14 @@ None of these are "broken" — they were all read start-to-finish during this au
 
 ## Testing
 
-- **Framework:** **none.** No `vitest`/`jest`/`@testing-library/*`/`playwright`/`cypress` in `package.json` (production or dev dependencies), and no `*.test.*`/`*.spec.*` files anywhere in `src/`.
-- **Existing coverage:** 0%.
-- **Missing critical tests:** given there are none, prioritizing by blast radius if a suite were introduced:
+- **Framework (added 2026-09-21):** Vitest + React Testing Library + jsdom, dev-only. Run with `npm test`. Tests live in `src/**/__tests__/`.
+- **Existing coverage (narrow):** unit tests for `utils/installationScope.js`, `utils/meterCapacity.js`, `utils/paymentSummary.js` and `utils/fetchAllPages.js`. Component tests render `InstallationRequests.jsx`, `AssignmentsPage.jsx` and `InstallationDetail.jsx`'s JED completion against a mocked `jedApi`. Item 4 below is now partly covered (JED completion only).
+- **Still missing, prioritized by blast radius:**
   1. `src/components/services/api.js` — response-envelope unwrapping, error-type mapping, retry/timeout behavior. This is the single highest-leverage place to add unit tests, since every page depends on it behaving correctly and it has no UI to "eyeball" when it's wrong.
   2. `src/components/auth/permissions.js` / `usePermissions.jsx` — the entire security-adjacent gating model. A regression here silently over- or under-grants access; worth a focused unit-test pass even before broader UI testing.
   3. `src/hooks/useAdminIdleTimeout.js` — timing-sensitive logic (deadline persistence across refresh, throttled extension, expiry detection) that's easy to subtly break and hard to notice broke, short of a dedicated test or a manual multi-minute wait.
   4. Installation-completion flow (`InstallationDetail.jsx`'s `completeInstallation` call) and payment-confirmation flow (`ConfirmPaymentTab.jsx`) — these are the two irreversible, real-money/real-installation-adjacent mutations in the app.
-- **High-risk areas (given the above):** any change to `api.js`'s response handling, the permission model, or the idle-timeout hook currently has zero automated protection — every prior change to these areas this session was validated by manual/scripted browser testing rather than a repeatable suite.
+- **High-risk areas (given the above):** any change to `api.js`'s response handling, the permission model, or the idle-timeout hook still has zero automated protection — every prior change to these areas this session was validated by manual/scripted browser testing rather than a repeatable suite.
 
 ## Technical Debt Summary
 
@@ -121,12 +121,13 @@ None of these are "broken" — they were all read start-to-finish during this au
 *(none identified — no data-loss, security-bypass, or crash-on-normal-use defects were found during this audit)*
 
 ### HIGH
-- **No test suite at all**, for an app that handles payment confirmation and installation completion. See "Testing" above for the prioritized list of what to cover first. *(Location: whole repo. Impact: every refactor or dependency bump is validated only by manual testing. Remediation: introduce Vitest + React Testing Library, starting with `api.js` and `permissions.js`.)*
+- **Test suite is narrow** (introduced 2026-09-21; covers the installation-scope/capacity/payment utils and three pages, not `api.js`, permissions, the idle timeout or payment confirmation), for an app that handles payment confirmation and installation completion. See "Testing" above for the prioritized list of what to cover first. *(Location: whole repo. Impact: every refactor or dependency bump is validated only by manual testing. Remediation: introduce Vitest + React Testing Library, starting with `api.js` and `permissions.js`.)*
 - ~~`react-router-dom`/`react-router` (installed 7.9.6) has multiple published HIGH-severity advisories~~ — **fixed 2026-08-26**: `npm audit fix` bumped both to 7.18.2, within the already-declared `^7.9.6` range (no `package.json` change, non-breaking). `npm audit --omit=dev` now reports 0 vulnerabilities. See `Security.md`.
 
 ### MEDIUM
 - ~~**Repeated response-unwrapping logic** across 4 files~~ — **fixed 2026-08-27**: extracted to `src/utils/unwrapListResponse.js`, all four call sites (`InstallerDashboard.jsx`, `AdminInstallations.jsx`, `PaymentsPage.jsx`, `MeterSchedule.jsx`) now use it. See "Duplicate / repeated logic" above.
 - ~~`vercel.json` sets no security response headers~~ — **fixed 2026-08-26**: a `headers` block covering CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and HSTS was added, scoped to this app's actual resource usage (Google Fonts + the one API host). Not yet verified against a live Vercel deployment — see `Security.md`.
+- *(2026-09-21: `csv.js` has since been replaced by `src/utils/xlsx.js`, and every client export is now a typed `.xlsx`. See CLAUDE.md rule 3.)*
 - ~~No client-side file-size limit on Excel/CSV uploads~~ — **fixed 2026-08-26**: `src/utils/csv.js` was also added in the same pass and is a *positive* counter-example worth noting alongside the response-unwrapping finding above — it replaced three independently hand-rolled, differently-buggy CSV-export implementations (`AdminReports.jsx`, `BulkConfirmPaymentsTab.jsx`, `ExcelUpload.jsx`) with one shared, safer one. `src/utils/fileValidation.js` centralizes the new file-size/type check (10MB, `.xlsx`/`.xls`/`.csv`) for both upload pages.
 
 ### LOW

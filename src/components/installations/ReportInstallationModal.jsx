@@ -1,9 +1,10 @@
 // src/components/installations/ReportInstallationModal.jsx
 // Installer reports a completed installation: POST /installations/{id}/report.
 //
-// Body per the live spec — `meterNumber` is the only required field; the rest
-// are optional but are exactly what the disco's response sheet is built from,
-// so the form asks for all of them.
+// Body per the live spec — the API requires only `meterNumber`; the rest are
+// optional there but are exactly what the disco's response sheet is built
+// from, so the form asks for all of them. `sealNumber` is additionally
+// required by this form (business rule, 2026-09-21).
 //
 // Two rules from the integration guide shape this form:
 //  1. The meter picker is populated from GET /installations/me/meters filtered
@@ -140,6 +141,9 @@ function ReportInstallationModal({ job, isOpen, onClose, onReported }) {
   const validate = () => {
     const found = {};
     if (!form.meterNumber.trim()) found.meterNumber = 'Select or enter the meter you installed.';
+    // Required by the business (the disco's response sheet has an APLE Seal
+    // Number column), although the API schema marks it optional.
+    if (!form.sealNumber.trim()) found.sealNumber = 'Seal number is required.';
 
     if (form.installationDate) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(form.installationDate)) {
@@ -180,8 +184,7 @@ function ReportInstallationModal({ job, isOpen, onClose, onReported }) {
 
     // Only send what the installer actually filled in — the API treats every
     // field but meterNumber as optional, and empty strings are not blanks.
-    const payload = { meterNumber: form.meterNumber.trim() };
-    if (form.sealNumber.trim()) payload.sealNumber = form.sealNumber.trim();
+    const payload = { meterNumber: form.meterNumber.trim(), sealNumber: form.sealNumber.trim() };
     if (form.installationDate) payload.installationDate = form.installationDate; // plain date, sent as-is
     if (form.latitude !== '' && form.longitude !== '') {
       payload.latitude = Number(form.latitude);
@@ -313,7 +316,7 @@ function ReportInstallationModal({ job, isOpen, onClose, onReported }) {
           </Field>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field id="report-seal" label="Seal number" error={errors.sealNumber}>
+            <Field id="report-seal" label="Seal number" required error={errors.sealNumber}>
               <input
                 id="report-seal"
                 name="sealNumber"
@@ -321,6 +324,8 @@ function ReportInstallationModal({ job, isOpen, onClose, onReported }) {
                 value={form.sealNumber}
                 onChange={handleChange}
                 disabled={submitting}
+                aria-required="true"
+                aria-invalid={!!errors.sealNumber}
                 className={`${inputClass('sealNumber')} font-mono`}
               />
             </Field>

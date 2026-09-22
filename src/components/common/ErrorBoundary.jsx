@@ -26,11 +26,15 @@ class ErrorBoundary extends React.Component {
               Something went wrong
             </h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              An unexpected error occurred in this section of the application.
+              Please reload the page and try again.
             </p>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg text-left overflow-auto max-h-40 mb-6 text-sm text-red-600 dark:text-red-400 font-mono border border-red-100 dark:border-red-800">
-              {this.state.error && this.state.error.toString()}
-            </div>
+            {/* Technical detail is for developers only — it is always in the
+                console (componentDidCatch above) and shown here in dev builds. */}
+            {import.meta.env.DEV && this.state.error && (
+              <div className="bg-white dark:bg-gray-800 p-4 rounded-lg text-left overflow-auto max-h-40 mb-6 text-sm text-red-600 dark:text-red-400 font-mono border border-red-100 dark:border-red-800">
+                {this.state.error.toString()}
+              </div>
+            )}
             <button
               onClick={() => window.location.reload()}
               className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-sm hover:shadow"

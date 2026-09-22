@@ -9,6 +9,12 @@
 // A meter out with an installer keeps status 'AVAILABLE' and moves only its
 // assignmentStatus to 'ASSIGNED' — the two axes are independent so that the
 // JED flow, which gates on status === 'AVAILABLE', is never disturbed.
+//
+// Capacity: a dispatch may not exceed the meters the installer still needs
+// for their open jobs in this disco (see utils/meterCapacity.js). Partial
+// dispatches are allowed. The API itself does not enforce this cap (see
+// API_GAP_REPORT.md), so it is checked here against live data just before
+// submitting.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Send, PackageCheck, AlertCircle, Loader2, RefreshCw, ChevronRight, X, Undo2,
@@ -20,23 +26,19 @@ import StatusTabs from '../common/StatusTabs';
 import StatusBadge from '../common/StatusBadge';
 import InstallerSelect from '../installations/InstallerSelect';
 import BatchResultSummary from '../installations/BatchResultSummary';
+import MeterCapacitySummary from '../installations/MeterCapacitySummary';
 import { useDiscoOptions } from '../../hooks/useDiscoOptions';
-import { fetchAllPages } from '../../utils/fetchAllPages';
+import { useInstallerMeterCapacity, loadInstallerMeterCapacity } from '../../hooks/useInstallerMeterCapacity';
+import { evaluateMeterDispatch } from '../../utils/meterCapacity';
+import { fetchAllPages, fetchAllPagesDetailed } from '../../utils/fetchAllPages';
 import { getErrorMessage } from '../../utils/errorMessage';
 import { formatDateTime } from '../../utils/date';
 import { METER_ASSIGNMENT_STATUS } from '../../utils/installationStatus';
+import { toMeterOptions } from '../../utils/meterInventory';
+import MeterSerialPicker from '../installations/MeterSerialPicker';
 
-/** Split a pasted block of serials on commas, spaces or newlines. */
-function parseSerials(raw) {
-  return Array.from(
-    new Set(
-      String(raw || '')
-        .split(/[\s,;]+/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-    )
-  );
-}
+// GET /meters is ~6,000 rows; 100 pages x 100 covers it with room to spare.
+const METER_MAX_PAGES = 100;
 
 function AssignmentsPage() {
   const permissions = usePermissions();
@@ -48,7 +50,7 @@ function AssignmentsPage() {
   // --- dispatch form ---
   const [discoCode, setDiscoCode] = useState('');
   const [installerId, setInstallerId] = useState('');
-  const [serialsRaw, setSerialsRaw] = useState('');
+  const [serials, setSerials] = useState([]);
   const [note, setNote] = useState('');
   const [dispatchRef, setDispatchRef] = useState('');
   const [errors, setErrors] = useState({});
@@ -68,7 +70,52 @@ function AssignmentsPage() {
   const [returning, setReturning] = useState(false);
   const [returnError, setReturnError] = useState(null);
 
-  const serials = useMemo(() => parseSerials(serialsRaw), [serialsRaw]);
+  // --- dispatchable meters (picker options) ---
+  const [meterRecords, setMeterRecords] = useState([]);
+  const [metersLoading, setMetersLoading] = useState(false);
+  const [metersError, setMetersError] = useState(null);
+  const [metersTruncated, setMetersTruncated] = useState(false);
+  const [metersReload, setMetersReload] = useState(0);
+  // Serials the API accepted in this session. Left out of the picker even if
+  // a re-read still lists them (the meter list may not carry assignmentStatus).
+  const [dispatched, setDispatched] = useState(() => new Set());
+
+  useEffect(() => {
+    if (activeTab !== 'dispatch') return undefined;
+    let cancelled = false;
+    (async () => {
+      setMetersLoading(true);
+      setMetersError(null);
+      try {
+        const list = await fetchAllPagesDetailed(
+          (p) => jedApi.getMeters(p),
+          { status: 'AVAILABLE' },
+          { maxPages: METER_MAX_PAGES, inferNextFromFullPage: true }
+        );
+        if (!cancelled) {
+          setMeterRecords(list.items);
+          setMetersTruncated(list.truncated);
+        }
+      } catch (err) {
+        console.error('[Assignments] Failed to load meters:', err);
+        if (!cancelled) setMetersError("Couldn't load available meters.");
+      } finally {
+        if (!cancelled) setMetersLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, metersReload]);
+
+  const meterOptions = useMemo(() => toMeterOptions(meterRecords, dispatched), [meterRecords, dispatched]);
+
+  const [capacityRefresh, setCapacityRefresh] = useState(0);
+  const {
+    capacity, loading: capacityLoading, error: capacityError, reload: reloadCapacity,
+  } = useInstallerMeterCapacity({ installerId, discoCode, refreshKey: capacityRefresh });
+  const dispatchCheck = useMemo(
+    () => (capacity ? evaluateMeterDispatch(capacity, serials) : null),
+    [capacity, serials]
+  );
 
   useEffect(() => {
     if (!discoCode && discos.length > 0) setDiscoCode(discos[0].code);
@@ -100,7 +147,15 @@ function AssignmentsPage() {
     const found = {};
     if (!discoCode) found.discoCode = 'Select a disco.';
     if (!installerId) found.installerId = 'Select the installer receiving these meters.';
-    if (serials.length === 0) found.serials = 'Enter at least one meter serial number.';
+    if (serials.length === 0) found.serials = 'Select at least one meter.';
+    // Fail closed: without a verified capacity there is no way to know the
+    // dispatch is within what the installer needs.
+    if (Object.keys(found).length === 0) {
+      if (capacityLoading) found.serials = 'Still checking meter needs. Try again in a moment.';
+      else if (capacityError || !capacity) found.serials = "Couldn't check meter needs. Please retry.";
+      else if (!dispatchCheck.allowed) found.serials = dispatchCheck.message;
+      else if (dispatchCheck.requested === 0) found.serials = 'These meters are already with this installer.';
+    }
     setErrors(found);
     if (Object.keys(found).length > 0 || submitting) return;
 
@@ -108,18 +163,41 @@ function AssignmentsPage() {
     setSubmitError(null);
     setResult(null);
     try {
-      const payload = { discoCode, installerId, meterNumbers: serials };
+      // Re-check against a fresh read (not the figures loaded when the
+      // installer was picked) so a job or meter change made in the meantime
+      // can't let an over-dispatch through.
+      jedApi.clearCache();
+      const fresh = await loadInstallerMeterCapacity({ installerId, discoCode });
+      const check = evaluateMeterDispatch(fresh, serials);
+      if (!check.allowed || check.requested === 0) {
+        setErrors({ serials: check.message || 'These meters are already with this installer.' });
+        setCapacityRefresh((k) => k + 1);
+        return;
+      }
+
+      // Serials already with this installer are left out — re-sending them
+      // would only come back as per-row rejections.
+      const held = new Set(check.alreadyHeld);
+      const payload = { discoCode, installerId, meterNumbers: serials.filter((s) => !held.has(s)) };
       if (note.trim()) payload.note = note.trim();
       if (dispatchRef.trim()) payload.dispatchRef = dispatchRef.trim();
 
       const response = await jedApi.assignMeters(payload);
-      setResult(response?.data || response);
-      setSerialsRaw('');
+      const data = response?.data || response;
+      setResult(data);
+      // Only serials the API did not reject leave the picker.
+      const rejected = new Set(
+        (Array.isArray(data?.rejected) ? data.rejected : [])
+          .map((r) => String(typeof r === 'string' ? r : r?.meterNumber ?? r?.key ?? ''))
+      );
+      setDispatched((prev) => new Set([...prev, ...payload.meterNumbers.filter((s) => !rejected.has(s))]));
+      setSerials([]);
       notifyDataChanged();
       setRefreshKey((k) => k + 1);
+      setCapacityRefresh((k) => k + 1);
     } catch (err) {
       console.error('[Assignments] Assign meters failed:', err);
-      setSubmitError(getErrorMessage(err, 'Could not dispatch these meters.'));
+      setSubmitError(getErrorMessage(err, "Couldn't dispatch these meters. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -244,26 +322,39 @@ function AssignmentsPage() {
               </div>
             </div>
 
+            {installerId && discoCode && (
+              <MeterCapacitySummary
+                capacity={capacity}
+                loading={capacityLoading}
+                error={capacityError}
+                onRetry={reloadCapacity}
+                addMeters={dispatchCheck?.requested || 0}
+              />
+            )}
+
             <div>
               <label htmlFor="assign-serials" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 Meter serial numbers<span className="text-red-600 dark:text-red-400" aria-hidden="true"> *</span>
               </label>
-              <textarea
+              <MeterSerialPicker
                 id="assign-serials"
-                rows={5}
-                value={serialsRaw}
-                onChange={(e) => { setSerialsRaw(e.target.value); setErrors((p) => ({ ...p, serials: undefined })); }}
+                options={meterOptions}
+                loading={metersLoading}
+                error={metersError}
+                onRetry={() => { jedApi.clearCache(); setMetersReload((k) => k + 1); }}
+                value={serials}
+                onChange={(next) => { setSerials(next); setErrors((p) => ({ ...p, serials: undefined })); }}
                 disabled={submitting}
-                placeholder={'0239110006909\n0239110006917'}
-                aria-invalid={!!errors.serials}
-                className={`form-input w-full px-3 py-2.5 text-sm font-mono ${errors.serials ? 'border-red-400 dark:border-red-500' : ''}`}
+                invalid={!!errors.serials}
               />
-              <div className="flex justify-between gap-3 mt-1">
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  One per line, or separated by spaces or commas. Duplicates are removed.
+              {metersTruncated && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">Not every meter could be listed. Search may miss some.</p>
+              )}
+              {dispatchCheck?.alreadyHeld.length > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {dispatchCheck.alreadyHeld.length} of these {dispatchCheck.alreadyHeld.length === 1 ? 'is' : 'are'} already with this installer and won&apos;t count again.
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 shrink-0">{serials.length} serial{serials.length === 1 ? '' : 's'}</p>
-              </div>
+              )}
               {errors.serials && <p role="alert" className="text-xs text-red-600 dark:text-red-400 mt-1">{errors.serials}</p>}
             </div>
 

@@ -8,6 +8,8 @@ import { formatDateTime } from '../../utils/date';
 import { buildDailySeries } from '../../utils/trendAggregation';
 import TrendChart from './TrendChart';
 import StatusBadge from '../common/StatusBadge';
+import { getErrorMessage } from '../../utils/errorMessage';
+import { downloadServerXlsx } from '../../utils/xlsx';
 import {
   BarChart,
   Users,
@@ -469,7 +471,7 @@ function AdminDashboard() {
       setInstallationsSeries(buildDailySeries(records, { dateField: 'dateCompleted', aggregate: 'count', days }));
     } catch (err) {
       console.error('[Dashboard] Failed to load revenue/installations trend:', err);
-      setTrendError(err.message || 'Failed to load trend data');
+      setTrendError(getErrorMessage(err, 'Failed to load trend data'));
     } finally {
       setTrendLoading(false);
     }
@@ -517,15 +519,9 @@ function AdminDashboard() {
           filename = `all_requests_${Date.now()}.xlsx`;
       }
 
-      // Trigger download
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      // Numeric identifier cells in the server's workbook are rewritten as
+      // text first, so Excel can't show meter numbers in scientific notation.
+      await downloadServerXlsx(blob, filename);
     } catch (error) {
       console.error('Export error:', error);
       throw error;

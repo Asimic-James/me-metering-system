@@ -7,6 +7,44 @@
 > **new resource**, not as changes to the JED endpoints. Read the section directly below before
 > the older gap entries, several of which are now historical.
 
+## 2026-09-21 (third pass): errors, meter picker, seal number, installer summary, exports
+
+Spec re-pulled from `api.memetering.com` (85 operations, byte-identical to the second pass). Still no
+credentials, so no live responses were observed. The shapes below come from the spec and the existing
+integration.
+
+| # | Gap | Effect in the app today | What the backend needs to provide |
+|---|---|---|---|
+| G | **`GET /meters` has no `assignmentStatus` in its documented item schema**, no search, and no disco filter. | The Assignments picker loads every AVAILABLE meter (up to 10,000) and filters `assignmentStatus` only when the field is present. If it's absent, a meter already out with an installer can still be listed, and the API rejects it per row on dispatch. Serials the API accepted are hidden for the rest of the session. | Document and return `assignmentStatus` (and `assignedTo`) on `GET /meters`, add `assignmentStatus`/`search`/`discoCode` filters, or add a "dispatchable meters" endpoint. |
+| H | **`sealNumber` is optional in `POST /installations/{id}/report`.** | Required in the UI only. Any other client can still report without one. | Make it required server-side if the business rule applies to every client. |
+| I | **Server-generated exports can't be inspected from here.** `/meters/export`, `/meters/customer-requests/export`, `/external/jed/requests/export` and `/installations/export/{disco}` build their `.xlsx` on the server. | Each download goes through `downloadServerXlsx`, which turns numeric identifier cells into text and re-pads 13-digit meter numbers. It **cannot** restore zeros dropped from other identifiers, or digits lost from numbers beyond 2^53 (19-digit SIM serials), because those are gone before the file reaches the browser. Such cells only get a non-scientific format. | Write every identifier (meter, SIM, seal, account, RRR, order id, phone, SGC) as a **string** cell with the Text format `@`, as the disco export template's `format: "text"` columns already intend. |
+| J | **No completed-installations export or aggregate endpoint.** | The comprehensive report is built in the browser from the fully loaded scope (up to 10,000 records per source) and is disabled when a source is incomplete. Meter/SIM details come from a second full read of `GET /meters?status=INSTALLED`. | A server export such as `GET /installations/export/completed?discoCode=&from=&to=` that joins customer, payment, installer and meter/SIM data. |
+| K | **Installer dashboard counts need every job page.** | `InstallerJobSummary` pages through `GET /installations/me/jobs` to count. | A count endpoint (e.g. `GET /installations/me/statistics`), like `GET /installations/statistics` for admins. |
+
+## 2026-09-21 (second pass): installation management, disco filtering, payments, capacity
+
+**Verified against:** `GET https://api.memetering.com/api-docs/swagger.json` (85 operations). The
+brief pointed at `https://pharez-api.onrender.com`, but that host still serves the old 54-operation
+spec with **none** of the `/discos`, `/imports`, `/assignments` or `/installations` routes, so this
+app keeps `api.memetering.com`. Every route returns `401 Access token required` without a JWT, and
+no credentials were available for this pass. So response *shapes* come from the spec, and the
+earlier guide-based integration and live behaviour (e.g. the actual text of a completion 400) were
+**not** re-observed.
+
+Fixed in the frontend (not backend gaps): the disco filter never loaded JED's resource. Pages were
+fetched one at a time and silently capped at 2,000. Status changes refetched everything. Completion
+sent undocumented fields and was offered on unpaid requests. Details are in `PROJECT_CONTEXT.md`.
+These remain **backend** items:
+
+| # | Gap | Effect in the app today | What the backend needs to provide |
+|---|---|---|---|
+| A | **JED requests still can't be assigned to an installer.** `JedCustomerRequest` has no installer field, and `POST /assignments/installations` takes only `InstallationRequest` ids (sending JED ids would assign the wrong records). | JED rows on Installation Requests and on Installations (JED) open an explanatory modal. Every installer still sees the shared PAID queue. | Either an assignment field/endpoint on JED requests, or a backend-owned bridge that creates an `InstallationRequest` per paid JED request **and** marks the JED request COMPLETED and notifies JED when that job is reported. The frontend must not build that bridge: reporting through `/installations/{id}/report` doesn't complete the Remita record or notify JED. |
+| B | **Completion may still require JED payment confirmation.** `POST /external/jed/complete-installation` documents a 400 for "payment not confirmed". | The app now allows completion of any PAID request, sends only the documented body and shows the server's reason. If the server still rejects a PAID request, the page says the rule is server-side. | Relax the check so `status === PAID` is enough (keep the other rules: meter exists, meter type matches, not already completed). Please confirm the exact condition. It couldn't be observed without credentials. |
+| C | **Imported installation requests carry no payment data.** `InstallationRequest` (see the `POST /installations` body and the Aba import mapping) has no amount, payment status or payment date. | "Total collected payments" and "Revenue due to us" for Aba Power can only come from Remita requests whose `discoCode` is `ABA_POWER`. When there are none, the page says so instead of showing an invented figure. | `amount`, `paymentStatus` and `datePaid` on `InstallationRequest` (or its import mapping), or an aggregate like `GET /payments/summary?discoCode=` returning `{ collected, revenueDue }` with the backend's own dedupe rules. `/dashboard-stats.totalRevenue` isn't disco-scoped, so it can't be used. |
+| D | **No meter-quantity field and no server-side capacity cap.** An installation request is one account and one meter. Nothing stops `POST /assignments/meters` from dispatching more meters than an installer's open jobs need. | Enforced in the Assignments page only (fails closed, re-checked at submit). Any other API client can still over-dispatch. | Reject (per row) serials beyond `open jobs − meters held` for that installer and disco, or add `requiredMeters`/`meterQuantity` if a request can ever need more than one meter. Also an admin read such as `GET /assignments/meters?installerId=&discoCode=&assignmentStatus=ASSIGNED`: today the app has to open each ACTIVE/PARTIALLY_RETURNED batch (`GET /assignments/{id}`) to count held meters. |
+| E | **No server-side filters or sort for upload fields.** `GET /installations` supports only `discoCode`/`status`/`installerId`/`search`. | Feeder/transformer/meter type/position filtering and sorting run in the browser over the full scope, capped at 10,000 records per source with a visible warning. | `feederName`, `transformerName`/`transformerCode`, `meterType`, `installationPosition` filters plus `sortBy`/`sortOrder`, and a documented `pagination` block (`page`/`limit` still aren't in the spec for this route, though they work). A `GET /installations/facets?discoCode=` returning distinct values with counts would let dropdowns load without fetching every row. |
+| F | **`InstallationRequest` has no component schema** in the spec. | Fields were taken from the `POST /installations` body, the Aba import mapping/export template and the existing integration. | Publish the response schema, including `createdAt`, `assigneeName`, `assignedTo` and `extras`. |
+
 ## 2026-09-21: multi-disco installation flow — gaps #1, #3 and the Completed-Installation fields are resolved
 
 **Verified, not assumed:** the live spec was pulled from `https://api.memetering.com/api-docs/swagger.json`

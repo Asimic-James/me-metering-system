@@ -18,6 +18,7 @@ import ErrorNotification from './components/common/ErrorNotification';
 import { usePermissions } from './components/auth/usePermissions';
 import { useAdminIdleTimeout } from './hooks/useAdminIdleTimeout';
 import jedApi from './components/services/api';
+import { getErrorMessage } from './utils/errorMessage';
 
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
 // Installer-facing tabbed dashboard (Pending/Completed) — added this project.
@@ -119,7 +120,7 @@ function AppContent() {
       return userData;
     } catch (error) {
       console.error('[App] Login failed:', error);
-      setGlobalError(error.message || 'Failed to log in. Please check your credentials.');
+      setGlobalError(getErrorMessage(error, 'Failed to log in. Please check your credentials.'));
       throw error;
     }
   }, [login, navigate]);

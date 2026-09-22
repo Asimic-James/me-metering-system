@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import jedApi from '../services/api';
 import ConfirmationModal from '../common/ConfirmationModal';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 // Field names on the API key object are unconfirmed against a real
 // response sample (no example was provided in the API docs screenshot).
@@ -123,7 +124,7 @@ const ApiKeySettings = () => {
       setApiKeys(data);
     } catch (err) {
       console.error('[ApiKeys] Failed to fetch:', err);
-      setError(String(err?.message || 'Failed to load API keys'));
+      setError(getErrorMessage(err, 'Failed to load API keys'));
       setApiKeys([]);
     } finally {
       setLoading(false);
@@ -169,9 +170,7 @@ const ApiKeySettings = () => {
       setIsCreating(false);
     } catch (err) {
       console.error('[ApiKeys] Failed to create:', err);
-      let msg = String(err?.message || 'Failed to create API key');
-      if (msg.includes('VALIDATION_ERROR:')) msg = msg.replace('VALIDATION_ERROR:', '');
-      setError(msg);
+      setError(getErrorMessage(err, 'Failed to create API key'));
     } finally {
       setActionLoading(null);
     }
@@ -189,7 +188,7 @@ const ApiKeySettings = () => {
       setItemToDeactivate(null);
     } catch (err) {
       console.error('[ApiKeys] Failed to deactivate:', err);
-      setError(String(err?.message || 'Failed to deactivate API key'));
+      setError(getErrorMessage(err, 'Failed to deactivate API key'));
     } finally {
       setActionLoading(null);
     }
@@ -207,7 +206,7 @@ const ApiKeySettings = () => {
       setItemToDelete(null);
     } catch (err) {
       console.error('[ApiKeys] Failed to delete:', err);
-      setError(String(err?.message || 'Failed to delete API key'));
+      setError(getErrorMessage(err, 'Failed to delete API key'));
     } finally {
       setActionLoading(null);
     }
@@ -243,7 +242,7 @@ const ApiKeySettings = () => {
       setUsageModal((prev) => ({ ...prev, data, loading: false }));
     } catch (err) {
       console.error('[ApiKeys] Failed to load usage:', err);
-      setUsageModal((prev) => ({ ...prev, loading: false, error: String(err?.message || 'Failed to load usage stats') }));
+      setUsageModal((prev) => ({ ...prev, loading: false, error: getErrorMessage(err, 'Failed to load usage stats') }));
     }
   }, []);
 

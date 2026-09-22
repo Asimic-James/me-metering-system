@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import jedApi from '../services/api';
 import ConfirmationModal from '../common/ConfirmationModal';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 const MeterTypeSettings = () => {
   const [meterTypes, setMeterTypes] = useState([]);
@@ -73,8 +74,7 @@ const MeterTypeSettings = () => {
       }));
     } catch (err) {
       console.error('[Settings] Failed to fetch meter types:', err);
-      const errorMsg = String(err?.message || 'Failed to load meter types');
-      setError(errorMsg);
+      setError(getErrorMessage(err, 'Failed to load meter types'));
       setMeterTypes([]);
     } finally {
       setLoading(false);
@@ -125,16 +125,7 @@ const MeterTypeSettings = () => {
       console.error('[Settings] Failed to create meter type:', err);
 
       // Parse backend validation errors
-      let errorMsg = String(err?.message || 'Failed to create meter type');
-
-      // Handle validation error format
-      if (errorMsg.includes('VALIDATION_ERROR:')) {
-        errorMsg = errorMsg.replace('VALIDATION_ERROR:', '');
-      } else if (errorMsg.includes('Validation failed')) {
-        errorMsg = errorMsg.replace('Validation failed: ', '');
-      }
-
-      setError(errorMsg);
+      setError(getErrorMessage(err, 'Failed to create meter type'));
     } finally {
       setActionLoading(null);
     }
@@ -162,15 +153,7 @@ const MeterTypeSettings = () => {
     } catch (err) {
       console.error('[Settings] Failed to update meter type:', err);
 
-      let errorMsg = String(err?.message || 'Failed to update meter type');
-
-      if (errorMsg.includes('VALIDATION_ERROR:')) {
-        errorMsg = errorMsg.replace('VALIDATION_ERROR:', '');
-      } else if (errorMsg.includes('Validation failed')) {
-        errorMsg = errorMsg.replace('Validation failed: ', '');
-      }
-
-      setError(errorMsg);
+      setError(getErrorMessage(err, 'Failed to update meter type'));
     } finally {
       setActionLoading(null);
     }
@@ -189,8 +172,7 @@ const MeterTypeSettings = () => {
       setItemToDelete(null); // Close modal on success
     } catch (err) {
       console.error('[Settings] Failed to delete meter type:', err);
-      const errorMsg = String(err?.message || 'Failed to deactivate meter type');
-      setError(errorMsg);
+      setError(getErrorMessage(err, 'Failed to deactivate meter type'));
       // Keep modal open on error
     } finally {
       setActionLoading(null);

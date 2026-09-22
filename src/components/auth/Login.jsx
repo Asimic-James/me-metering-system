@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Phone, Lock, Eye, EyeOff, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
 import InfoModal from '../common/InfoModal';
+import { getErrorMessage } from '../../utils/errorMessage';
 
 // Validation rules
 const VALIDATION = {
@@ -213,8 +214,8 @@ function Login({ onLogin }) {
         errorMessage = 'Connection error. Check your internet';
       } else if (msg.includes('timeout')) {
         errorMessage = 'Request timed out. Try again';
-      } else if (error.message) {
-        errorMessage = error.message.replace(/^[A-Z_]+:/, '').trim();
+      } else {
+        errorMessage = getErrorMessage(error, errorMessage);
       }
       
       setLoginError(errorMessage);

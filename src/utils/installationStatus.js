@@ -109,6 +109,23 @@ export const isInstalledStatus = (status) =>
   [INSTALLATION_STATUS.INSTALLED, INSTALLATION_STATUS.EXPORTED].includes(normalizeStatus(status));
 
 /**
+ * Installer job summary — the single definition shared by the Installer
+ * Dashboard cards and the My Jobs filters, so the two can never disagree.
+ *   awaiting  = still to install (ASSIGNED, IN_PROGRESS) — isOpenJob
+ *   completed = reported installed, incl. already sent to the disco
+ *               (INSTALLED, EXPORTED) — isInstalledStatus
+ */
+export function summarizeInstallerJobs(jobs = []) {
+  let awaiting = 0;
+  let completed = 0;
+  jobs.forEach((j) => {
+    if (isOpenJob(j?.status)) awaiting += 1;
+    else if (isInstalledStatus(j?.status)) completed += 1;
+  });
+  return { awaiting, completed, total: jobs.length };
+}
+
+/**
  * Valid GPS pair, or null. Latitude/longitude come back as numbers but are
  * nullable, and 0 is a legitimate value — so this checks range, not falsiness.
  */

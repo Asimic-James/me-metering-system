@@ -25,6 +25,9 @@ export default defineConfig({
       workbox: {
         navigateFallback: 'index.html',
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // ExcelJS (~940 kB) is only needed when someone exports, which needs
+        // the network anyway — don't make every install download it up front.
+        globIgnores: ['**/exceljs*.js'],
         runtimeCaching: [
           {
             // Never cache API responses — this app surfaces live payment,

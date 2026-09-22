@@ -19,7 +19,7 @@ import {
 import { formatDateTime } from '../../utils/date';
 import { formatCurrencyNGN } from '../../utils/currency';
 import { normalizeStatus } from '../../utils/statusBadge';
-import { downloadCsv } from '../../utils/csv';
+import { downloadXlsx, COLUMN_TYPES } from '../../utils/xlsx';
 import { fetchAllRequests } from '../../utils/fetchAllRequests';
 import InfoModal from '../common/InfoModal';
 import StatusBadge from '../common/StatusBadge';
@@ -32,20 +32,22 @@ import StatusBadge from '../common/StatusBadge';
 // name/phone (no installer relationship exists on a request at all), feeder
 // name, tariff class, GPS coordinates, meter phase, remarks — were removed
 // rather than always rendering blank.
+// `type` drives the Excel cell type (utils/xlsx.js): identifiers stay text so
+// Excel never drops a leading zero or shows them in scientific notation.
 const EXPORT_FIELDS = [
-  { key: 'id', label: 'Installation ID', width: 120 },
-  { key: 'accountNumber', label: 'Account Number', width: 140 },
-  { key: 'meterNumber', label: 'Meter Number', width: 140 },
-  { key: 'sealNumber', label: 'Seal Number', width: 120 },
-  { key: 'customerName', label: 'Customer Name', width: 200 },
-  { key: 'customerAddress', label: 'Customer Address', width: 250 },
-  { key: 'area', label: 'Area/Region', width: 150 },
-  { key: 'meterType', label: 'Meter Type', width: 120 },
-  { key: 'status', label: 'Status', width: 100 },
-  { key: 'amount', label: 'Amount (₦)', width: 120 },
-  { key: 'paymentReference', label: 'Payment Reference (RRR)', width: 180 },
-  { key: 'submittedDate', label: 'Submitted Date', width: 160 },
-  { key: 'completedDate', label: 'Completed Date', width: 160 },
+  { key: 'id', label: 'Installation ID', width: 120, type: COLUMN_TYPES.TEXT },
+  { key: 'accountNumber', label: 'Account Number', width: 140, type: COLUMN_TYPES.TEXT },
+  { key: 'meterNumber', label: 'Meter Number', width: 140, type: COLUMN_TYPES.TEXT },
+  { key: 'sealNumber', label: 'Seal Number', width: 120, type: COLUMN_TYPES.TEXT },
+  { key: 'customerName', label: 'Customer Name', width: 200, type: COLUMN_TYPES.TEXT },
+  { key: 'customerAddress', label: 'Customer Address', width: 250, type: COLUMN_TYPES.TEXT },
+  { key: 'area', label: 'Area/Region', width: 150, type: COLUMN_TYPES.TEXT },
+  { key: 'meterType', label: 'Meter Type', width: 120, type: COLUMN_TYPES.TEXT },
+  { key: 'status', label: 'Status', width: 100, type: COLUMN_TYPES.TEXT },
+  { key: 'amount', label: 'Amount (₦)', width: 120, type: COLUMN_TYPES.CURRENCY },
+  { key: 'paymentReference', label: 'Payment Reference (RRR)', width: 180, type: COLUMN_TYPES.TEXT },
+  { key: 'submittedDate', label: 'Submitted Date', width: 160, type: COLUMN_TYPES.DATETIME },
+  { key: 'completedDate', label: 'Completed Date', width: 160, type: COLUMN_TYPES.DATETIME },
 ];
 
 const formatStatusText = (status) => normalizeStatus(status).replace(/_/g, ' ');
@@ -112,7 +114,7 @@ const rowMatchesFilters = (row, { query, status, dateFrom, dateTo }) => {
 // never count toward the average in the first place.
 // The page-loop itself (`fetchAllRequests`, imported above from
 // utils/fetchAllRequests.js) is shared by Avg Transaction (status-scoped,
-// below), Export CSV/Print to PDF (unscoped: every status, then filtered
+// below), Export Excel/Print to PDF (unscoped: every status, then filtered
 // client-side same as the table — see buildFullFilteredRows) and the
 // Installations page.
 
@@ -253,8 +255,8 @@ function AdminReports() {
   // Fetches every page (fetchAllRequests, no status — every status, same as
   // the table's own unscoped fetch) and applies the exact same filter
   // predicate the table uses, so "the report" means the same thing whether
-  // it's on screen, in the CSV, or on the printed page — just not capped to
-  // one 50-row page. Shared by both Export CSV and Print to PDF below.
+  // it's on screen, in the workbook, or on the printed page — just not capped to
+  // one 50-row page. Shared by both Export Excel and Print to PDF below.
   const buildFullFilteredRows = useCallback(async () => {
     const all = await fetchAllRequests();
     return all.map(normalizeRequestRow).filter((r) => rowMatchesFilters(r, { query, status, dateFrom, dateTo }));
@@ -273,12 +275,27 @@ function AdminReports() {
     ),
   });
 
-  const exportToCSV = async () => {
+  // Excel workbook (was CSV — Excel reads CSV cells untyped, dropping
+  // leading zeros and showing long identifiers in scientific notation).
+  // Values come from the raw record, so a missing field is an empty cell
+  // rather than the table's "-" placeholder, and the amount stays a number.
+  const exportToExcel = async () => {
     setExporting(true);
     try {
       const records = await buildFullFilteredRows();
-      const { headers, rows } = buildExportTable(records);
-      downloadCsv(`admin-reports-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+      const rows = records.map((record) => {
+        const out = {};
+        EXPORT_FIELDS.forEach((field) => {
+          const value = field.key === 'amount' ? record.raw?.amount : record[field.key];
+          out[field.key] = value === '-' ? '' : value;
+        });
+        return out;
+      });
+      await downloadXlsx(`admin-reports-${new Date().toISOString().slice(0, 10)}.xlsx`, [{
+        name: 'Customer Requests',
+        columns: EXPORT_FIELDS.map((f) => ({ header: f.label, key: f.key, type: f.type })),
+        rows,
+      }]);
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed. Please try again.');
@@ -421,13 +438,13 @@ function AdminReports() {
           <span className="hidden sm:inline text-sm font-medium">Refresh</span>
         </button>
         <button
-          onClick={exportToCSV}
+          onClick={exportToExcel}
           disabled={exporting || filtered.length === 0}
           className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
         >
           {exporting
             ? <><RefreshCw className="w-4 h-4 animate-spin" />Exporting...</>
-            : <><FileText className="w-4 h-4" />Export CSV</>}
+            : <><FileText className="w-4 h-4" />Export Excel</>}
         </button>
         <button
           type="button"
@@ -745,7 +762,7 @@ function AdminReports() {
         buildFullFilteredRows/handlePrintToPDF just before window.print()
         is called) — NOT `filtered`, which is deliberately scoped to just
         the table's current 50-row page. Uses the same EXPORT_FIELDS as
-        Export CSV so Print and CSV always agree on what "the report" means.
+        Export Excel so Print and Excel always agree on what "the report" means.
         Always light-mode styled (no dark: variants) since a printed page
         should be legible on paper regardless of which theme was active on
         screen. */}
