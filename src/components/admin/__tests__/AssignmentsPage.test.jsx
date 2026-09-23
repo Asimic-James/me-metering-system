@@ -143,17 +143,33 @@ describe('AssignmentsPage — meter capacity', () => {
     ['0239110006911', '0239110006912', '0239110006913'].forEach(pickMeter);
     expect(screen.getByText(/This dispatch is 1 meter over what is needed/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Dispatch 3 meters/ }));
-    expect(await screen.findByText('Assignment exceeds the available meter quantity. Only 2 more needed.')).toBeTruthy();
+    // The constraint is stated per meter type, with the live remaining count.
+    expect(await screen.findByText(
+      'The meter assignment exceeds the pending installations assigned to this installer for the selected meter type. Only 1 more Single Phase meter is needed.'
+    )).toBeTruthy();
     expect(jedApi.assignMeters).not.toHaveBeenCalled();
   });
 
-  it('allows a partial or exact dispatch and submits the selected serials as strings', async () => {
+  it('rejects an over-dispatch of one meter type even when the overall total fits', async () => {
     await setup();
+    // 2 single-phase jobs but 1 single-phase meter already in hand: only one
+    // more single-phase meter is needed, whatever the overall total allows.
     pickMeter('0239110006911');
     pickMeter('0239110006913');
     fireEvent.click(screen.getByRole('button', { name: /Dispatch 2 meters/ }));
+    expect(await screen.findByText(
+      'The meter assignment exceeds the pending installations assigned to this installer for the selected meter type. Only 1 more Single Phase meter is needed.'
+    )).toBeTruthy();
+    expect(jedApi.assignMeters).not.toHaveBeenCalled();
+  });
+
+  it('allows a dispatch within every meter type and submits the selected serials as strings', async () => {
+    await setup();
+    pickMeter('0239110006911'); // SINGLE PHASE — 1 still needed
+    pickMeter('0239110006912'); // THREE PHASE  — 1 still needed
+    fireEvent.click(screen.getByRole('button', { name: /Dispatch 2 meters/ }));
     await waitFor(() => expect(jedApi.assignMeters).toHaveBeenCalledWith({
-      discoCode: 'ABA_POWER', installerId: 'uuid-1', meterNumbers: ['0239110006911', '0239110006913'],
+      discoCode: 'ABA_POWER', installerId: 'uuid-1', meterNumbers: ['0239110006911', '0239110006912'],
     }));
     // Dispatched meters leave the picker.
     await waitFor(() => expect(within(meterList()).queryByText('0239110006911')).toBeNull());

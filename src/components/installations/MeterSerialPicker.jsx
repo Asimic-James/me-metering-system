@@ -7,6 +7,7 @@
 import { useMemo, useState } from 'react';
 import { Search, X, Loader2, RefreshCw, ClipboardPaste } from 'lucide-react';
 import { matchPastedSerials } from '../../utils/meterInventory';
+import { meterMakeModel } from '../../utils/meterDisplay';
 
 const MAX_SHOWN = 200;
 
@@ -122,7 +123,7 @@ function MeterSerialPicker({ id, options, loading, error, onRetry, value, onChan
                 <span className="min-w-0">
                   <span className="block text-sm font-mono text-gray-900 dark:text-white break-all">{o.serial}</span>
                   <span className="block text-[11px] text-gray-500 dark:text-gray-400">
-                    {[o.phaseType, o.meterMake, o.simNumber && `SIM ${o.simNumber}`].filter(Boolean).join(' · ')}
+                    {[o.phaseType, meterMakeModel(o), o.simNumber && `SIM ${o.simNumber}`].filter(Boolean).join(' · ')}
                   </span>
                 </span>
               </label>

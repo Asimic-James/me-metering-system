@@ -11,10 +11,11 @@
 // Actions offered per job are driven by getAvailableActions(status): the API
 // rejects an illegal transition with a 400 and has no force flag, so the UI
 // only ever shows what the current status actually allows.
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useDeferredValue } from 'react';
 import {
   ClipboardList, Package, RefreshCw, Search, AlertCircle, MapPin,
   PlayCircle, CheckCircle, XCircle, Loader2, Inbox, ExternalLink,
+  Filter, X, ChevronDown,
 } from 'lucide-react';
 import jedApi from '../services/api';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
@@ -33,6 +34,15 @@ import {
   isOpenJob,
   isInstalledStatus,
 } from '../../utils/installationStatus';
+import {
+  INSTALLER_JOB_FILTERS, EMPTY_JOB_FILTERS,
+  toFilterableJobs, applyJobFilters, buildJobFilterOptions, countActiveJobFilters,
+} from '../../utils/installerJobFilters';
+import { collectSealKeys } from '../../utils/sealNumber';
+import { meterSummaryLine } from '../../utils/meterDisplay';
+
+// Jobs render a page at a time so a large round stays responsive on a phone.
+const PAGE_SIZE = 25;
 
 // "Awaiting installation" and "Completed" use the same definitions as the
 // Installer Dashboard cards (summarizeInstallerJobs). Completed includes
@@ -155,6 +165,7 @@ function JobCard({ job, onStart, onReport, onFail, busy }) {
       <div className="pt-1">
         <DetailRow label="Area" value={[job.area, job.region].filter(Boolean).join(' · ') || null} />
         <DetailRow label="Feeder" value={job.feederName} />
+        <DetailRow label="Transformer" value={job.transformerName || job.transformerCode} />
         <DetailRow label="Position" value={job.installationPosition} />
         <DetailRow label="Phone" value={job.customerPhone} />
       </div>
@@ -243,6 +254,13 @@ function MyJobs() {
   const [activeTab, setActiveTab] = useState('jobs');
   const [filter, setFilter] = useState('OPEN');
   const [searchTerm, setSearchTerm] = useState('');
+  const search = useDeferredValue(searchTerm);
+  // Area / Meter Type / Feeder / Transformer. Applied client-side: the
+  // /installations/me/jobs endpoint has no such query parameters, and the
+  // whole (already installer-scoped) list is loaded here anyway.
+  const [fieldFilters, setFieldFilters] = useState(EMPTY_JOB_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [jobs, setJobs] = useState([]);
@@ -290,24 +308,54 @@ function MyJobs() {
     return () => { cancelled = true; };
   }, [refreshKey, refreshSignal]);
 
-  const visibleJobs = useMemo(() => {
-    const match = (JOB_FILTERS.find((f) => f.id === filter) || JOB_FILTERS[0]).match;
-    const filtered = jobs.filter(match);
+  // Search and the field filters narrow the same list; the status pills then
+  // pick a slice of what is left, so their counts always describe exactly what
+  // the current search + filters can show.
+  const filterable = useMemo(() => toFilterableJobs(jobs), [jobs]);
 
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return filtered;
-    return filtered.filter((j) =>
-      [j.accountNumber, j.customerName, j.meterNumber, j.customerAddress]
+  const searchedAndFiltered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const byField = applyJobFilters(filterable, fieldFilters).map((r) => r.job);
+    if (!term) return byField;
+    return byField.filter((j) =>
+      [j.accountNumber, j.customerName, j.meterNumber, j.customerAddress, j.feederName, j.transformerName, j.area]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(term))
     );
-  }, [jobs, filter, searchTerm]);
+  }, [filterable, fieldFilters, search]);
+
+  const visibleJobs = useMemo(() => {
+    const match = (JOB_FILTERS.find((f) => f.id === filter) || JOB_FILTERS[0]).match;
+    return searchedAndFiltered.filter(match);
+  }, [searchedAndFiltered, filter]);
 
   const filterCounts = useMemo(
-    () => Object.fromEntries(JOB_FILTERS.map((f) => [f.id, jobs.filter(f.match).length])),
+    () => Object.fromEntries(JOB_FILTERS.map((f) => [f.id, searchedAndFiltered.filter(f.match).length])),
+    [searchedAndFiltered]
+  );
+  // The tab badge counts everything awaiting installation, not just the
+  // filtered slice — it is a workload indicator, not a result count.
+  const openCount = useMemo(
+    () => jobs.filter((j) => isOpenJob(j.status)).length,
     [jobs]
   );
-  const openCount = filterCounts.OPEN;
+
+  const filterOptions = useMemo(
+    () => buildJobFilterOptions(filterable, fieldFilters),
+    [filterable, fieldFilters]
+  );
+  const activeFilterCount = countActiveJobFilters(fieldFilters) + (search.trim() ? 1 : 0);
+  const clearFilters = useCallback(() => {
+    setFieldFilters(EMPTY_JOB_FILTERS);
+    setSearchTerm('');
+  }, []);
+
+  // Never leave the page scrolled into records that a new filter removed.
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filter, fieldFilters, search]);
+
+  // Seals already recorded on this installer's own jobs — the duplicate the
+  // client can actually see (see utils/sealNumber.js).
+  const usedSealKeys = useMemo(() => collectSealKeys(jobs, reportJob?.id), [jobs, reportJob?.id]);
   const heldMeters = useMemo(
     () => meters.filter((m) => String(m.assignmentStatus || '').toUpperCase() !== 'USED'),
     [meters]
@@ -429,17 +477,82 @@ function MyJobs() {
         {activeTab === 'jobs' ? (
           <>
             <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by account, customer, address or meter..."
-                  aria-label="Search jobs"
-                  className="form-input w-full pl-9 pr-3 py-2 text-sm"
-                />
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="search"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search by account, customer, address or meter..."
+                    aria-label="Search jobs"
+                    className="form-input w-full pl-9 pr-3 py-2 text-sm"
+                  />
+                </div>
+                {/* Collapsed by default on a phone so the job list stays on
+                    screen; always expanded from sm up. */}
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen((v) => !v)}
+                  aria-expanded={filtersOpen}
+                  aria-controls="job-filter-panel"
+                  className="sm:hidden inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  <Filter className="w-4 h-4" />
+                  Filter jobs
+                  {activeFilterCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-brand-500 text-gray-900 text-[11px] font-semibold">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
+                </button>
               </div>
+
+              <fieldset
+                id="job-filter-panel"
+                className={`${filtersOpen ? 'block' : 'hidden'} sm:block`}
+              >
+                <legend className="sr-only">Filter jobs</legend>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+                  {INSTALLER_JOB_FILTERS.map(({ field, label }) => {
+                    const options = filterOptions[field];
+                    const id = `mj-filter-${field}`;
+                    return (
+                      <div key={field}>
+                        <label htmlFor={id} className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{label}</label>
+                        <select
+                          id={id}
+                          value={fieldFilters[field]}
+                          onChange={(e) => setFieldFilters((prev) => ({ ...prev, [field]: e.target.value }))}
+                          disabled={options.length === 0}
+                          className="form-input w-full px-3 py-2 text-sm"
+                        >
+                          <option value="">{options.length === 0 ? 'No data recorded' : `Any ${label.toLowerCase()}`}</option>
+                          {options.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label} ({o.count})</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+                {activeFilterCount > 0 && (
+                  <div className="flex items-center justify-between gap-2 mt-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400" aria-live="polite">
+                      {visibleJobs.length.toLocaleString()} of {jobs.length.toLocaleString()} job{jobs.length === 1 ? '' : 's'} shown
+                    </p>
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                    >
+                      <X className="w-3.5 h-3.5" /> Clear filters
+                    </button>
+                  </div>
+                )}
+              </fieldset>
+
               <div className="flex flex-wrap gap-2">
                 {JOB_FILTERS.map((f) => (
                   <button
@@ -469,27 +582,45 @@ function MyJobs() {
                 <p className="text-gray-600 dark:text-gray-400 font-medium">
                   {jobs.length === 0
                     ? 'No jobs have been dispatched to you yet'
-                    : 'No jobs match this filter'}
+                    : 'No jobs match these filters'}
                 </p>
-                {jobs.length === 0 && (
+                {jobs.length === 0 ? (
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     An administrator assigns jobs to you; they appear here straight away.
                   </p>
+                ) : activeFilterCount > 0 && (
+                  <button type="button" onClick={clearFilters}
+                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
+                    <X className="w-3.5 h-3.5" /> Clear filters
+                  </button>
                 )}
               </div>
             ) : (
-              <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {visibleJobs.map((job) => (
-                  <JobCard
-                    key={job.id}
-                    job={job}
-                    busy={busyId === job.id}
-                    onStart={handleStart}
-                    onReport={setReportJob}
-                    onFail={(j) => { setFailError(null); setFailJob(j); }}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {visibleJobs.slice(0, visibleCount).map((job) => (
+                    <JobCard
+                      key={job.id}
+                      job={job}
+                      busy={busyId === job.id}
+                      onStart={handleStart}
+                      onReport={setReportJob}
+                      onFail={(j) => { setFailError(null); setFailJob(j); }}
+                    />
+                  ))}
+                </div>
+                {visibleJobs.length > visibleCount && (
+                  <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-center gap-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Showing {visibleCount.toLocaleString()} of {visibleJobs.length.toLocaleString()}
+                    </p>
+                    <button type="button" onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                      className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
+                      Show {Math.min(PAGE_SIZE, visibleJobs.length - visibleCount)} more
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </>
         ) : (
@@ -515,8 +646,7 @@ function MyJobs() {
                         {m.meterNumber}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        {m.phaseType || 'Phase unknown'}
-                        {m.simNumber ? ` · SIM ${m.simNumber}` : ''}
+                        {meterSummaryLine(m) || 'No details recorded'}
                       </p>
                       {m.assignedAt && (
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
@@ -542,6 +672,7 @@ function MyJobs() {
         isOpen={!!reportJob}
         onClose={() => setReportJob(null)}
         onReported={handleReported}
+        usedSealKeys={usedSealKeys}
       />
 
       <FailJobModal

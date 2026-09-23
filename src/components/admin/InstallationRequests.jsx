@@ -25,7 +25,7 @@ import { Link } from 'react-router-dom';
 import {
   ClipboardList, RefreshCw, Search, AlertCircle, Loader2, UserPlus, X,
   Download, Ban, Undo2, Inbox, MapPin, ExternalLink, ArrowDownUp, Filter,
-  Wallet, BadgeCheck, ChevronRight, FileSpreadsheet,
+  Wallet, BadgeCheck, ChevronRight, FileSpreadsheet, CalendarClock,
 } from 'lucide-react';
 import jedApi from '../services/api';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
@@ -54,6 +54,7 @@ import {
   buildScopeOptions, resolveScope, attributeRemitaRecord, nonJedCodeSet,
   normalizeMultiRow, normalizeJedRow, dedupeRows, rowStatusLabel, statusesForScope,
   buildFilterOptions, applyAttributeFilters, applyStatusFilter, countByStatus, sortRows,
+  filterByImportDate,
 } from '../../utils/installationScope';
 
 const PAGE_SIZE = 50;
@@ -147,6 +148,9 @@ function RequestRow({ row, selectable, selected, onToggle, onCancel, onUnassign,
         {attrs && <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate">{attrs}</p>}
 
         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 space-y-0.5">
+          {/* Three separate events, never conflated: when the record was
+              imported, when it was assigned, when it was installed. */}
+          {row.importedAt && <p>Imported {formatDateOnly(row.importedAt)}</p>}
           {job.assigneeName && <p>Assigned to {job.assigneeName}{job.assignedAt ? ` · ${formatDateTime(job.assignedAt)}` : ''}</p>}
           {job.meterNumber && (
             <p className="font-mono">
@@ -254,6 +258,10 @@ function InstallationRequests() {
   const [searchTerm, setSearchTerm] = useState('');
   const search = useDeferredValue(searchTerm);
   const [attributes, setAttributes] = useState(EMPTY_ATTRIBUTES);
+  // Import date range — when the record entered ME Metering, NOT its
+  // assignment, payment or installation date (see filterByImportDate).
+  const [importedFrom, setImportedFrom] = useState('');
+  const [importedTo, setImportedTo] = useState('');
   const [sortKey, setSortKey] = useState('requestedAt');
   const [sortDir, setSortDir] = useState('desc');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -397,9 +405,11 @@ function InstallationRequests() {
     [includeMulti, includeJed]
   );
 
+  // Import-date range applies before the status counts, so every tile, the
+  // list, the totals and the exports all describe the same set of rows.
   const attrFiltered = useMemo(
-    () => applyAttributeFilters(scopeRows, { attributes, search }),
-    [scopeRows, attributes, search]
+    () => filterByImportDate(applyAttributeFilters(scopeRows, { attributes, search }), importedFrom, importedTo),
+    [scopeRows, attributes, search, importedFrom, importedTo]
   );
   const statusCounts = useMemo(() => countByStatus(attrFiltered), [attrFiltered]);
   const visibleRows = useMemo(
@@ -413,7 +423,10 @@ function InstallationRequests() {
     const out = {};
     ATTRIBUTE_FILTERS.forEach(({ field }) => {
       const others = { ...attributes, [field]: '' };
-      const options = buildFilterOptions(applyAttributeFilters(scopeRows, { attributes: others, search }), field);
+      const base = filterByImportDate(
+        applyAttributeFilters(scopeRows, { attributes: others, search }), importedFrom, importedTo
+      );
+      const options = buildFilterOptions(base, field);
       const current = attributes[field];
       if (current && !options.some((o) => o.value === current)) {
         options.push({ value: current, label: current === NOT_RECORDED ? 'Not recorded' : current, count: 0 });
@@ -421,20 +434,34 @@ function InstallationRequests() {
       out[field] = options;
     });
     return out;
-  }, [scopeRows, attributes, search]);
+  }, [scopeRows, attributes, search, importedFrom, importedTo]);
 
   const shownFilters = ATTRIBUTE_FILTERS.filter(
     (f) => f.always || filterOptions[f.field].some((o) => o.value !== NOT_RECORDED)
   );
-  const activeFilterCount = Object.values(attributes).filter(Boolean).length + (search.trim() ? 1 : 0);
+  const activeFilterCount = Object.values(attributes).filter(Boolean).length
+    + (search.trim() ? 1 : 0)
+    + (importedFrom || importedTo ? 1 : 0);
+
+  const clearAllFilters = useCallback(() => {
+    setAttributes(EMPTY_ATTRIBUTES);
+    setSearchTerm('');
+    setStatus('');
+    setImportedFrom('');
+    setImportedTo('');
+  }, []);
 
   // Scope change: filters from another disco don't carry over.
   useEffect(() => {
     setAttributes(EMPTY_ATTRIBUTES);
     setStatus('');
+    setImportedFrom('');
+    setImportedTo('');
   }, [scope]);
 
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [scope, status, attributes, search, sortKey, sortDir]);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [scope, status, attributes, search, sortKey, sortDir, importedFrom, importedTo]);
 
   // Keep the selection to rows that are still visible and still assignable,
   // using their freshest copy — hidden or stale rows must never be dispatched.
@@ -636,6 +663,9 @@ function InstallationRequests() {
       });
       if (status && completedCandidates.every((r) => r.status === status)) {
         filterNotes.push(`Status: ${statusOptions.find((s) => s.value === status)?.label || status}`);
+      }
+      if (importedFrom || importedTo) {
+        filterNotes.push(`Imported ${importedFrom || '…'} to ${importedTo || '…'}`);
       }
       if (completedFrom || completedTo) {
         filterNotes.push(`Installed ${completedFrom || '…'} to ${completedTo || '…'}`);
@@ -874,6 +904,53 @@ function InstallationRequests() {
             </div>
           </fieldset>
 
+          {/* Import date — when the record was imported into ME Metering.
+              Deliberately separate from the installation-date range further
+              down, and from assignment/payment dates, which it never uses. */}
+          <fieldset>
+            <legend className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+              <CalendarClock className="w-3.5 h-3.5" /> Filter by import date
+            </legend>
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-end gap-3">
+              <div className="min-w-0">
+                <label htmlFor="ir-imported-from" className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Imported from</label>
+                <input
+                  id="ir-imported-from"
+                  type="date"
+                  value={importedFrom}
+                  max={importedTo || undefined}
+                  onChange={(e) => setImportedFrom(e.target.value)}
+                  className="form-input w-full sm:w-auto px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="min-w-0">
+                <label htmlFor="ir-imported-to" className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Imported to</label>
+                <input
+                  id="ir-imported-to"
+                  type="date"
+                  value={importedTo}
+                  min={importedFrom || undefined}
+                  onChange={(e) => setImportedTo(e.target.value)}
+                  className="form-input w-full sm:w-auto px-3 py-2 text-sm"
+                />
+              </div>
+              {(importedFrom || importedTo) && (
+                <div className="col-span-2 sm:col-auto flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setImportedFrom(''); setImportedTo(''); }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  >
+                    <X className="w-3.5 h-3.5" /> Clear dates
+                  </button>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    JED&apos;s Remita requests aren&apos;t imported, so they are excluded while this is set.
+                  </p>
+                </div>
+              )}
+            </div>
+          </fieldset>
+
           <div className="flex flex-col sm:flex-row sm:items-end gap-3">
             <div className="flex items-end gap-2">
               <div>
@@ -898,7 +975,7 @@ function InstallationRequests() {
             </p>
             {activeFilterCount > 0 && (
               <button type="button"
-                onClick={() => { setAttributes(EMPTY_ATTRIBUTES); setSearchTerm(''); setStatus(''); }}
+                onClick={clearAllFilters}
                 className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
                 <X className="w-4 h-4" /> Clear filters
               </button>

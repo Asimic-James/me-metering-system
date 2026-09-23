@@ -7,6 +7,65 @@
 > **new resource**, not as changes to the JED endpoints. Read the section directly below before
 > the older gap entries, several of which are now historical.
 
+## 2026-09-23 (second pass): meter make/model, Meter Schedule assignment, deleting imported data
+
+**Verified against:** `GET https://api.memetering.com/api-docs/swagger.json`, re-pulled and diffed
+byte-for-byte against the morning's snapshot — **identical**, 73 paths / 85 operations. No
+credentials, so no live responses were observed.
+
+**Not backend gaps — fixed or built in the frontend this pass:** Make/Model were already mapped to
+the right fields and were simply rendered as empty labels; Meter Schedule's Assign was a placeholder
+modal even though `POST /assignments/meters` has existed since 2026-09-21; meter deletion was open to
+the whole admin tier with no dependency guard. Details in `PROJECT_CONTEXT.md`.
+
+**The complete delete surface of this API is four endpoints** — `DELETE /apikeys/{id}`,
+`DELETE /meters/{meterNumber}`, `DELETE /settings/meter-type/{id}` (soft) and `DELETE /users/{id}`
+(soft). Only the meter one touches anything an upload or import created.
+
+| # | Gap | Effect in the app today | What the backend needs to provide |
+|---|---|---|---|
+| Q | **No `manufacturer` field, and no guarantee `meterMake`/`model` are populated.** The whole spec contains "manufactur" exactly once — `manufacturedDate`, a build date — so `meterMake` is the only make/manufacturer field there is. Separately, two import paths write the same shared `meters` table: `POST /meters/upload` ("column names are hardcoded") and `POST /imports/{discoCode}/meters` (uses the disco's `meterInventory` mapping). A disco mapping that maps no make/model column produces meters with those fields null. | Meter Schedule shows the record's real `meterMake`/`model`/`manufacturedDate` and renders a missing one as "Not recorded" rather than a blank label. Nothing is invented and no second "Manufacturer" field is shown. But the frontend cannot tell whether a blank means "not in the sheet", "not mapped" or "not stored", and `GET /discos/{code}`'s mapping can only be read with a live token. | Confirm whether `meterMake` is intended to carry the manufacturer (and if a distinct manufacturer is wanted, add the field). Confirm the default `meterInventory` mapping includes make/model/manufactured-date aliases, and return them on `GET /meters` for meters created by **both** import routes. Publishing the default mapping in the spec would let this be verified without credentials. |
+| R | **Nothing an import created can be deleted except a meter.** `GET /imports` lists batches and `GET /imports/{id}` details them, but there is no `DELETE /imports/{id}`. Imported installation requests can only be `PATCH /installations/{id}/cancel`led (a status change, not a removal), and `JedCustomerRequest` has no delete at all. `POST /uploads/excel` and Upload Paid Customers persist nothing of their own, so there is nothing there to delete. | Super Admin deletion is offered only where the API supports it: individual meter records in Meter Schedule. The Imports page shows batch history with no delete action, because inventing one would mean looping deletes over records the batch doesn't even enumerate. | `DELETE /imports/{id}` scoped strictly to the rows that batch created and still unused, with a per-row result (deleted / skipped-because-referenced), plus a documented rule for what "still unused" means. Without it, a mistaken customer import can only be cancelled row by row. |
+| S | **`DELETE /meters/{meterNumber}` documents no dependency protection.** Its responses are 200/401/403/404 only — nothing says what happens to a meter that is installed at a customer or out with an installer, and there is no soft-delete/archive alternative for meters (`/settings/meter-type/{id}` has one; meters do not). | The client refuses those cases before sending: INSTALLED, any `installedAt`, or assignmentStatus ASSIGNED/USED/LOST are blocked with a reason, and every deletion is confirmed with an exact count. This is a client-side guard — another API client can still delete a meter that an installation references. | Reject a delete that would orphan an installation or a dispatch (409 with the reason), and consider a soft delete/archive for meters so a removed unit stays auditable, as meter types already are. Also confirm which roles the documented 403 applies to. |
+| T | **No audit trail.** There is no logs/audit/activity endpoint in the spec (the `SYSTEM_LOGS`/`AUDIT_TRAIL` entries this app once had were invented and were removed). | A Super Admin deleting imported meter records leaves no record of who deleted what, when. The app does not fabricate one — it will not write an audit log to `localStorage` or to an unrelated endpoint. | An append-only audit record for destructive and authorization-sensitive actions (delete meter, delete user, assign/unassign, import, export-and-mark-sent) with actor, action, target identifier and timestamp — and no customer PII in the entry — plus a read endpoint for it. |
+
+### Noted for the backend, from the import mapping
+
+`PUT /discos/{code}/import-mapping` supports a per-field **`padStart`** transform. If a disco's
+`meterInventory` mapping pads the meter-number field to a fixed width, it will inject leading zeros
+at import time — the server-side twin of the client bug fixed earlier today (gap **P**). Meter
+numbers are 10–13 digits and must not be padded to a fixed length in a mapping either. Worth
+auditing each disco's live mapping.
+
+## 2026-09-23: installer job filters, import date, identifier integrity, assignment limit, account protection
+
+**Verified against:** `GET https://api.memetering.com/api-docs/swagger.json`, re-pulled for this pass
+(73 documented paths / 85 operations, unchanged from the previous pass). No credentials, so no live
+responses were observed — shapes come from the spec and the existing integration.
+
+**Not backend gaps — fixed in the frontend this pass** (details in `PROJECT_CONTEXT.md`): meter
+numbers were padded to 13 digits in two places; the meter-dispatch cap was checked on the total only,
+not per meter type; the assignment error was generic; there was no import date on screen and no way to
+filter by it; Installer Jobs had no field filters; nothing stopped a Super Admin opening the delete
+dialog on their own account.
+
+| # | Gap | Effect in the app today | What the backend needs to provide |
+|---|---|---|---|
+| L | **Seal-number uniqueness is not enforced or verifiable.** `POST /installations/{id}/report` marks `sealNumber` optional (gap **H**) and documents no uniqueness constraint and no 409; `POST /external/jed/complete-installation` documents nothing for `sealNo` either. There is also **no lookup by seal** — `GET /installations` searches an undocumented set of fields, and an installer may only read their own jobs, so the client cannot ask "is this seal used?". | Report Installation rejects a seal already recorded on one of **this installer's own** jobs (case- and whitespace-insensitive; the value is sent trimmed and otherwise unchanged), and both completion forms turn a duplicate/unique rejection from the server into a plain "This seal number has already been used." **A seal used by a different installer is not detected**, and two installers submitting the same seal at the same moment will both succeed unless the database refuses one. | A **unique constraint on the seal number** (per disco if that is the business rule), a documented 409/400 response for it, and ideally a cheap existence check such as `GET /installations/seal/{sealNumber}` or a `sealNumber` filter on `GET /installations`. Until then the frontend must not claim uniqueness is enforced. |
+| M | **No import timestamp of its own on `InstallationRequest`.** The spec publishes no schema for the record at all (gap **F**), and no `importedAt`, `importBatchId` or link back to the `/imports` batch that created it. | "Imported" on Installation Requests, the "Imported from/to" filter and the workbook's "Imported Date" column all read the record's `createdAt`. That is correct for a row created by an import — the import is what creates it — but a row added by hand through `POST /installations` is indistinguishable from an imported one, and a re-import that updates an existing row would not move the date. | `importedAt` and `importBatchId` on the record (and in a published schema), so "imported" means the import event rather than row creation, and an imported row can be traced to its batch and file. |
+| N | **No server-side filters for the installer's own jobs.** `GET /installations/me/jobs` documents only `page`, `limit`, `status` and `search` — no `area`, `meterType`, `feederName` or `transformerName` (the admin `GET /installations` has none of them either, gap **E**). | Area / Meter Type / Feeder / Transformer are filtered in the browser over the installer's own, fully loaded job list. That list is small and already scoped to the caller's JWT, so nothing extra is downloaded — but an installer with a very large round pays for loading it all before filtering. | The same four filters (plus a facet endpoint with distinct values and counts) on `GET /installations/me/jobs`, matching whatever is added to `GET /installations` for gap **E**. |
+| O | **No server-side cap on meters per meter type.** Extends gap **D**: `POST /assignments/meters` does not check the dispatch against the installer's pending installations *of that phase*, so an installer with 10 three-phase jobs and 6 three-phase meters can still be sent more than 4 more by any other client. | Enforced only in the Assignments page and the job-assign modal, from live reads, re-checked against fresh figures at submit, failing closed when the figures can't load. The message names the meter type and the remaining count. | Reject per row any serial beyond `open jobs of that phase − meters of that phase held`, and return the remaining count per phase so the client and the server agree on the number shown to the operator. |
+| P | **Identifiers are stored as numbers somewhere in the export path.** A meter number arriving in a server-built workbook as the *number* `239110006909` has already lost any leading zero, and a value beyond 2^53 (19-digit SIM serial) has lost digits. | The client no longer tries to repair this. It writes the digits the cell holds as a text cell and nothing more — so a genuine leading zero the server dropped is **gone**, and the file is honest about it rather than inventing padding. Client-built exports are unaffected (identifiers are text cells throughout, re-verified in Microsoft Excel at 10–13 digits via `scripts/excel-check/`). | Store and export every identifier as a string end to end (gap **I**), and treat the meter number as a variable-length identifier: the spec's own examples range from 13 (`0239110006909`) to 14 characters (`01234567678898`), so no fixed length can be assumed. **Please confirm the authoritative length rule** — this app validates operator input as 10–13 digits per the business rule given, which would reject the 14-character example in the spec. |
+
+### Already enforced by the backend — no gap
+
+- **Self-deletion of a user account.** `DELETE /users/{id}` documents `400 "Cannot delete own account
+  or invalid ID"`. The frontend now refuses it too (`utils/userAccount.js`): the delete action is not
+  offered on the signed-in user's own row and no `DELETE` is issued for it, so the only Super Admin
+  cannot remove the one account able to create Super Admins. Both layers agree; this is defence in
+  depth, not a substitute. *(Not observed live — no credentials — so the exact response text is the
+  spec's.)*
+
 ## 2026-09-21 (third pass): errors, meter picker, seal number, installer summary, exports
 
 Spec re-pulled from `api.memetering.com` (85 operations, byte-identical to the second pass). Still no
@@ -17,7 +76,7 @@ integration.
 |---|---|---|---|
 | G | **`GET /meters` has no `assignmentStatus` in its documented item schema**, no search, and no disco filter. | The Assignments picker loads every AVAILABLE meter (up to 10,000) and filters `assignmentStatus` only when the field is present. If it's absent, a meter already out with an installer can still be listed, and the API rejects it per row on dispatch. Serials the API accepted are hidden for the rest of the session. | Document and return `assignmentStatus` (and `assignedTo`) on `GET /meters`, add `assignmentStatus`/`search`/`discoCode` filters, or add a "dispatchable meters" endpoint. |
 | H | **`sealNumber` is optional in `POST /installations/{id}/report`.** | Required in the UI only. Any other client can still report without one. | Make it required server-side if the business rule applies to every client. |
-| I | **Server-generated exports can't be inspected from here.** `/meters/export`, `/meters/customer-requests/export`, `/external/jed/requests/export` and `/installations/export/{disco}` build their `.xlsx` on the server. | Each download goes through `downloadServerXlsx`, which turns numeric identifier cells into text and re-pads 13-digit meter numbers. It **cannot** restore zeros dropped from other identifiers, or digits lost from numbers beyond 2^53 (19-digit SIM serials), because those are gone before the file reaches the browser. Such cells only get a non-scientific format. | Write every identifier (meter, SIM, seal, account, RRR, order id, phone, SGC) as a **string** cell with the Text format `@`, as the disco export template's `format: "text"` columns already intend. |
+| I | **Server-generated exports can't be inspected from here.** `/meters/export`, `/meters/customer-requests/export`, `/external/jed/requests/export` and `/installations/export/{disco}` build their `.xlsx` on the server. | Each download goes through `downloadServerXlsx`, which turns numeric identifier cells into text **digit for digit**. It **cannot** restore a zero the server already dropped, or digits lost from numbers beyond 2^53 (19-digit SIM serials), because those are gone before the file reaches the browser. Such cells only get a non-scientific format. *(Amended 2026-09-23: it used to re-pad meter numbers to 13 digits. Meter numbers are 10–13 digits, so that invented two leading zeros on every shorter serial — see gap **P**. The padding is removed; nothing is added to an identifier any more.)* | Write every identifier (meter, SIM, seal, account, RRR, order id, phone, SGC) as a **string** cell with the Text format `@`, as the disco export template's `format: "text"` columns already intend. |
 | J | **No completed-installations export or aggregate endpoint.** | The comprehensive report is built in the browser from the fully loaded scope (up to 10,000 records per source) and is disabled when a source is incomplete. Meter/SIM details come from a second full read of `GET /meters?status=INSTALLED`. | A server export such as `GET /installations/export/completed?discoCode=&from=&to=` that joins customer, payment, installer and meter/SIM data. |
 | K | **Installer dashboard counts need every job page.** | `InstallerJobSummary` pages through `GET /installations/me/jobs` to count. | A count endpoint (e.g. `GET /installations/me/statistics`), like `GET /installations/statistics` for admins. |
 
@@ -300,6 +359,11 @@ The `JedCustomerRequest` schema is unchanged: `id, accountNumber, custNames, gsm
 **What's needed from the backend:** A way to reserve/pre-assign a specific meter (by number) to a request prior to installer completion, and to reflect that reservation in the meter inventory's status.
 
 **What was implemented instead:** a disabled "Assign" action on each `AVAILABLE` meter in Meter Schedule → Inventory (`MeterSchedule.jsx`), which opens an info modal explaining this gap. Meters remain linked to a completed installation the one way the real API supports today: the `meterNo`/`sealNo` fields submitted together at `POST /external/jed/complete-installation`.
+
+> **Superseded.** `POST /assignments/meters` closed this for the multi-disco flow on 2026-09-21, and
+> on 2026-09-23 Meter Schedule's Assign became a real dispatch through it (see the 2026-09-23 second-pass
+> section at the top). The paragraph above is kept as the record of why the placeholder existed. It
+> remains true for the **JED** flow only: a `JedCustomerRequest` still has no meter-reservation field.
 
 ## 4. No `/complaints` resource
 

@@ -3,9 +3,9 @@
 // wherever an admin dispatches meters or jobs. Figures come from
 // useInstallerMeterCapacity (live API reads) via computeMeterCapacity.
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { formatPhaseLabel } from '../../utils/installationScope';
 
-const phaseLabel = (key) =>
-  key === 'UNSPECIFIED' ? 'Phase not recorded' : key.charAt(0) + key.slice(1).toLowerCase();
+const phaseLabel = (key) => (key === 'UNSPECIFIED' ? 'Phase not recorded' : formatPhaseLabel(key));
 
 function Figure({ label, value }) {
   return (

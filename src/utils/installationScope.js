@@ -50,6 +50,16 @@ const upperKey = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toUp
 export const normalizePhase = (value) => upperKey(String(value ?? '').replace(/[_-]+/g, ' '));
 
 /**
+ * A phase for display: 'THREE PHASE' → 'Three Phase'. One spelling everywhere
+ * a phase is named to the user (capacity figures, assignment errors).
+ */
+export const formatPhaseLabel = (value) => {
+  const key = normalizePhase(value);
+  if (!key || key === 'UNSPECIFIED') return 'Unspecified';
+  return key.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+};
+
+/**
  * Dropdown options: "All discos", every registered disco, and — only when no
  * registered disco is JED — a separate entry for JED's Remita requests, so
  * JED never appears twice.
@@ -119,6 +129,14 @@ export function normalizeMultiRow(r) {
     installer: text(r.assigneeName),
     meterNumber: r.meterNumber != null ? String(r.meterNumber) : '',
     requestedAt: r.createdAt || null,
+    // When this pending installation entered ME Metering. An imported row is
+    // created by the import itself, so the record's own createdAt IS the
+    // import timestamp — the API exposes no separate importedAt/importBatchId
+    // on an InstallationRequest (see API_GAP_REPORT.md). Deliberately NOT the
+    // assignment date (assignedAt) or the installation date
+    // (installationDate/reportedAt), which are separate events.
+    importedAt: r.createdAt || null,
+    assignedAt: r.assignedAt || null,
     raw: r,
   };
 }
@@ -145,6 +163,11 @@ export function normalizeJedRow(r, bucket) {
     installer: '',
     meterNumber: r.meterNo != null ? String(r.meterNo) : '',
     requestedAt: r.dateRequested || null,
+    // A Remita request is created by JED calling generate-ref, not by an
+    // import — it has no import date. dateRequested is the request date and
+    // must never stand in for one.
+    importedAt: null,
+    assignedAt: null,
     raw: r,
   };
 }
@@ -232,6 +255,39 @@ export function applyAttributeFilters(rows, { attributes = {}, search = '' } = {
 export const applyStatusFilter = (rows, status) =>
   status ? rows.filter((row) => row.status === status) : rows;
 
+const PLAIN_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A timestamp's local calendar date as 'YYYY-MM-DD', or null. */
+export function localDateOf(value) {
+  if (!value) return null;
+  if (typeof value === 'string' && PLAIN_DATE_RE.test(value)) return value;
+  const t = new Date(value);
+  if (Number.isNaN(t.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+}
+
+/** The date this row was imported, as 'YYYY-MM-DD', or null when it wasn't imported. */
+export const importDateOf = (row) => localDateOf(row?.importedAt);
+
+/**
+ * Keep rows imported within [from, to] inclusive (either may be ''). Rows
+ * with no import date — JED's Remita requests — are excluded whenever the
+ * filter is active, because "imported between X and Y" is not true of them.
+ * This filters on the import date ONLY; assignment, payment and installation
+ * dates are untouched.
+ */
+export function filterByImportDate(rows, from, to) {
+  if (!from && !to) return rows;
+  return rows.filter((row) => {
+    const d = importDateOf(row);
+    if (!d) return false;
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  });
+}
+
 /** Per-status counts for exactly the rows given. */
 export function countByStatus(rows) {
   const counts = {};
@@ -245,6 +301,7 @@ const STATUS_RANK = new Map(
 
 export const SORT_OPTIONS = [
   { value: 'requestedAt', label: 'Request date' },
+  { value: 'importedAt', label: 'Import date' },
   { value: 'status', label: 'Status' },
   { value: 'feederName', label: 'Feeder' },
   { value: 'transformerName', label: 'Transformer' },
@@ -265,7 +322,7 @@ const timeOf = (value) => {
 export function sortRows(rows, key = 'requestedAt', direction = 'desc') {
   const dir = direction === 'asc' ? 1 : -1;
   const valueOf = (row) => {
-    if (key === 'requestedAt') return timeOf(row.requestedAt);
+    if (key === 'requestedAt' || key === 'importedAt') return timeOf(row[key]);
     if (key === 'status') return STATUS_RANK.has(row.status) ? STATUS_RANK.get(row.status) : null;
     const v = text(row[key]);
     return v === '' ? null : v;

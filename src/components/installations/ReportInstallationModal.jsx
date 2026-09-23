@@ -23,6 +23,8 @@ import jedApi from '../services/api';
 import { getErrorMessage } from '../../utils/errorMessage';
 import { toDateInputValue } from '../../utils/date';
 import { fetchAllPages } from '../../utils/fetchAllPages';
+import { validateMeterNumber, METER_NUMBER_HINT } from '../../utils/meterNumber';
+import { validateSealNumber, isDuplicateSealError, DUPLICATE_SEAL_MESSAGE } from '../../utils/sealNumber';
 
 const MAX_NOTES = 500;
 
@@ -52,7 +54,13 @@ function Field({ id, label, required, error, hint, children }) {
   );
 }
 
-function ReportInstallationModal({ job, isOpen, onClose, onReported }) {
+/**
+ * @param {object} props
+ * @param {Set<string>} [props.usedSealKeys] - sealKey()s already recorded on
+ *   this installer's own jobs. The only duplicates the client can see; true
+ *   uniqueness is the backend's (see utils/sealNumber.js, API_GAP_REPORT.md).
+ */
+function ReportInstallationModal({ job, isOpen, onClose, onReported, usedSealKeys }) {
   const [form, setForm] = useState(newForm);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -140,10 +148,21 @@ function ReportInstallationModal({ job, isOpen, onClose, onReported }) {
 
   const validate = () => {
     const found = {};
-    if (!form.meterNumber.trim()) found.meterNumber = 'Select or enter the meter you installed.';
+    if (!form.meterNumber.trim()) {
+      found.meterNumber = 'Select or enter the meter you installed.';
+    } else if (manualEntry) {
+      // Only a hand-typed serial is length-checked. A serial chosen from the
+      // picker came from the API and is passed through exactly as given —
+      // never padded, trimmed to a length or reformatted.
+      const check = validateMeterNumber(form.meterNumber);
+      if (!check.valid) found.meterNumber = check.error;
+    }
+
     // Required by the business (the disco's response sheet has an APLE Seal
-    // Number column), although the API schema marks it optional.
-    if (!form.sealNumber.trim()) found.sealNumber = 'Seal number is required.';
+    // Number column), although the API schema marks it optional. Also checked
+    // against the seals already recorded on this installer's own jobs.
+    const seal = validateSealNumber(form.sealNumber, usedSealKeys);
+    if (!seal.valid) found.sealNumber = seal.error;
 
     if (form.installationDate) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(form.installationDate)) {
@@ -201,7 +220,15 @@ function ReportInstallationModal({ job, isOpen, onClose, onReported }) {
       onReported?.();
     } catch (err) {
       console.error('[ReportInstallation] Report failed:', err);
-      setSubmitError(getErrorMessage(err, 'Could not submit this installation.'));
+      // A seal the backend already holds comes back as a duplicate/unique
+      // rejection; say so on the field rather than showing the raw database
+      // text (which getErrorMessage would drop entirely).
+      if (isDuplicateSealError(err)) {
+        setErrors((prev) => ({ ...prev, sealNumber: DUPLICATE_SEAL_MESSAGE }));
+        setSubmitError(DUPLICATE_SEAL_MESSAGE);
+      } else {
+        setSubmitError(getErrorMessage(err, 'Could not submit this installation.'));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -255,9 +282,11 @@ function ReportInstallationModal({ job, isOpen, onClose, onReported }) {
             required
             error={errors.meterNumber}
             hint={
-              job.meterType && !manualEntry
-                ? `Only the ${job.meterType.toLowerCase()} meters assigned to you are listed.`
-                : undefined
+              manualEntry
+                ? METER_NUMBER_HINT
+                : job.meterType
+                  ? `Only the ${job.meterType.toLowerCase()} meters assigned to you are listed.`
+                  : undefined
             }
           >
             {manualEntry ? (

@@ -8,6 +8,7 @@ import { ROLES, getRoleMetadata } from '../auth/permissions';
 import jedApi from '../services/api';
 import { fetchAllPages } from '../../utils/fetchAllPages';
 import { getErrorMessage } from '../../utils/errorMessage';
+import { canDeleteUserAccount, isSameUserAccount } from '../../utils/userAccount';
 import {
   Users,
   UserPlus,
@@ -485,8 +486,17 @@ function UserManagement() {
 
   const handleDeleteUser = useCallback(async () => {
     if (!userToDelete) return;
-    if (!permissions.isSuperAdmin) {
-      setError('Access Restricted: only a Super Administrator can delete user accounts.');
+    // Authorisation, not decoration: the DELETE is never issued when this
+    // says no — including a Super Admin's own account, which would leave the
+    // system with no one able to create a replacement Super Admin. The real
+    // API enforces the same rule (400 "Cannot delete own account").
+    const verdict = canDeleteUserAccount({
+      currentUser: permissions.user,
+      targetUser: userToDelete,
+      isSuperAdmin: permissions.isSuperAdmin,
+    });
+    if (!verdict.allowed) {
+      setError(verdict.reason);
       setUserToDelete(null);
       return;
     }
@@ -506,7 +516,7 @@ function UserManagement() {
     } finally {
       setActionLoading(null);
     }
-  }, [userToDelete, fetchUsers, permissions.isSuperAdmin]);
+  }, [userToDelete, fetchUsers, permissions.isSuperAdmin, permissions.user]);
 
   const handleViewUser = useCallback(async (user) => {
     setViewingUser(user);
@@ -876,6 +886,10 @@ function UserManagement() {
                         const canDestructivelyManage = permissions.isSuperAdmin;
                         const editRestrictedTitle = 'Access Restricted: only a Super Administrator can manage Admin/Super Admin accounts';
                         const superAdminOnlyTitle = 'Access Restricted: only a Super Administrator can do this';
+                        // Own account: the Delete action is not offered at
+                        // all (handleDeleteUser refuses it too, so hiding the
+                        // button is the presentation of the rule, not the rule).
+                        const isOwnAccount = isSameUserAccount(permissions.user, user);
                         return (
                           <div className="flex items-center justify-end gap-2">
                             <button
@@ -909,18 +923,31 @@ function UserManagement() {
                                 <Lock className="w-4 h-4" />
                               )}
                             </button>
-                            <button
-                              onClick={() => setUserToDelete(user)}
-                              disabled={!canDestructivelyManage || actionLoading === `delete-${user.id}`}
-                              className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
-                              title={canDestructivelyManage ? 'Delete user' : superAdminOnlyTitle}
-                            >
-                              {actionLoading === `delete-${user.id}` ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-4 h-4" />
-                              )}
-                            </button>
+                            {isOwnAccount ? (
+                              <span
+                                className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap"
+                                title={
+                                  permissions.isSuperAdmin
+                                    ? 'A Super Admin cannot delete their own account.'
+                                    : 'You cannot delete your own account.'
+                                }
+                              >
+                                Your account
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setUserToDelete(user)}
+                                disabled={!canDestructivelyManage || actionLoading === `delete-${user.id}`}
+                                className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+                                title={canDestructivelyManage ? 'Delete user' : superAdminOnlyTitle}
+                              >
+                                {actionLoading === `delete-${user.id}` ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            )}
                           </div>
                         );
                       })()}

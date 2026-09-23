@@ -25,7 +25,7 @@ Versions below are read directly from `package.json` — verify there before ass
 | Icons | lucide-react 0.548.0 |
 | PWA | vite-plugin-pwa 1.3.0 (Workbox-generated service worker) |
 | Linting | ESLint 9.36.0, flat config (`eslint.config.js`), React Hooks + React Refresh plugins |
-| Testing | Vitest 3 + React Testing Library + jsdom (dev-only, added 2026-09-21). `npm test` runs `src/**/__tests__/*.test.{js,jsx}`: unit tests for the installation-scope, meter-capacity, meter-inventory, payment-summary, error-message, xlsx, completed-report and pagination utils, plus component tests for Installation Requests, Assignments, InstallationDetail, Report Installation and the installer job summary, all against a mocked `jedApi`. `scripts/excel-check/` generates sample workbooks with the real export code and checks them in Microsoft Excel over COM (Windows with Excel only). Coverage is still narrow; see `CodeBaseAudit.md` for the untested high-risk areas |
+| Testing | Vitest 3 + React Testing Library + jsdom (dev-only, added 2026-09-21). `npm test` runs `src/**/__tests__/*.test.{js,jsx}`: unit tests for the installation-scope, installer-job-filter, meter-capacity, meter-inventory, meter-display, meter-number, seal-number, user-account, payment-summary, error-message, xlsx, completed-report and pagination utils, plus component tests for Installation Requests, Assignments, Meter Schedule, User Management, My Jobs, InstallationDetail, Report Installation and the installer job summary, all against a mocked `jedApi`. `scripts/excel-check/` generates sample workbooks with the real export code and checks them in Microsoft Excel over COM (Windows with Excel only). Coverage is still narrow; see `CodeBaseAudit.md` for the untested high-risk areas |
 | Spreadsheets | ExcelJS 4 (lazy-loaded chunk, excluded from the PWA precache), with an npm `overrides` pin of `uuid` ≥ 11.1.1 for a moderate advisory in ExcelJS's own `uuid` dependency |
 | Other | `sharp` (dev-only, PWA icon generation script) |
 
@@ -76,12 +76,50 @@ jobs can be assigned. JED rows open the explanatory modal instead.
 **Money and meter figures come from pure utils, never ad hoc:** `utils/paymentSummary.js`
 (collected = PAID+COMPLETED, revenue due = COMPLETED only, deduped by RRR/id/account, invalid amounts
 skipped). Only Remita requests carry `amount`; imported jobs have none. `utils/meterCapacity.js`: one
-meter per open job, minus meters the installer holds. Dispatch may be partial but never over. This is
-enforced client-side only, because the API doesn't cap it. `utils/meterInventory.js` decides which
+meter per open job, minus meters the installer holds, **checked per meter type** (`byPhase`), not only
+on the total — 10 pending three-phase jobs with 6 three-phase meters out leaves room for 1–4 more
+three-phase meters. Dispatch may be partial but never over, and `overCapacityMessage` names the meter
+type and the live remaining count. This is enforced client-side only, because the API doesn't cap it.
+`utils/meterInventory.js` decides which
 meters are dispatchable: `status` AVAILABLE and `assignmentStatus` not ASSIGNED/USED/LOST. The
 Assignments picker offers only those. Installer job counts (Installer Dashboard cards, My Jobs
 filters) both come from `summarizeInstallerJobs` in `utils/installationStatus.js`:
 awaiting = ASSIGNED+IN_PROGRESS, completed = INSTALLED+EXPORTED.
+
+**Three dates, never interchangeable:** `importedAt` (when a record entered ME Metering — the
+`InstallationRequest`'s own `createdAt`, since an imported row is created by the import; the API has no
+separate `importedAt`), `assignedAt` (dispatch to an installer) and `installationDate`/`reportedAt`
+(the physical install). `filterByImportDate` and the Installation Requests "Imported from/to" filter
+read **only** `importedAt`. JED's Remita requests are never imported — `importedAt` is `null` for them
+and `dateRequested` must never stand in for it.
+
+**One dispatch implementation:** `hooks/useMeterDispatch.js` owns "give these meter serials to this
+installer" — the live capacity read, the per-meter-type cap, the fresh re-check at submit, the
+`POST /assignments/meters` call and its partial-success parsing. Both entry points use it
+(Assignments → Dispatch meters, and Meter Schedule → Assign via
+`components/installations/AssignMeterModal.jsx`). Never add a second assignment calculation or a
+second call site; add a caller of the hook. Eligibility is `isAssignableMeter` from
+`utils/meterInventory.js`, everywhere.
+
+**Meter make/model:** the API has **no `manufacturer` field** — `meterMake` is the only make field,
+`model` is separate, and `manufacturedDate` is a build DATE, not a manufacturer. Read them through
+`utils/meterDisplay.js`, which shows a missing value as "Not recorded" and never derives one field
+from another. A blank make means the upload didn't carry that column; don't paper over it.
+
+**Deleting imported data:** `DELETE /meters/{meterNumber}` is the only delete the API offers for
+anything an upload/import created — there is none for import batches, imported installation requests
+or JED requests, so don't build UI that implies otherwise. It is **Super Admin only** (matching
+User Management's rule that destructive actions aren't an Admin capability), always behind a
+confirmation naming the exact count, and `meterDeletionBlockReason` refuses anything installed, out
+with an installer, used or lost. After a delete, re-read from the server — never just drop the row
+from React state.
+
+**Identifier rules that apply everywhere:** meter numbers and seal numbers are identifiers.
+`utils/meterNumber.js` owns meter-number handling (10–13 digits, exact string, no padding);
+`utils/sealNumber.js` owns seal comparison (`sealKey` — case- and whitespace-insensitive), the
+"already used" message and `isDuplicateSealError` for a backend duplicate rejection.
+`utils/userAccount.js` owns who may delete a user account — nobody may delete their own, so the only
+Super Admin can never remove the account that creates Super Admins.
 
 **Rules specific to the multi-disco flow:**
 
@@ -96,7 +134,11 @@ awaiting = ASSIGNED+IN_PROGRESS, completed = INSTALLED+EXPORTED.
 3. **Only offer transitions the current status allows** (`getAvailableActions`). There is no force
    flag; an illegal transition is a 400.
 4. **Meter and account numbers are strings** — `"0239110006909"` loses its leading zero if coerced
-   with `Number()`. SIM serials are 19 digits, beyond JS's safe-integer range.
+   with `Number()`. SIM serials are 19 digits, beyond JS's safe-integer range. **A meter number has
+   no fixed length** (10–13 digits, `utils/meterNumber.js`): never `padStart` one to a length, never
+   truncate it, never reformat it. Padding to 13 is exactly how `145345123456` became
+   `00145345123456` (fixed 2026-09-23 in `xlsx.js` and the JED completion form). Validate the range
+   on operator input with `validateMeterNumber`; pass an API-supplied value through untouched.
 5. **A meter has two independent axes:** `status` (`AVAILABLE`…, shared with the JED flow) and
    `assignmentStatus` (`UNASSIGNED/ASSIGNED/USED/…`, who holds it). A meter out with an installer is
    still `AVAILABLE`. For "is it in the installer's hands?", read `assignmentStatus`.
@@ -137,7 +179,7 @@ Exactly three, matching the real API's `User.role` enum (uppercase, used as-is):
 9. **Preserve role-based access control.** Any new route needs an inline permission gate in `App.jsx` matching the existing pattern; any new nav item needs an `accessible(userRole)` check in `Navigation.jsx`'s `NAVIGATION_CONFIG`.
 10. **Remove obsolete code when functionality is intentionally retired** — the route, the nav item, the component file(s), the now-unused permission constants, and any now-dead API method/endpoint config exclusive to that feature. Verify with a repo-wide search first; keep anything still used elsewhere (see the several "was X used elsewhere before deleting?" passes documented in `API_GAP_REPORT.md` and `PROJECT_CONTEXT.md`).
 11. **Run lint, tests and build after any non-trivial change** (`npm run lint`, `npm test`, `npm run build`). There's no type checker, and the test suite only covers the areas listed under Technology, so lint + build are still the only safety net for everything else. When you add business logic, put it in a pure util and add a test beside the existing ones.
-12. **When adding a feature the real API doesn't support**, follow the pattern already established for installer/meter assignment: build the real, working parts (selection UI, forms, validation), and make the unsupported action open a clear explanatory modal instead of a fake success state or a `localStorage`-backed simulation.
+12. **When adding a feature the real API doesn't support**, follow the pattern already established for JED installer assignment on `/installations`: build the real, working parts (selection UI, forms, validation), and make the unsupported action open a clear explanatory modal instead of a fake success state or a `localStorage`-backed simulation. Equally: when the API *does* support it, wire it up for real and delete the placeholder — Meter Schedule's Assign was such a placeholder until `POST /assignments/meters` existed (2026-09-23).
 
 ## Where to look next
 

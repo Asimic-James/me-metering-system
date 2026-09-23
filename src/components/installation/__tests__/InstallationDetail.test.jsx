@@ -43,11 +43,58 @@ const renderDetail = () => render(
   </MemoryRouter>
 );
 
-const fillAndSubmit = () => {
-  fireEvent.change(screen.getByPlaceholderText('13 digits'), { target: { value: '0123456789012' } });
-  fireEvent.change(document.querySelector('input[name="actualSealNo"]'), { target: { value: ' 9900 ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Mark as Complete' }));
+const meterInput = () => document.querySelector('input[name="actualMeterNo"]');
+const sealInput = () => document.querySelector('input[name="actualSealNo"]');
+const submit = () => fireEvent.click(screen.getByRole('button', { name: 'Mark as Complete' }));
+
+const fillAndSubmit = (meterNo = '0123456789012') => {
+  fireEvent.change(meterInput(), { target: { value: meterNo } });
+  fireEvent.change(sealInput(), { target: { value: ' 9900 ' } });
+  submit();
 };
+
+describe('InstallationDetail — meter number', () => {
+  beforeEach(() => {
+    jedApi.getCustomerRequest.mockResolvedValue(request('PAID'));
+    jedApi.completeInstallation.mockResolvedValue({ success: true, data: { status: 'COMPLETED' } });
+  });
+
+  it('is not capped at a fixed length in the input', async () => {
+    renderDetail();
+    await screen.findByText('Complete Installation');
+    expect(meterInput().getAttribute('maxlength')).toBeNull();
+  });
+
+  it.each(['1234567890', '14534512345', '145345123456', '1453451234567'])(
+    'sends "%s" exactly as typed, with no leading zeros added',
+    async (meterNo) => {
+      renderDetail();
+      await screen.findByText('Complete Installation');
+      fillAndSubmit(meterNo);
+      await waitFor(() => expect(jedApi.completeInstallation).toHaveBeenCalledWith(
+        expect.objectContaining({ meterNo })
+      ));
+      cleanup();
+    }
+  );
+
+  it('preserves a legitimate leading zero', async () => {
+    renderDetail();
+    await screen.findByText('Complete Installation');
+    fillAndSubmit('0239110006909');
+    await waitFor(() => expect(jedApi.completeInstallation).toHaveBeenCalledWith(
+      expect.objectContaining({ meterNo: '0239110006909' })
+    ));
+  });
+
+  it('rejects a length outside 10-13 digits rather than padding it', async () => {
+    renderDetail();
+    await screen.findByText('Complete Installation');
+    fillAndSubmit('123456789');
+    expect(await screen.findByText(/must be 10-13 digits/)).toBeTruthy();
+    expect(jedApi.completeInstallation).not.toHaveBeenCalled();
+  });
+});
 
 describe('InstallationDetail — JED completion', () => {
   it('completes a paid request with exactly the documented body', async () => {

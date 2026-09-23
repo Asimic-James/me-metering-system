@@ -16,9 +16,14 @@
 // they are excluded from the count instead of being counted twice.
 //
 // Phase matters at report time (a three-phase meter can't be reported on a
-// single-phase job), so the same figures are also broken down by phase.
+// single-phase job), so the same figures are also broken down by phase — and
+// the dispatch check is applied PER METER TYPE, not only to the total:
+// 10 pending three-phase jobs with 6 three-phase meters already out leaves
+// room for 1-4 more three-phase meters, whatever the single-phase figures say.
+// evaluateMeterDispatch reports which meter type blocked it and how many of
+// that type are still needed, so the message can say so exactly.
 import { isOpenJob, METER_ASSIGNMENT_STATUS } from './installationStatus';
-import { normalizePhase } from './installationScope';
+import { normalizePhase, formatPhaseLabel } from './installationScope';
 import { normalizeStatus } from './statusBadge';
 
 const UNSPECIFIED = 'UNSPECIFIED';
@@ -56,28 +61,80 @@ export function computeMeterCapacity({ openJobs = [], heldMeters = [] } = {}) {
   };
 }
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * The message an over-dispatch gets. It names the real constraint (the
+ * installer's pending installations for that meter type) and the real number
+ * still needed, both computed — never a hardcoded figure.
+ */
+export function overCapacityMessage(remaining, phaseKey = null) {
+  const named = phaseKey && phaseKey !== UNSPECIFIED;
+  const phase = named ? `${formatPhaseLabel(phaseKey)} ` : '';
+  const constraint = named
+    ? 'The meter assignment exceeds the pending installations assigned to this installer for the selected meter type.'
+    : 'The meter assignment exceeds the pending installations assigned to this installer.';
+  if (remaining <= 0) {
+    return named
+      ? `${constraint} No more ${phase}meters are needed.`
+      : "This installer doesn't need more meters.";
+  }
+  return `${constraint} Only ${plural(remaining, `more ${phase}meter`)} ${remaining === 1 ? 'is' : 'are'} needed.`;
+}
+
 /**
  * Check a proposed dispatch against the capacity.
+ *
+ * The rule is per meter type (requirement: pending installations for this
+ * installer AND meter type, minus the meters of that type they already hold),
+ * with the overall total as a backstop for serials whose phase isn't known.
+ * A dispatch smaller than what's needed is always allowed; a larger one never
+ * is. `byPhase` comes from computeMeterCapacity, so the numbers in the
+ * message are the live ones.
+ *
  * @param {ReturnType<typeof computeMeterCapacity>} capacity
  * @param {string[]} serials - de-duplicated serials being dispatched
+ * @param {{ phaseBySerial?: Map<string,string>|Record<string,string> }} [options]
+ *   phaseBySerial: serial → phase type, from the meter records being
+ *   dispatched. Omit it and only the overall total is checked.
  * @returns {{ requested: number, alreadyHeld: string[], remainingAfter: number,
- *   allowed: boolean, message: string|null }}
+ *   allowed: boolean, message: string|null, phase: string|null }}
  */
-export function evaluateMeterDispatch(capacity, serials = []) {
+export function evaluateMeterDispatch(capacity, serials = [], { phaseBySerial } = {}) {
   const held = new Set(capacity?.heldSerials || []);
   const alreadyHeld = serials.filter((s) => held.has(s));
-  const requested = serials.length - alreadyHeld.length;
+  const fresh = serials.filter((s) => !held.has(s));
+  const requested = fresh.length;
   const remaining = capacity?.remaining ?? 0;
-  const allowed = requested <= remaining;
 
-  // Short, user-facing. The figures behind it are on screen in
-  // MeterCapacitySummary, so the message doesn't repeat them.
-  let message = null;
-  if (!allowed) {
-    message = remaining === 0
-      ? "This installer doesn't need more meters."
-      : `Assignment exceeds the available meter quantity. Only ${remaining} more needed.`;
+  const lookup = (serial) => {
+    if (!phaseBySerial) return null;
+    const value = phaseBySerial instanceof Map ? phaseBySerial.get(serial) : phaseBySerial[serial];
+    const key = normalizePhase(value);
+    return key || null;
+  };
+
+  // Per meter type first — that is the constraint the operator needs to hear.
+  let phase = null;
+  let phaseRemaining = null;
+  if (phaseBySerial) {
+    const byPhase = capacity?.byPhase || {};
+    const counts = new Map();
+    fresh.forEach((s) => {
+      const key = lookup(s);
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    for (const [key, count] of counts) {
+      const left = byPhase[key]?.remaining ?? 0;
+      if (count > left) { phase = key; phaseRemaining = left; break; }
+    }
   }
 
-  return { requested, alreadyHeld, remainingAfter: remaining - requested, allowed, message };
+  const allowed = phase === null && requested <= remaining;
+
+  let message = null;
+  if (phase !== null) message = overCapacityMessage(phaseRemaining, phase);
+  else if (!allowed) message = overCapacityMessage(remaining);
+
+  return { requested, alreadyHeld, remainingAfter: remaining - requested, allowed, message, phase };
 }

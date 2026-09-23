@@ -59,12 +59,33 @@ fs.writeFileSync(path.join(outDir, 'admin-reports.xlsx'), Buffer.from(await buil
   ],
 }])));
 
+// 2b) Meter numbers at every valid length (10-13 digits), including ones with
+//     and without a leading zero. Excel must show each one exactly as written
+//     — no padding, no truncation, no scientific notation.
+fs.writeFileSync(path.join(outDir, 'meter-number-lengths.xlsx'), Buffer.from(await buildXlsxBuffer([{
+  name: 'Meter Numbers',
+  columns: [
+    { header: 'Meter Number', key: 'm', type: COLUMN_TYPES.TEXT },
+    { header: 'Digits', key: 'n', type: COLUMN_TYPES.NUMBER },
+  ],
+  rows: [
+    '1234567890', '0234567890', // 10
+    '14534512345', '01453451234', // 11
+    '145345123456', '014534512345', // 12
+    '1453451234567', '0239110006909', // 13
+  ].map((m) => ({ m, n: m.length })),
+}])));
+
 // 3) A "server" workbook that stored identifiers as numbers, after the fix-up.
+//    The meter column deliberately holds 10-, 11- and 12-digit values: they
+//    must come out with exactly those digits, never padded up to 13.
 const server = new ExcelJS.Workbook();
 const ws = server.addWorksheet('Meters');
 ws.addRow(['Meter Number', 'SIM Card Serial Number', 'Customer Account number', 'Amount', 'Phase']);
 ws.addRow([239110006909, 8923401000012345000, 100234567, 67000, 'SINGLE PHASE']);
 ws.addRow(['0239110006917', '8923401000012345679', '0477014', 50000, 'THREE PHASE']);
+ws.addRow([1234567890, '8923401000012345680', 100234568, 45000, 'SINGLE PHASE']);
+ws.addRow([14534512345, '8923401000012345681', 100234569, 45000, 'THREE PHASE']);
 fs.writeFileSync(path.join(outDir, 'server-before.xlsx'), Buffer.from(await server.xlsx.writeBuffer()));
 const changed = normalizeIdentifierCells(server);
 fs.writeFileSync(path.join(outDir, 'server-after.xlsx'), Buffer.from(await server.xlsx.writeBuffer()));

@@ -52,7 +52,68 @@ describe('evaluateMeterDispatch — requirement table (installation requires 10)
     const result = evaluateMeterDispatch(capacity, serials(assign));
     expect(result.remainingAfter).toBe(remaining);
     expect(result.allowed).toBe(allowed);
-    if (!allowed) expect(result.message).toBe('Assignment exceeds the available meter quantity. Only 10 more needed.');
+    if (!allowed) {
+      expect(result.message).toBe(
+        'The meter assignment exceeds the pending installations assigned to this installer. Only 10 more meters are needed.'
+      );
+    }
+  });
+});
+
+describe('evaluateMeterDispatch — per meter type', () => {
+  // 10 pending Three Phase jobs, 6 Three Phase meters already with them.
+  const capacity = computeMeterCapacity({
+    openJobs: jobs(10, 'THREE PHASE'),
+    heldMeters: meters(6, 'THREE PHASE'),
+  });
+  const three = (n, offset = 0) =>
+    Array.from({ length: n }, (_, i) => String(3000000000000 + offset + i));
+  const phaseMap = (list, phase) => new Map(list.map((s) => [s, phase]));
+
+  it('allows exactly the remaining requirement for that meter type', () => {
+    const picked = three(4);
+    const result = evaluateMeterDispatch(capacity, picked, { phaseBySerial: phaseMap(picked, 'THREE PHASE') });
+    expect(result.allowed).toBe(true);
+    expect(result.message).toBeNull();
+  });
+
+  it('rejects one over, and says how many of that meter type are still needed', () => {
+    const picked = three(5);
+    const result = evaluateMeterDispatch(capacity, picked, { phaseBySerial: phaseMap(picked, 'THREE PHASE') });
+    expect(result.allowed).toBe(false);
+    expect(result.phase).toBe('THREE PHASE');
+    expect(result.message).toBe(
+      'The meter assignment exceeds the pending installations assigned to this installer for the selected meter type. Only 4 more Three Phase meters are needed.'
+    );
+  });
+
+  it('uses the singular when one meter of that type remains', () => {
+    const c = computeMeterCapacity({ openJobs: jobs(7, 'THREE PHASE'), heldMeters: meters(6, 'THREE PHASE') });
+    const picked = three(2, 100);
+    const result = evaluateMeterDispatch(c, picked, { phaseBySerial: phaseMap(picked, 'THREE PHASE') });
+    expect(result.message).toBe(
+      'The meter assignment exceeds the pending installations assigned to this installer for the selected meter type. Only 1 more Three Phase meter is needed.'
+    );
+  });
+
+  it('blocks a meter type the installer has no pending jobs for, even when the total fits', () => {
+    // 10 single-phase jobs, nothing held: total room for 10, but no three-phase job.
+    const c = computeMeterCapacity({ openJobs: jobs(10, 'SINGLE PHASE') });
+    const picked = three(1, 200);
+    const result = evaluateMeterDispatch(c, picked, { phaseBySerial: phaseMap(picked, 'THREE PHASE') });
+    expect(result.allowed).toBe(false);
+    expect(result.message).toBe(
+      'The meter assignment exceeds the pending installations assigned to this installer for the selected meter type. No more Three Phase meters are needed.'
+    );
+  });
+
+  it('does not count serials the installer already holds against the phase limit', () => {
+    const held = meters(6, 'THREE PHASE').map((m) => m.meterNumber);
+    const picked = [...held, ...three(4, 300)];
+    const result = evaluateMeterDispatch(capacity, picked, { phaseBySerial: phaseMap(picked, 'THREE PHASE') });
+    expect(result.alreadyHeld).toHaveLength(6);
+    expect(result.requested).toBe(4);
+    expect(result.allowed).toBe(true);
   });
 });
 

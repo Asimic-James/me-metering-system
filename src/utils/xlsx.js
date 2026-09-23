@@ -177,9 +177,16 @@ export async function downloadXlsx(filename, sheets) {
 // The export endpoints build their .xlsx on the server. If a server file stores
 // an identifier as a NUMBER, Excel shows it in scientific notation once it's
 // long enough. Before saving such a file we rewrite numeric cells in
-// identifier columns as text. This cannot bring back a leading zero the server
-// already dropped, except for meter numbers, which are exactly 13 digits by
-// business rule (and are padded to 13 on import), so they are re-padded.
+// identifier columns as text, so the digits the cell actually holds are shown
+// literally instead of as 2.39E+11.
+//
+// Nothing is ever added to or removed from an identifier here. A meter number
+// is NOT a fixed-length field (they are 10-13 digits — see utils/meterNumber.js),
+// so a shorter value is a shorter meter number, not a value missing leading
+// zeros: this used to pad meter cells to 13 digits, which turned a real
+// 11-digit serial into "00…" and corrupted the export. If the server dropped a
+// leading zero by storing the identifier as a number, that zero is gone at the
+// source and only the server can fix it (see API_GAP_REPORT.md).
 // Numbers beyond 2^53 have already lost digits in the server's number type; those
 // are only given a non-scientific format, never "repaired".
 // ---------------------------------------------------------------------------
@@ -200,11 +207,6 @@ const NOT_ID_WORDS = new Set([
   'amount', 'date', 'time', 'timestamp', 'latitude', 'longitude', 'count', 'qty', 'quantity', 'total',
   'type', 'status', 'make', 'model', 'name', 'email', 'address', 'price', 'cost',
 ]);
-const METER_DIGITS = 13;
-
-const isMeterNumberHeader = (tokens) =>
-  (tokens.length === 1 && ['meterno', 'meternumber'].includes(tokens[0]))
-  || (tokens.length === 2 && tokens[0] === 'meter' && NUMBER_WORDS.has(tokens[1]));
 
 /** Whether a column header names an identifier (exported for tests). */
 export function isIdentifierHeader(header) {
@@ -235,23 +237,22 @@ export function normalizeIdentifierCells(workbook) {
     }
     if (!headerRowNumber) return;
 
-    const idColumns = new Map(); // column number -> { meter: boolean }
+    const idColumns = new Set(); // column numbers holding identifiers
     ws.getRow(headerRowNumber).eachCell((cell, col) => {
-      const text = cellText(cell.value);
-      if (isIdentifierHeader(text)) idColumns.set(col, { meter: isMeterNumberHeader(headerTokens(text)) });
+      if (isIdentifierHeader(cellText(cell.value))) idColumns.add(col);
     });
     if (idColumns.size === 0) return;
     const longest = new Map();
 
     ws.eachRow((row, rowNumber) => {
       if (rowNumber <= headerRowNumber) return;
-      idColumns.forEach(({ meter }, col) => {
+      idColumns.forEach((col) => {
         const cell = row.getCell(col);
         const v = cell.value;
         if (typeof v === 'number' && Number.isInteger(v)) {
           if (Number.isSafeInteger(v) && v >= 0) {
-            let s = String(v);
-            if (meter && s.length < METER_DIGITS) s = s.padStart(METER_DIGITS, '0');
+            // The digits the cell holds, exactly — never padded to a length.
+            const s = String(v);
             cell.value = s;
             cell.numFmt = '@';
             longest.set(col, Math.max(longest.get(col) || 0, s.length));

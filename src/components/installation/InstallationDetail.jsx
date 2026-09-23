@@ -15,6 +15,8 @@ import StatusBadge from '../common/StatusBadge';
 import { buildRrrPayload } from '../../utils/rrrPayload';
 import { isCompletedStatus, isAwaitingInstallationStatus } from '../../utils/statusBadge';
 import { getErrorMessage } from '../../utils/errorMessage';
+import { validateMeterNumber, METER_NUMBER_HINT } from '../../utils/meterNumber';
+import { normalizeSealNumber, isDuplicateSealError, DUPLICATE_SEAL_MESSAGE } from '../../utils/sealNumber';
 import {
   ArrowLeft,
   CheckCircle,
@@ -35,6 +37,10 @@ import {
  * rule of its own and cannot bypass the server's (see API_GAP_REPORT.md).
  */
 function describeCompletionError(err) {
+  // A seal the backend already holds comes back as a duplicate/unique
+  // violation — plain words for it, before getErrorMessage drops the raw
+  // database text as technical.
+  if (isDuplicateSealError(err)) return DUPLICATE_SEAL_MESSAGE;
   const message = getErrorMessage(err, "Couldn't complete this installation. Please try again.");
   if (/confirm/i.test(message) && /pay/i.test(message)) {
     return 'Installation cannot be completed yet. Payment confirmation is still pending.';
@@ -176,10 +182,12 @@ function InstallationDetail() {
 
   const validate = () => {
     const errs = {};
-    if (!/^\d{13}$/.test(String(formData.actualMeterNo || '').trim())) {
-      errs.actualMeterNo = 'Meter Number must be exactly 13 digits';
-    }
-    if (!formData.actualSealNo || !String(formData.actualSealNo).trim()) {
+    // A meter number is an identifier of 10-13 digits, not a fixed-length
+    // number: it is checked against that range and sent exactly as typed,
+    // never padded to a length (see utils/meterNumber.js).
+    const meter = validateMeterNumber(formData.actualMeterNo);
+    if (!meter.valid) errs.actualMeterNo = meter.error;
+    if (!normalizeSealNumber(formData.actualSealNo)) {
       errs.actualSealNo = 'Seal Number is required';
     }
     setFormErrors(errs);
@@ -204,7 +212,7 @@ function InstallationDetail() {
       // none of which the endpoint accepts; extra keys risk a validation 400
       // on a strict schema and were never stored anyway.
       const response = await JEDApiService.completeInstallation({
-        sealNo: String(formData.actualSealNo).trim(),
+        sealNo: normalizeSealNumber(formData.actualSealNo),
         meterNo: String(formData.actualMeterNo).trim(),
         accountNumber: String(accountNumber),
       });
@@ -402,18 +410,19 @@ function InstallationDetail() {
                 name="actualMeterNo"
                 value={formData.actualMeterNo}
                 onChange={handleChange}
-                maxLength={13}
+                inputMode="numeric"
                 disabled={submitting}
                 className={`form-input w-full px-3 py-2.5 font-mono text-sm ${
                   formErrors.actualMeterNo ? 'border-red-400 dark:border-red-500 focus:ring-red-500' : ''
                 }`}
-                placeholder="13 digits"
+                placeholder="Meter number exactly as printed"
               />
-              <div className="flex justify-between mt-1">
-                {formErrors.actualMeterNo && (
-                  <p className="text-xs text-red-600">{formErrors.actualMeterNo}</p>
+              <div className="mt-1">
+                {formErrors.actualMeterNo ? (
+                  <p role="alert" className="text-xs text-red-600 dark:text-red-400">{formErrors.actualMeterNo}</p>
+                ) : (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{METER_NUMBER_HINT}</p>
                 )}
-                <p className="text-xs text-gray-500 ml-auto">{formData.actualMeterNo.length}/13</p>
               </div>
             </div>
 

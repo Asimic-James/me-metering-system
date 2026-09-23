@@ -88,7 +88,7 @@ describe('server workbook identifier fix-up', () => {
       .forEach((h) => expect(isIdentifierHeader(h)).toBe(false));
   });
 
-  it('rewrites numeric identifier cells as text, re-padding 13-digit meter numbers', async () => {
+  it('rewrites numeric identifier cells as text without changing a single digit', async () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Meters');
     ws.addRow(['Meter Number', 'SIM Number', 'Amount', 'Phase']);
@@ -97,12 +97,28 @@ describe('server workbook identifier fix-up', () => {
 
     const changed = normalizeIdentifierCells(wb);
     expect(changed).toBe(2);
-    expect(ws.getCell('A2').value).toBe('0239110006909');
+    // Exactly the digits the cell held — never padded to a fixed length.
+    expect(ws.getCell('A2').value).toBe('239110006909');
     expect(ws.getCell('A2').numFmt).toBe('@');
     // Beyond 2^53 the digits are already lost — only the format changes.
     expect(typeof ws.getCell('B2').value).toBe('number');
     expect(ws.getCell('B2').numFmt).toBe('0');
     expect(ws.getCell('C2').value).toBe(67000);
+    // A value the server already stored as text is passed through untouched,
+    // leading zero and all.
     expect(ws.getCell('A3').value).toBe('0239110006917');
+  });
+
+  it('never pads a meter number to a fixed length, at any valid length', async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Meters');
+    ws.addRow(['meterNo']);
+    // 10, 11, 12 and 13 digits — all legitimate meter numbers.
+    [1234567890, 14534512345, 145345123456, 1453451234567].forEach((n) => ws.addRow([n]));
+
+    normalizeIdentifierCells(wb);
+    expect([2, 3, 4, 5].map((r) => ws.getCell(`A${r}`).value)).toEqual([
+      '1234567890', '14534512345', '145345123456', '1453451234567',
+    ]);
   });
 });

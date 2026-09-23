@@ -3,7 +3,6 @@ import JEDApiService from '../services/api';
 import { usePermissions } from '../auth/usePermissions';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
 import ConfirmationModal from '../common/ConfirmationModal';
-import InfoModal from '../common/InfoModal';
 import {
   Calendar, MapPin, User, Phone, Clock, CheckCircle,
   AlertCircle, FileText, Search, // Navigation and Filter icons removed — confirmed unused
@@ -22,12 +21,20 @@ import {
   Database,
   Trash2,
   Loader2,
-  UserPlus
+  UserPlus,
+  X
 } from 'lucide-react';
 import { formatDateOnly } from '../../utils/date';
 import { unwrapListResponse } from '../../utils/unwrapListResponse';
 import { getErrorMessage } from '../../utils/errorMessage';
 import { downloadServerXlsx } from '../../utils/xlsx';
+import {
+  MANUFACTURED_LABEL, orNotRecorded, meterMakeOf, meterModelOf, manufacturedDateOf,
+} from '../../utils/meterDisplay';
+import {
+  isAssignableMeter, meterDeletionBlockReason, partitionDeletableMeters, meterSerial,
+} from '../../utils/meterInventory';
+import AssignMeterModal from '../installations/AssignMeterModal';
 
 // Constants for better maintainability
 const PRIORITY_CONFIG = {
@@ -533,19 +540,39 @@ const PhaseTypeBadge = ({ phaseType }) => {
 
 
 // Meter Card Component
-const MeterCard = ({ meter, canDelete, deleting, onDeleteClick, onAssignClick }) => {
+const MeterCard = ({
+  meter, canDelete, canAssignMeters, deleting, onDeleteClick, onAssignClick,
+  selectable, selected, onToggleSelect,
+}) => {
   const status = getMeterStatus(meter);
-  const canAssign = canDelete && status === 'AVAILABLE';
+  // Dispatchable per the shared inventory rule (status AVAILABLE and not
+  // already out with someone) — the same rule the Assignments picker uses, so
+  // the two screens can never offer different meters.
+  const canAssign = canAssignMeters && isAssignableMeter(meter);
+  const deleteBlockedReason = canDelete ? meterDeletionBlockReason(meter) : null;
   return (
-  <div className="card p-4 sm:p-6 hover:shadow-lg transition-shadow duration-200">
-    <div className="flex items-start justify-between mb-3">
-      <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate mb-1">
-          {meter.meterNumber}
-        </h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-          SIM: {meter.simNumber}
-        </p>
+  <div className={`card p-4 sm:p-6 hover:shadow-lg transition-shadow duration-200 ${
+    selected ? 'ring-2 ring-brand-500 dark:ring-brand-400' : ''
+  }`}>
+    <div className="flex items-start justify-between mb-3 gap-2">
+      <div className="flex items-start gap-2 flex-1 min-w-0">
+        {selectable && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(meter)}
+            aria-label={`Select meter ${meter.meterNumber}`}
+            className="mt-1 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500 shrink-0"
+          />
+        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate mb-1">
+            {meter.meterNumber}
+          </h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            SIM: {orNotRecorded(meter.simNumber)}
+          </p>
+        </div>
       </div>
       <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-1">
@@ -553,9 +580,11 @@ const MeterCard = ({ meter, canDelete, deleting, onDeleteClick, onAssignClick })
           {canDelete && (
             <button
               onClick={() => onDeleteClick(meter)}
-              disabled={deleting}
-              className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
-              title="Delete meter from inventory"
+              disabled={deleting || !!deleteBlockedReason}
+              className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title={deleteBlockedReason
+                ? `Cannot be deleted. ${deleteBlockedReason}`
+                : 'Delete meter from inventory'}
             >
               {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
             </button>
@@ -566,20 +595,23 @@ const MeterCard = ({ meter, canDelete, deleting, onDeleteClick, onAssignClick })
     </div>
 
     <div className="grid grid-cols-1 gap-2 text-xs sm:text-sm">
-      <div className="flex items-center text-gray-600 dark:text-gray-400">
-        <Calendar className="w-3 h-3 mr-2 flex-shrink-0" />
-        <span>Manufactured: {meter.manufacturedDate}</span>
-      </div>
+      {/* Make and Model are always shown, even when the record doesn't carry
+          them: "Make:" with nothing after it reads as a rendering bug, while
+          "Not recorded" says what is actually true of the data. The API has no
+          separate manufacturer field — meterMake is it — and manufacturedDate
+          is a build DATE, so it is labelled as one. See utils/meterDisplay.js. */}
       <div className="flex items-center text-gray-600 dark:text-gray-400">
         <Wrench className="w-3 h-3 mr-2 flex-shrink-0" />
-        <span>Make: {meter.meterMake}</span>
+        <span className="truncate">Make: {orNotRecorded(meterMakeOf(meter))}</span>
       </div>
-      {meter.model && (
-        <div className="flex items-center text-gray-600 dark:text-gray-400">
-          <FileText className="w-3 h-3 mr-2 flex-shrink-0" />
-          <span>Model: {meter.model}</span>
-        </div>
-      )}
+      <div className="flex items-center text-gray-600 dark:text-gray-400">
+        <FileText className="w-3 h-3 mr-2 flex-shrink-0" />
+        <span className="truncate">Model: {orNotRecorded(meterModelOf(meter))}</span>
+      </div>
+      <div className="flex items-center text-gray-600 dark:text-gray-400">
+        <Calendar className="w-3 h-3 mr-2 flex-shrink-0" />
+        <span className="truncate">{MANUFACTURED_LABEL}: {orNotRecorded(manufacturedDateOf(meter))}</span>
+      </div>
       {meter.sgcNumber && (
         <div className="flex items-center text-gray-600 dark:text-gray-400">
           <FileText className="w-3 h-3 mr-2 flex-shrink-0" />
@@ -645,7 +677,7 @@ const MeterTable = ({ meters, loading }) => {
                 Status
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Manufactured
+                {MANUFACTURED_LABEL}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Installed
@@ -662,10 +694,10 @@ const MeterTable = ({ meters, loading }) => {
                   {meter.simNumber}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                  <div>{meter.meterMake}</div>
-                  {meter.model && (
-                    <div className="text-gray-500 dark:text-gray-400 text-xs">{meter.model}</div>
-                  )}
+                  <div>{orNotRecorded(meterMakeOf(meter))}</div>
+                  <div className="text-gray-500 dark:text-gray-400 text-xs">
+                    {orNotRecorded(meterModelOf(meter))}
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <PhaseTypeBadge phaseType={meter.phaseType} />
@@ -674,7 +706,7 @@ const MeterTable = ({ meters, loading }) => {
                   <MeterStatusBadge status={getMeterStatus(meter)} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                  {meter.manufacturedDate}
+                  {orNotRecorded(manufacturedDateOf(meter))}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                   {getInstalledAtValue(meter)
@@ -1093,30 +1125,143 @@ const Pagination = ({ pagination, onPageChange, loading }) => {
 };
 
 // Meter Inventory Component
-const MeterInventory = ({ meterInventory, canManageSchedule }) => {
+/**
+ * What the confirmation actually says will happen: how many records, which
+ * ones, and which of the selection will be left alone and why. Nothing is
+ * deleted that isn't named here.
+ */
+function deleteConfirmationMessage(meters) {
+  const { deletable, blocked } = partitionDeletableMeters(meters);
+  const lines = [];
+  if (deletable.length === 0) {
+    lines.push('None of the selected meters can be deleted.');
+  } else {
+    lines.push(
+      `This will permanently remove ${deletable.length} imported meter record${deletable.length === 1 ? '' : 's'} from inventory. This action cannot be undone.`
+    );
+    const shown = deletable.slice(0, 8).map(meterSerial).join(', ');
+    lines.push(deletable.length > 8 ? `${shown} and ${deletable.length - 8} more.` : shown);
+  }
+  if (blocked.length > 0) {
+    lines.push(
+      `${blocked.length} selected meter${blocked.length === 1 ? ' is' : 's are'} in use and will be left unchanged.`
+    );
+  }
+  return lines.join('\n\n');
+}
+
+const MeterInventory = ({ meterInventory, canDeleteMeters, canAssignMeters, onDataChanged }) => {
   const { meters, loading, error, pagination, filters, fetchMeters, updateFilters, changePage, exportMeters } = meterInventory;
 
-  const [meterToDelete, setMeterToDelete] = useState(null);
+  // Deletion is scoped to what a Super Admin selected, one meter at a time
+  // against DELETE /meters/{meterNumber} — the only delete the API offers for
+  // anything an upload created. `pendingDelete` is always an explicit list,
+  // so nothing can be removed by a stray click or an Enter key.
+  const [pendingDelete, setPendingDelete] = useState(null); // object[] | null
   const [deletingNumber, setDeletingNumber] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
-  const [meterToAssign, setMeterToAssign] = useState(null);
+  const [deleteOutcome, setDeleteOutcome] = useState(null);
+  const [selected, setSelected] = useState(() => new Map()); // serial -> meter
+  const [metersToAssign, setMetersToAssign] = useState(null); // object[] | null
+
+  // Never keep a meter selected once the page it was on is gone, and never
+  // act on a stale copy — the selection always tracks the rows on screen.
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const onScreen = new Map(meters.map((m) => [meterSerial(m), m]));
+      const next = new Map();
+      prev.forEach((_, serial) => {
+        const fresh = onScreen.get(serial);
+        if (fresh && !meterDeletionBlockReason(fresh)) next.set(serial, fresh);
+      });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [meters]);
+
+  const toggleSelect = useCallback((meter) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      const serial = meterSerial(meter);
+      if (next.has(serial)) next.delete(serial);
+      else next.set(serial, meter);
+      return next;
+    });
+  }, []);
+
+  const selectedMeters = useMemo(() => Array.from(selected.values()), [selected]);
+  const selectableOnPage = useMemo(
+    () => meters.filter((m) => !meterDeletionBlockReason(m)),
+    [meters]
+  );
+
+  const closeDeleteDialog = useCallback(() => {
+    setPendingDelete(null);
+    setDeleteOutcome(null);
+  }, []);
 
   const handleDelete = useCallback(async () => {
-    if (!meterToDelete) return;
+    if (!pendingDelete || deleteBusy) return;
+    // Re-checked here, not only when the button was rendered: the list may
+    // have refreshed while the dialog was open.
+    const { deletable, blocked } = partitionDeletableMeters(pendingDelete);
+    if (deletable.length === 0) {
+      setDeleteError('None of the selected meters can be deleted.');
+      setPendingDelete(null);
+      return;
+    }
 
+    setDeleteBusy(true);
+    setDeleteError(null);
+    const failures = [];
+    let deleted = 0;
     try {
-      setDeletingNumber(meterToDelete.meterNumber);
-      setDeleteError(null);
-      await JEDApiService.deleteMeter(meterToDelete.meterNumber);
-      await fetchMeters();
-      setMeterToDelete(null);
-    } catch (err) {
-      console.error('[MeterInventory] Failed to delete meter:', err);
-      setDeleteError(getErrorMessage(err, 'Failed to delete meter'));
+      for (const meter of deletable) {
+        const serial = meterSerial(meter);
+        setDeletingNumber(serial);
+        try {
+          // Sequential on purpose: one documented single-record endpoint per
+          // meter, so each outcome stays attributable to its serial.
+          await JEDApiService.deleteMeter(serial);
+          deleted += 1;
+        } catch (err) {
+          console.error('[MeterInventory] Failed to delete meter:', serial, err);
+          failures.push({ serial, reason: getErrorMessage(err, 'It could not be deleted.') });
+        }
+      }
     } finally {
       setDeletingNumber(null);
+      setDeleteBusy(false);
     }
-  }, [meterToDelete, fetchMeters]);
+
+    setSelected(new Map());
+    setPendingDelete(null);
+    // The server is the source of truth for what is left — re-read rather
+    // than dropping rows from local state.
+    JEDApiService.clearCache();
+    await fetchMeters();
+    onDataChanged?.();
+    setDeleteOutcome({ deleted, failures, skipped: blocked.length });
+  }, [pendingDelete, deleteBusy, fetchMeters, onDataChanged]);
+
+  const handleAssigned = useCallback(async ({ accepted }) => {
+    setMetersToAssign(null);
+    setSelected(new Map());
+    JEDApiService.clearCache();
+    await fetchMeters();
+    onDataChanged?.();
+    if (accepted?.length) {
+      setDeleteOutcome({
+        deleted: 0,
+        failures: [],
+        skipped: 0,
+        assigned: accepted.length,
+      });
+    }
+  }, [fetchMeters, onDataChanged]);
+
+  const deleteCount = pendingDelete ? partitionDeletableMeters(pendingDelete).deletable.length : 0;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -1129,47 +1274,134 @@ const MeterInventory = ({ meterInventory, canManageSchedule }) => {
       />
 
       {(error || deleteError) && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-red-800 dark:text-red-300">
-            <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">{error || deleteError}</span>
+        <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-start gap-2 text-red-800 dark:text-red-300">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span className="text-sm break-words">{error || deleteError}</span>
           </div>
         </div>
       )}
 
+      {deleteOutcome && (
+        <div role="status" className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 sm:p-4 flex items-start justify-between gap-3">
+          <div className="min-w-0 text-sm text-green-800 dark:text-green-300 space-y-1">
+            {deleteOutcome.assigned > 0 && (
+              <p>{deleteOutcome.assigned} meter{deleteOutcome.assigned === 1 ? '' : 's'} assigned successfully.</p>
+            )}
+            {deleteOutcome.deleted > 0 && (
+              <p>{deleteOutcome.deleted} meter{deleteOutcome.deleted === 1 ? '' : 's'} deleted.</p>
+            )}
+            {deleteOutcome.failures?.length > 0 && (
+              <div className="text-red-800 dark:text-red-300">
+                <p>{deleteOutcome.failures.length} could not be deleted:</p>
+                <ul className="list-disc list-inside">
+                  {deleteOutcome.failures.map((f) => (
+                    <li key={f.serial} className="break-words">
+                      <span className="font-mono">{f.serial}</span> — {f.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteOutcome(null)}
+            aria-label="Dismiss"
+            className="p-1 rounded-lg text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40 shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Selection bar — only for the roles that can act on a selection */}
+      {(canDeleteMeters || canAssignMeters) && selectedMeters.length > 0 && (
+        <div className="bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800 rounded-lg px-3 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <p className="text-sm font-medium text-brand-800 dark:text-brand-300">
+            {selectedMeters.length} meter{selectedMeters.length === 1 ? '' : 's'} selected
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {canAssignMeters && (
+              <button
+                type="button"
+                onClick={() => setMetersToAssign(selectedMeters.filter(isAssignableMeter))}
+                disabled={!selectedMeters.some(isAssignableMeter)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-500 text-gray-900 rounded-lg text-xs font-medium hover:bg-brand-600 disabled:opacity-50"
+              >
+                <UserPlus className="w-3.5 h-3.5" /> Assign to installer
+              </button>
+            )}
+            {canDeleteMeters && (
+              <button
+                type="button"
+                onClick={() => setPendingDelete(selectedMeters)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete {selectedMeters.length}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setSelected(new Map())}
+              aria-label="Clear selection"
+              className="p-1.5 text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 rounded-lg"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Destructive, so: an explicit list, the exact count on the button,
+          and no default-confirm path. Cancel does nothing at all. */}
       <ConfirmationModal
-        isOpen={!!meterToDelete}
-        onClose={() => setMeterToDelete(null)}
+        isOpen={!!pendingDelete}
+        onClose={closeDeleteDialog}
         onConfirm={handleDelete}
-        loading={!!deletingNumber}
-        title="Delete Meter"
-        message={`Remove meter "${meterToDelete?.meterNumber}" from inventory? This cannot be undone.`}
-        confirmText="Delete"
+        loading={deleteBusy}
+        title={deleteCount === 1 ? 'Delete imported meter?' : 'Delete imported meters?'}
+        message={pendingDelete ? deleteConfirmationMessage(pendingDelete) : ''}
+        confirmText={deleteCount === 1 ? 'Delete 1 meter' : `Delete ${deleteCount} meters`}
       />
 
-      <InfoModal
-        isOpen={!!meterToAssign}
-        onClose={() => setMeterToAssign(null)}
-        title="Assign meters from Assignments"
-      >
-        <p>
-          Go to Assignments to dispatch this meter to an installer.
-        </p>
-      </InfoModal>
+      <AssignMeterModal
+        meters={metersToAssign || []}
+        isOpen={!!metersToAssign && metersToAssign.length > 0}
+        onClose={() => setMetersToAssign(null)}
+        onAssigned={handleAssigned}
+      />
 
       {loading && <MeterLoadingSkeleton />}
 
       {!loading && meters.length > 0 && (
         <>
+          {canDeleteMeters && selectableOnPage.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={selectableOnPage.every((m) => selected.has(meterSerial(m)))}
+                onChange={(e) => setSelected(e.target.checked
+                  ? new Map(selectableOnPage.map((m) => [meterSerial(m), m]))
+                  : new Map())}
+                className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-brand-600 focus:ring-brand-500"
+              />
+              Select all {selectableOnPage.length} deletable meter{selectableOnPage.length === 1 ? '' : 's'} on this page
+            </label>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {meters.map(meter => (
               <MeterCard
                 key={meter.id}
                 meter={meter}
-                canDelete={canManageSchedule}
-                deleting={deletingNumber === meter.meterNumber}
-                onDeleteClick={setMeterToDelete}
-                onAssignClick={setMeterToAssign}
+                canDelete={canDeleteMeters}
+                canAssignMeters={canAssignMeters}
+                deleting={deletingNumber === meterSerial(meter)}
+                onDeleteClick={(m) => setPendingDelete([m])}
+                onAssignClick={(m) => setMetersToAssign([m])}
+                selectable={canDeleteMeters && !meterDeletionBlockReason(meter)}
+                selected={selected.has(meterSerial(meter))}
+                onToggleSelect={toggleSelect}
               />
             ))}
           </div>
@@ -1260,7 +1492,17 @@ const MeterQuery = ({ meterQuery }) => {
 
 // Main Component
 function MeterSchedule() {
-  const { canManageSchedule } = usePermissions();
+  // Two distinct capabilities on this page, not one "can manage" flag
+  // (the route itself is already admin-gated in App.jsx):
+  //  - canManageAssignments: dispatch meters — the same permission the
+  //    Assignments page gates on, so Meter Schedule can never hand out a
+  //    meter to someone the Assignments page wouldn't.
+  //  - isSuperAdmin: delete records an upload/import created. Deliberately
+  //    narrower than "can upload" — matching how User Management already
+  //    reserves destructive actions for a Super Admin. The backend is still
+  //    authoritative (DELETE /meters/{meterNumber} documents a 403).
+  const { canManageAssignments, isSuperAdmin } = usePermissions();
+  const { notifyDataChanged } = useDataRefresh();
   const { meterStats, loading: statsLoading, error: statsError, refetch: refetchStats } = useMeterStatistics();
 
   // activeTab now declared before the two useMeterData() instances so each
@@ -1415,7 +1657,12 @@ function MeterSchedule() {
       </div>
 
       {activeTab === 'inventory' && (
-        <MeterInventory meterInventory={meterInventory} canManageSchedule={canManageSchedule} />
+        <MeterInventory
+          meterInventory={meterInventory}
+          canDeleteMeters={isSuperAdmin}
+          canAssignMeters={canManageAssignments}
+          onDataChanged={notifyDataChanged}
+        />
       )}
 
       {activeTab === 'query' && (

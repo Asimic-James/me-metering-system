@@ -95,6 +95,11 @@ const COLUMNS = [
   ['area', 'Area', TEXT, (row) => row.raw.area],
   ['requestRef', 'Request Reference', TEXT, (row) => row.raw.requestRef],
   ['requestDate', 'Request Date', DATETIME, (row) => (jed(row) ? row.raw.dateRequested : row.raw.createdAt)],
+  // When the record was imported into ME Metering. Blank for JED's Remita
+  // requests, which are created by generate-ref and never imported — their
+  // request date is not an import date. All-blank columns are dropped, so a
+  // JED-only export simply won't carry this one.
+  ['importedDate', 'Imported Date', DATETIME, (row) => row.importedAt],
   // Payment (JED Remita requests only — imported jobs have no payment fields)
   ['rrr', 'Payment Reference (RRR)', TEXT, (row) => row.raw.rrr],
   ['orderId', 'Remita Order ID', TEXT, (row) => row.raw.orderId],

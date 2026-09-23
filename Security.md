@@ -66,9 +66,55 @@ DATABASE
 
 ## Meter Assignment Security
 
-- **"Assign Meter" is fully inert today:** clicking it (`MeterCard`'s `onAssignClick` → `MeterSchedule.jsx`'s `setMeterToAssign`) only opens a read-only `InfoModal` explaining that the real API has no meter-assignment field or endpoint (see `API_GAP_REPORT.md` gap #3). No API call is made, no `localStorage` write occurs, and no component state persists past closing the modal. There is nothing here for an unauthorized user to manipulate, because there is no real mutation to intercept.
-- **Reaching the button at all requires Admin/Super Admin:** Meter Schedule itself is gated to admin-tier roles (see Authorization) — an Installer cannot reach this button through the UI, and the backend independently rejects an Installer JWT on the underlying meter endpoints regardless (see below).
-- **When the backend does add a real assign endpoint**, it will need to independently validate (per the task brief's own list, echoed here as the requirement for that future work): the caller's authorization, that the target meter exists and is genuinely `AVAILABLE`, and that the requested status transition is valid — none of which the frontend can be trusted to have already checked, no matter how the request got constructed.
+**Updated 2026-09-23** — "Assign Meter" was inert until this pass (it opened an `InfoModal`, because
+the JED-era API had no assignment endpoint). It is now a real dispatch through
+`POST /assignments/meters`, which has existed since the 2026-09-21 multi-disco release.
+
+- **One implementation, one set of rules.** `hooks/useMeterDispatch.js` is the only code that
+  dispatches a meter; both Meter Schedule and the Assignments page call it. There is no second
+  capacity calculation and no second call site that could drift out of step with the first.
+- **Authorization:** the button is gated on `canManageAssignments` — the same permission the
+  Assignments page uses, so Meter Schedule cannot hand a meter to anyone the Assignments page
+  wouldn't. `INSTALLER` does not hold it, and `/schedule` is admin-tier-gated at the route besides.
+  The backend independently rejects an Installer JWT on the meter endpoints (empirically verified,
+  see below), and `POST /assignments/meters` is `bearerAuth` with its own server-side checks
+  (documented 400 "User is not an active installer", 404 for an unknown disco/installer).
+- **Limits cannot be bypassed from the client, but are not enforced by the server either.** The
+  per-meter-type cap is checked against live API reads and **re-checked against a second, fresh read
+  immediately before submitting**, and it fails closed when the figures can't be loaded — so a stale
+  page cannot let an over-dispatch through. It is still a client-side cap: any other API client can
+  over-dispatch until the backend enforces it (`API_GAP_REPORT.md`, gaps D and O). The frontend does
+  not claim otherwise.
+- **Scope of the mutation:** the dispatch sends only `{ discoCode, installerId, meterNumbers[],
+  note?, dispatchRef? }`. It does not alter meter numbers, customer records, installation status or
+  `meters.status` (assignment moves `assignmentStatus` only, by the API's own design), and it creates
+  no customer request. Serials the installer already holds are removed from the payload rather than
+  re-sent, so a duplicate assignment record can't be created by a double submission.
+
+## Deleting Imported Meter Records (2026-09-23)
+
+- **Super Admin only.** Deletion moved from the whole admin tier to `isSuperAdmin`, matching the rule
+  already applied to user deletion and password resets — an Admin who can *upload* meters does not
+  thereby gain the ability to *delete* them. The UI offers no delete control to anyone else, and
+  `DELETE /meters/{meterNumber}` documents a 403, so the backend remains the real boundary. (Which
+  roles that 403 covers is undocumented — raised as gap **S**.)
+- **Dependency guard, client-side and explicit.** `meterDeletionBlockReason` refuses a meter that is
+  INSTALLED, carries an `installedAt`, or is ASSIGNED / USED / LOST — the cases that would corrupt
+  installation history or erase a loss record. Blocked meters cannot be selected, their delete button
+  is disabled with the reason, and the rule is **re-evaluated when the dialog is confirmed**, not only
+  when it was opened. The API documents no such check of its own (gap **S**), so this is a guard, not
+  a guarantee.
+- **No accidental deletion.** Every delete goes through `ConfirmationModal`, which focuses Cancel,
+  cancels on Escape, and has no form/Enter submit path. The confirmation names the exact count, lists
+  the serials and states what will be left untouched; the confirm button reads "Delete N meters".
+  Nothing is deleted from a row click, a navigation or a failed upload.
+- **No stale state.** After a delete the cache is cleared and the list is re-read from the API — rows
+  are never merely dropped from React state — and `notifyDataChanged()` refreshes the other pages
+  that display meter counts. Per-record failures are reported individually and never counted as
+  successes.
+- **Not auditable.** The API has no audit/activity endpoint, so a deletion leaves no server-side
+  record of who did it. The app does not invent one (no `localStorage` log, no unrelated endpoint) —
+  raised as gap **T**.
 
 ## File Upload Security
 
@@ -109,7 +155,7 @@ DATABASE
 
 ## Input Validation
 
-- **Forms:** account numbers (`/^\d+$/`), meter numbers (`/^\d{13}$/`), and required-field checks (seal number, etc.) are validated client-side before submission (`InstallationDetail.jsx`). Real-world enforcement still depends on the backend re-validating the same rules (confirmed it does, per the documented `ValidationError` response shape the app already handles) — client-side validation here is a UX convenience, correctly not the only gate.
+- **Forms:** account numbers (`/^\d+$/`), meter numbers (10–13 digits via `validateMeterNumber`, `src/utils/meterNumber.js` — a range check on operator input, never a reshaping of the value; the old fixed `/^\d{13}$/` rule and its zero-padding were removed 2026-09-23), and required-field checks (seal number, etc.) are validated client-side before submission (`InstallationDetail.jsx`, `ReportInstallationModal.jsx`). Real-world enforcement still depends on the backend re-validating the same rules (confirmed it does, per the documented `ValidationError` response shape the app already handles) — client-side validation here is a UX convenience, correctly not the only gate.
 - **Uploads — fixed this pass:** `ExcelUpload.jsx` and `BulkConfirmPaymentsTab.jsx` previously restricted the file picker to `.xlsx`/`.xls`/`.csv` via the `accept` attribute only (a browser *hint*, trivially bypassed) with no size limit at all. Both now run `src/utils/fileValidation.js`'s `validateUploadFile()` at file-selection time — rejects a wrong extension or a file over 10MB with a clear message, before any network request is sent (verified live: an oversized `.csv` and a `.exe` were both rejected client-side with zero request to `/meters/upload` or `/uploads/excel`). **Still only a UX convenience** — the real validation remains the backend's responsibility, and this doesn't change that.
 - **Numeric fields:** amount/currency fields are always formatted, never accepted as free-form user input for a mutating call (payments are confirmed by account number/RRR, not by typing an amount) — no injection surface here.
 - **XSS payload live-tested this pass:** typed `<img src=x onerror="...">` into Meter Schedule's search field — no script execution occurred, and the literal string was retained as inert text in the input, confirming React's default escaping holds for this real user-input path (not just a static-analysis claim — see XSS section below for the broader search).

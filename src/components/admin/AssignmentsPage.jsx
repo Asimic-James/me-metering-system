@@ -28,13 +28,13 @@ import InstallerSelect from '../installations/InstallerSelect';
 import BatchResultSummary from '../installations/BatchResultSummary';
 import MeterCapacitySummary from '../installations/MeterCapacitySummary';
 import { useDiscoOptions } from '../../hooks/useDiscoOptions';
-import { useInstallerMeterCapacity, loadInstallerMeterCapacity } from '../../hooks/useInstallerMeterCapacity';
-import { evaluateMeterDispatch } from '../../utils/meterCapacity';
+import { useMeterDispatch } from '../../hooks/useMeterDispatch';
 import { fetchAllPages, fetchAllPagesDetailed } from '../../utils/fetchAllPages';
 import { getErrorMessage } from '../../utils/errorMessage';
 import { formatDateTime } from '../../utils/date';
 import { METER_ASSIGNMENT_STATUS } from '../../utils/installationStatus';
 import { toMeterOptions } from '../../utils/meterInventory';
+import { meterSummaryLine } from '../../utils/meterDisplay';
 import MeterSerialPicker from '../installations/MeterSerialPicker';
 
 // GET /meters is ~6,000 rows; 100 pages x 100 covers it with room to spare.
@@ -54,9 +54,6 @@ function AssignmentsPage() {
   const [note, setNote] = useState('');
   const [dispatchRef, setDispatchRef] = useState('');
   const [errors, setErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState(null);
-  const [result, setResult] = useState(null);
 
   // --- batches ---
   const [batches, setBatches] = useState([]);
@@ -107,15 +104,20 @@ function AssignmentsPage() {
   }, [activeTab, metersReload]);
 
   const meterOptions = useMemo(() => toMeterOptions(meterRecords, dispatched), [meterRecords, dispatched]);
-
-  const [capacityRefresh, setCapacityRefresh] = useState(0);
-  const {
-    capacity, loading: capacityLoading, error: capacityError, reload: reloadCapacity,
-  } = useInstallerMeterCapacity({ installerId, discoCode, refreshKey: capacityRefresh });
-  const dispatchCheck = useMemo(
-    () => (capacity ? evaluateMeterDispatch(capacity, serials) : null),
-    [capacity, serials]
+  // serial → phase type, so the capacity check can be applied per meter type
+  // and the error can name the type and the number still needed.
+  const phaseBySerial = useMemo(
+    () => new Map(meterOptions.map((o) => [o.serial, o.phaseType])),
+    [meterOptions]
   );
+
+  // The dispatch itself — capacity, the per-meter-type cap, the fresh
+  // re-check at submit and the API call — lives in useMeterDispatch, shared
+  // with Meter Schedule's Assign action. This page owns only the form around it.
+  const {
+    capacity, capacityLoading, capacityError, reloadCapacity,
+    check: dispatchCheck, submit: submitDispatch, submitting, result, error: dispatchError,
+  } = useMeterDispatch({ discoCode, installerId, serials, phaseBySerial });
 
   useEffect(() => {
     if (!discoCode && discos.length > 0) setDiscoCode(discos[0].code);
@@ -144,63 +146,26 @@ function AssignmentsPage() {
   }, [activeTab, typeFilter, refreshKey]);
 
   const handleAssign = async () => {
+    // Field-level messages stay page-specific; the rules behind them are the
+    // hook's, so this page and Meter Schedule can never disagree.
     const found = {};
     if (!discoCode) found.discoCode = 'Select a disco.';
     if (!installerId) found.installerId = 'Select the installer receiving these meters.';
-    if (serials.length === 0) found.serials = 'Select at least one meter.';
-    // Fail closed: without a verified capacity there is no way to know the
-    // dispatch is within what the installer needs.
-    if (Object.keys(found).length === 0) {
-      if (capacityLoading) found.serials = 'Still checking meter needs. Try again in a moment.';
-      else if (capacityError || !capacity) found.serials = "Couldn't check meter needs. Please retry.";
-      else if (!dispatchCheck.allowed) found.serials = dispatchCheck.message;
-      else if (dispatchCheck.requested === 0) found.serials = 'These meters are already with this installer.';
-    }
     setErrors(found);
-    if (Object.keys(found).length > 0 || submitting) return;
+    if (Object.keys(found).length > 0) return;
 
-    setSubmitting(true);
-    setSubmitError(null);
-    setResult(null);
-    try {
-      // Re-check against a fresh read (not the figures loaded when the
-      // installer was picked) so a job or meter change made in the meantime
-      // can't let an over-dispatch through.
-      jedApi.clearCache();
-      const fresh = await loadInstallerMeterCapacity({ installerId, discoCode });
-      const check = evaluateMeterDispatch(fresh, serials);
-      if (!check.allowed || check.requested === 0) {
-        setErrors({ serials: check.message || 'These meters are already with this installer.' });
-        setCapacityRefresh((k) => k + 1);
-        return;
-      }
-
-      // Serials already with this installer are left out — re-sending them
-      // would only come back as per-row rejections.
-      const held = new Set(check.alreadyHeld);
-      const payload = { discoCode, installerId, meterNumbers: serials.filter((s) => !held.has(s)) };
-      if (note.trim()) payload.note = note.trim();
-      if (dispatchRef.trim()) payload.dispatchRef = dispatchRef.trim();
-
-      const response = await jedApi.assignMeters(payload);
-      const data = response?.data || response;
-      setResult(data);
-      // Only serials the API did not reject leave the picker.
-      const rejected = new Set(
-        (Array.isArray(data?.rejected) ? data.rejected : [])
-          .map((r) => String(typeof r === 'string' ? r : r?.meterNumber ?? r?.key ?? ''))
-      );
-      setDispatched((prev) => new Set([...prev, ...payload.meterNumbers.filter((s) => !rejected.has(s))]));
-      setSerials([]);
-      notifyDataChanged();
-      setRefreshKey((k) => k + 1);
-      setCapacityRefresh((k) => k + 1);
-    } catch (err) {
-      console.error('[Assignments] Assign meters failed:', err);
-      setSubmitError(getErrorMessage(err, "Couldn't dispatch these meters. Please try again."));
-    } finally {
-      setSubmitting(false);
+    const outcome = await submitDispatch({ note, dispatchRef });
+    if (!outcome.ok) {
+      if (outcome.reason) setErrors({ serials: outcome.reason });
+      return;
     }
+
+    // Only serials the API did not reject leave the picker.
+    setDispatched((prev) => new Set([...prev, ...outcome.accepted]));
+    setSerials([]);
+    setErrors({});
+    notifyDataChanged();
+    setRefreshKey((k) => k + 1);
   };
 
   const openDetail = useCallback(async (batch) => {
@@ -388,10 +353,10 @@ function AssignmentsPage() {
               </div>
             </div>
 
-            {submitError && (
+            {dispatchError && (
               <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                <p className="text-sm text-red-800 dark:text-red-300">{submitError}</p>
+                <p className="text-sm text-red-800 dark:text-red-300">{dispatchError}</p>
               </div>
             )}
 
@@ -539,7 +504,7 @@ function AssignmentsPage() {
                           </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                             {isMeter
-                              ? [item.phaseType, item.simNumber ? `SIM ${item.simNumber}` : null].filter(Boolean).join(' · ')
+                              ? meterSummaryLine(item)
                               : [item.customerName, item.customerAddress].filter(Boolean).join(' · ')}
                           </p>
                         </div>

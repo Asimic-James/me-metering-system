@@ -35,8 +35,12 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, loading
               <h3 className="text-lg font-semibold leading-6 text-gray-900 dark:text-white" id="modal-title">
                 {title}
               </h3>
-              <div className="mt-2">
-                <p id="modal-message" className="text-sm text-gray-600 dark:text-gray-400">
+              {/* whitespace-pre-line lets a caller separate paragraphs with
+                  blank lines (e.g. "what will be deleted" then "what will be
+                  left alone"); single-line messages are unaffected. The cap
+                  keeps a long list from pushing the buttons off a phone. */}
+              <div className="mt-2 max-h-[40vh] overflow-y-auto">
+                <p id="modal-message" className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line break-words">
                   {message}
                 </p>
               </div>

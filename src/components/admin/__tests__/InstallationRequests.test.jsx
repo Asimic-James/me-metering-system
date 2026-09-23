@@ -249,3 +249,63 @@ describe('InstallationRequests — Export Completed Installations', () => {
     expect(exportButton().disabled).toBe(true);
   });
 });
+
+describe('InstallationRequests — import date', () => {
+  // The fixtures give each imported job a different createdAt: 10, 11 and 12
+  // September. JED's Remita requests are not imported and have none.
+  const importedFrom = () => screen.getByLabelText('Imported from');
+  const importedTo = () => screen.getByLabelText('Imported to');
+
+  it('shows the import date on an imported row, separate from assignment and installation', async () => {
+    renderPage();
+    const row = (await screen.findByText('CHIDI EZE')).closest('.p-4');
+    expect(within(row).getByText(/^Imported /)).toBeTruthy();
+    expect(within(row).getByText(/^Assigned to Musa Bello/)).toBeTruthy();
+    // Two distinct dates, never the same field doing both jobs.
+    expect(within(row).getByText(/^Imported /).textContent)
+      .not.toBe(within(row).getByText(/^Assigned to Musa Bello/).textContent);
+  });
+
+  it('shows no import date for a JED request, which is never imported', async () => {
+    renderPage();
+    const row = (await screen.findByText('JED PAID')).closest('.p-4');
+    expect(within(row).queryByText(/^Imported /)).toBeNull();
+  });
+
+  it('filters on the import date alone', async () => {
+    renderPage();
+    await screen.findByText('ADA OBI');
+
+    fireEvent.change(importedFrom(), { target: { value: '2026-09-11' } });
+    await waitFor(() => expect(screen.queryByText('ADA OBI')).toBeNull());
+    expect(screen.getByText('BAYO ALI')).toBeTruthy();
+    expect(screen.getByText('CHIDI EZE')).toBeTruthy();
+    // JED's requests have no import date, so they drop out while it is set.
+    expect(screen.queryByText('JED PAID')).toBeNull();
+    expect(tileValue('All')).toBe(2);
+
+    fireEvent.change(importedTo(), { target: { value: '2026-09-11' } });
+    await waitFor(() => expect(screen.queryByText('CHIDI EZE')).toBeNull());
+    expect(tileValue('All')).toBe(1);
+  });
+
+  it('combines the import date with the meter-type filter', async () => {
+    renderPage();
+    await screen.findByText('ADA OBI');
+    fireEvent.change(importedFrom(), { target: { value: '2026-09-10' } });
+    fireEvent.change(screen.getByLabelText('Meter type'), { target: { value: 'THREE PHASE' } });
+
+    await waitFor(() => expect(screen.queryByText('ADA OBI')).toBeNull());
+    expect(screen.getByText('BAYO ALI')).toBeTruthy();
+    expect(tileValue('All')).toBe(1);
+  });
+
+  it('restores everything when the dates are cleared', async () => {
+    renderPage();
+    await screen.findByText('ADA OBI');
+    fireEvent.change(importedFrom(), { target: { value: '2026-09-12' } });
+    await waitFor(() => expect(tileValue('All')).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: /Clear dates/ }));
+    await waitFor(() => expect(tileValue('All')).toBe(7));
+  });
+});
