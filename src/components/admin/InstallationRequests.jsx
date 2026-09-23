@@ -23,7 +23,7 @@
 import { useState, useEffect, useCallback, useMemo, useDeferredValue } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ClipboardList, RefreshCw, Search, AlertCircle, Loader2, UserPlus, X,
+  RefreshCw, Search, AlertCircle, Loader2, UserPlus, X,
   Download, Ban, Undo2, Inbox, MapPin, ExternalLink, ArrowDownUp, Filter,
   Wallet, BadgeCheck, ChevronRight, FileSpreadsheet, CalendarClock,
 } from 'lucide-react';
@@ -32,7 +32,7 @@ import { useDataRefresh } from '../contexts/DataRefreshContext';
 import { usePermissions } from '../auth/usePermissions';
 import StatusBadge from '../common/StatusBadge';
 import ConfirmationModal from '../common/ConfirmationModal';
-import InfoModal from '../common/InfoModal';
+import JedAssignmentNotice from '../installations/JedAssignmentNotice';
 import InstallerSelect from '../installations/InstallerSelect';
 import BatchResultSummary from '../installations/BatchResultSummary';
 import MeterCapacitySummary from '../installations/MeterCapacitySummary';
@@ -725,18 +725,9 @@ function InstallationRequests() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 bg-brand-100 dark:bg-brand-900/30 rounded-lg shrink-0">
-            <ClipboardList className="w-6 h-6 text-brand-600 dark:text-brand-400" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">Installation Requests</h1>
-            <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm truncate">
-              Every disco&apos;s requests, installer dispatch, payments and the disco response sheet
-            </p>
-          </div>
-        </div>
+      {/* The page title lives on InstallationsPage, which hosts this view —
+          only the actions for this view belong here. */}
+      <div className="flex items-center justify-end gap-3">
         <button type="button" onClick={refreshAll} disabled={listLoading} aria-label="Refresh"
           className="p-2.5 sm:px-4 sm:py-2 bg-brand-500 text-gray-900 rounded-lg hover:bg-brand-600 disabled:bg-brand-400 shrink-0 flex items-center gap-2">
           <RefreshCw className={`w-4 h-4 ${listLoading ? 'animate-spin' : ''}`} />
@@ -1211,15 +1202,7 @@ function InstallationRequests() {
         </div>
       )}
 
-      <InfoModal
-        isOpen={!!jedAssignTarget}
-        onClose={() => setJedAssignTarget(null)}
-        title="JED requests can't be assigned yet"
-      >
-        <p>
-          All installers can see and complete JED requests from the Awaiting Installation queue.
-        </p>
-      </InfoModal>
+      <JedAssignmentNotice isOpen={!!jedAssignTarget} onClose={() => setJedAssignTarget(null)} />
 
       <ConfirmationModal
         isOpen={!!cancelTarget}

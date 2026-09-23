@@ -26,10 +26,12 @@ const InstallerDashboard = lazy(() => import('./components/dashboard/InstallerDa
 // Click-through detail view reached from either dashboard's rows — added this project.
 const InstallationDetail = lazy(() => import('./components/installation/InstallationDetail'));
 const AdminReports = lazy(() => import('./components/admin/AdminReports'));
-// Admin/Super Admin installation workflow (Awaiting Installation / Completed
-// + selection-based assignment, currently blocked pending backend support —
-// see API_GAP_REPORT.md). Replaces Payments' old "Requests by Status" tab.
-const AdminInstallations = lazy(() => import('./components/admin/AdminInstallations'));
+// The single Admin/Super Admin Installations area (2026-09-23). It carries
+// two views — the combined request list and JED's PAID/COMPLETED queue —
+// which used to be two top-level nav items. Each view is lazy-loaded inside
+// it, so opening one doesn't download the other. See InstallationsPage.jsx
+// for why they stayed two views rather than one merged table.
+const InstallationsPage = lazy(() => import('./components/installations/InstallationsPage'));
 // Simple operational Payments experience: real payment records, Confirm
 // Payment, and bulk-import. The old diagnostic "RRR / Order Lookup" and
 // "Webhook Replay" tabs were removed — see PaymentsPage.jsx's own header
@@ -48,7 +50,6 @@ const ComplaintForm = lazy(() => import('./components/complaints/ComplaintForm')
 // screens above — see API_GAP_REPORT.md and utils/installationStatus.js.
 const ImportsPage = lazy(() => import('./components/admin/ImportsPage'));
 const AssignmentsPage = lazy(() => import('./components/admin/AssignmentsPage'));
-const InstallationRequests = lazy(() => import('./components/admin/InstallationRequests'));
 const MyJobs = lazy(() => import('./components/installations/MyJobs'));
 // Tabbed Settings page (Meter Types + API Keys) — replaces direct
 // MeterTypeSettings mount so both settings resources live under one route.
@@ -181,15 +182,16 @@ function AppContent() {
                   path="/dashboard"
                   element={permissions.isAdmin ? <AdminDashboard /> : <InstallerDashboard />}
                 />
-                {/* Admin/Super Admin installation workflow: PAID ("Awaiting
-                    Installation") and COMPLETED, in one place — supersedes
-                    Payments' old "Requests by Status" tab. Installers use
-                    their own /dashboard (InstallerDashboard) for the same
-                    two-status view, scoped to what the shared queue
-                    endpoint returns for their role. */}
+                {/* The one Installations area for admin-tier accounts: the
+                    combined request list (imported jobs + JED's Remita
+                    requests, with disco scoping and dispatch) and JED's
+                    PAID/COMPLETED operational queue, as two views of one
+                    page. Installers never come here — they use /dashboard
+                    (the shared JED queue) and /my-jobs (their dispatched
+                    jobs). */}
                 <Route
                   path="/installations"
-                  element={permissions.isAdmin ? <AdminInstallations /> : <AccessDenied />}
+                  element={permissions.isAdmin ? <InstallationsPage /> : <AccessDenied />}
                 />
                 {/* Click-through detail view from either dashboard's rows —
                     the completion action lives here directly (a PAID job
@@ -225,7 +227,9 @@ function AppContent() {
                     from the JED routes above, which are unchanged. */}
                 <Route path="/imports" element={permissions.canRunImports ? <ImportsPage /> : <AccessDenied />} />
                 <Route path="/assignments" element={permissions.canManageAssignments ? <AssignmentsPage /> : <AccessDenied />} />
-                <Route path="/installation-requests" element={permissions.canViewInstallationRequests ? <InstallationRequests /> : <AccessDenied />} />
+                {/* Kept working for bookmarks and any external link: the
+                    page moved into /installations as its default view. */}
+                <Route path="/installation-requests" element={<Navigate to="/installations" replace />} />
                 <Route path="/my-jobs" element={permissions.canViewMyJobs ? <MyJobs /> : <AccessDenied />} />
                 <Route path="/reports" element={permissions.isAdmin ? <AdminReports /> : <AccessDenied />} />
                 <Route path="/payments" element={permissions.isAdmin ? <PaymentsPage /> : <AccessDenied />} />

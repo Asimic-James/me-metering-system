@@ -57,10 +57,15 @@ afterEach(cleanup);
 
 const renderPage = async () => {
   render(<UserManagement />);
-  await screen.findByText('boss@memetering.com');
+  await waitFor(() => expect(screen.getAllByText('boss@memetering.com').length).toBeGreaterThan(0));
 };
 
-const rowFor = (email) => screen.getByText(email).closest('tr');
+// Every user renders twice — a card (mobile) and a table row (md+). jsdom has
+// no viewport, so both are in the DOM; these helpers target the table row, and
+// `cardFor` the card, so each layout can be asserted on deliberately.
+const nodesFor = (email) => screen.getAllByText(email);
+const rowFor = (email) => nodesFor(email).map((n) => n.closest('tr')).find(Boolean);
+const cardFor = (email) => nodesFor(email).map((n) => n.closest('li')).find(Boolean);
 const deleteButtonIn = (email) =>
   Array.from(rowFor(email).querySelectorAll('button')).find((b) => /Delete user|Super Administrator can do this/.test(b.title || ''));
 const ownAccountMarker = (email) =>
@@ -96,16 +101,35 @@ describe('UserManagement — Super Admin account protection', () => {
   });
 });
 
+describe('UserManagement — mobile card layout', () => {
+  it('renders a card per user alongside the table, so nothing is table-only', async () => {
+    await renderPage();
+    expect(cardFor('boss@memetering.com')).toBeTruthy();
+    expect(cardFor('ngozi@memetering.com')).toBeTruthy();
+  });
+
+  it('enforces the same account rules in the card as in the row', async () => {
+    await renderPage();
+    const ownCard = cardFor('boss@memetering.com');
+    // Same rule, same component — no delete on your own account, either layout.
+    expect(Array.from(ownCard.querySelectorAll('button')).some((b) => /Delete user/.test(b.title || '')))
+      .toBe(false);
+    expect(ownCard.textContent).toContain('Your account');
+    expect(Array.from(cardFor('ngozi@memetering.com').querySelectorAll('button'))
+      .some((b) => /Delete user/.test(b.title || ''))).toBe(true);
+  });
+});
+
 describe('UserManagement — existing user-management rules are unchanged', () => {
   it('keeps deletion Super Admin-only, and keeps an Admin scoped to Installers', async () => {
     currentUser = OTHER_ADMIN;
     render(<UserManagement />);
-    await screen.findByText('ngozi@memetering.com');
+    await waitFor(() => expect(screen.getAllByText('ngozi@memetering.com').length).toBeGreaterThan(0));
 
     // An Admin only ever receives Installer accounts (role param + the
     // client-side backstop), so privileged rows are not on the page at all.
     expect(jedApi.getUsers).toHaveBeenCalledWith(expect.objectContaining({ role: 'INSTALLER' }));
-    expect(screen.queryByText('boss@memetering.com')).toBeNull();
+    expect(screen.queryAllByText('boss@memetering.com')).toHaveLength(0);
 
     const button = deleteButtonIn('ngozi@memetering.com');
     expect(button.disabled).toBe(true);

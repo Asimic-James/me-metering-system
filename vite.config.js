@@ -9,7 +9,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon-32.png', 'apple-touch-icon.png', 'brand-logo.png'],
       manifest: {
-        name: 'ME Metering Integration - JEDC Meter Management',
+        name: 'ME Metering Integration',
         short_name: 'ME Metering',
         description: 'ME Metering meter installation, payment, and management system',
         theme_color: '#5c4104',

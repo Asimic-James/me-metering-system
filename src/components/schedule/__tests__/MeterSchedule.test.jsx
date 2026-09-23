@@ -128,6 +128,17 @@ describe('MeterSchedule — assign', () => {
     expect(within(cardFor('0239110006909')).queryByRole('button', { name: 'Assign' })).toBeNull();
   });
 
+  it('loads nothing for the assignment dialog until it is opened', async () => {
+    await renderPage();
+    // The dialog's disco list and installer list are its own concern — a
+    // visit to Meter Schedule must not pay for a dialog nobody opened.
+    expect(jedApi.getDiscos).not.toHaveBeenCalled();
+    expect(jedApi.getUsers).not.toHaveBeenCalled();
+
+    fireEvent.click(within(cardFor('0239110006909')).getByRole('button', { name: 'Assign' }));
+    await waitFor(() => expect(jedApi.getDiscos).toHaveBeenCalled());
+  });
+
   it('opens the shared assignment modal, not a page-local one', async () => {
     await renderPage();
     fireEvent.click(within(cardFor('0239110006909')).getByRole('button', { name: 'Assign' }));

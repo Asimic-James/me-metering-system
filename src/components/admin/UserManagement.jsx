@@ -32,6 +32,75 @@ const roleBadgeClass = (role) => {
   return 'bg-brand-100 dark:bg-brand-900/30 text-brand-800 dark:text-brand-300';
 };
 
+// Row actions, shared by the desktop table and the mobile card list below.
+// Extracted so the authorization rules exist once: an Admin may view and edit
+// Installers; only a Super Admin may reset a password or delete; and nobody
+// may delete their own account (see utils/userAccount.js).
+const UserRowActions = ({ user, permissions, actionLoading, onView, onEdit, onResetPassword, onDelete }) => {
+  const isPrivilegedTarget = user?.role === ROLES.ADMIN || user?.role === ROLES.SUPERADMIN;
+  const canEditThisUser = permissions.isSuperAdmin || !isPrivilegedTarget;
+  // Delete and password-reset are Super Admin-only, for every account
+  // including Installers — Admin's scope is add/view/edit Installers, not
+  // destructive or security-sensitive actions.
+  const canDestructivelyManage = permissions.isSuperAdmin;
+  const editRestrictedTitle = 'Access Restricted: only a Super Administrator can manage Admin/Super Admin accounts';
+  const superAdminOnlyTitle = 'Access Restricted: only a Super Administrator can do this';
+  // Own account: the Delete action is not offered at all (handleDeleteUser
+  // refuses it too, so hiding the button presents the rule, it isn't the rule).
+  const isOwnAccount = isSameUserAccount(permissions.user, user);
+  const busy = actionLoading === `delete-${user.id}`;
+
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <button
+        onClick={() => onView(user)}
+        disabled={busy}
+        className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+        title="View full profile"
+      >
+        <Eye className="w-4 h-4" />
+      </button>
+      <button
+        onClick={() => onEdit(user)}
+        disabled={!canEditThisUser || busy}
+        className="p-2 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 rounded-lg transition-colors disabled:opacity-50"
+        title={canEditThisUser ? 'Edit user' : editRestrictedTitle}
+      >
+        <Edit className="w-4 h-4" />
+      </button>
+      <button
+        onClick={() => onResetPassword(user)}
+        disabled={!canDestructivelyManage || busy || actionLoading === `reset-${user.id}`}
+        className="p-2 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors disabled:opacity-50"
+        title={canDestructivelyManage ? 'Reset password to default' : superAdminOnlyTitle}
+      >
+        {actionLoading === `reset-${user.id}`
+          ? <Loader2 className="w-4 h-4 animate-spin" />
+          : <Lock className="w-4 h-4" />}
+      </button>
+      {isOwnAccount ? (
+        <span
+          className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap"
+          title={permissions.isSuperAdmin
+            ? 'A Super Admin cannot delete their own account.'
+            : 'You cannot delete your own account.'}
+        >
+          Your account
+        </span>
+      ) : (
+        <button
+          onClick={() => onDelete(user)}
+          disabled={!canDestructivelyManage || busy}
+          className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+          title={canDestructivelyManage ? 'Delete user' : superAdminOnlyTitle}
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+        </button>
+      )}
+    </div>
+  );
+};
+
 // User Form Component
 // `canAssignPrivilegedRoles` gates whether ADMIN/SUPERADMIN are even
 // selectable — per the real API's documented rule that only a SUPERADMIN
@@ -814,7 +883,54 @@ function UserManagement() {
         </div>
       ) : (
         <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile: cards. The table's four columns can't be read at 320px
+              without side-scrolling past the actions, which is exactly the
+              pattern the other admin lists already avoid. */}
+          <ul className="md:hidden divide-y divide-gray-200 dark:divide-gray-700">
+            {filteredUsers.map((user) => (
+              <li key={user.id} className="p-4 space-y-2">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center flex-shrink-0">
+                    <span className="text-gray-900 font-semibold text-sm">
+                      {((user?.firstName || 'U')[0] + (user?.lastName || ''))[0].toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {`${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Unknown User'}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 break-all">{user?.email || 'No email'}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{user?.phone || 'No phone'}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${roleBadgeClass(user?.role)}`}>
+                    <Shield className="w-3 h-3" />
+                    {getRoleMetadata(user?.role).displayName || user?.role || 'Unknown'}
+                  </span>
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                    user?.isActive !== false
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                      : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                  }`}>
+                    {user?.isActive !== false ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                    {user?.isActive !== false ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <UserRowActions
+                  user={user}
+                  permissions={permissions}
+                  actionLoading={actionLoading}
+                  onView={handleViewUser}
+                  onEdit={(u) => { setEditingUser(u); setShowForm(true); }}
+                  onResetPassword={setUserToResetPassword}
+                  onDelete={setUserToDelete}
+                />
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
@@ -876,81 +992,15 @@ function UserManagement() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {(() => {
-                        const isPrivilegedTarget = user?.role === ROLES.ADMIN || user?.role === ROLES.SUPERADMIN;
-                        const canEditThisUser = permissions.isSuperAdmin || !isPrivilegedTarget;
-                        // Delete and password-reset are Super Admin-only,
-                        // for every account including Installers — Admin's
-                        // scope is add/view/edit Installers, not destructive
-                        // or security-sensitive actions.
-                        const canDestructivelyManage = permissions.isSuperAdmin;
-                        const editRestrictedTitle = 'Access Restricted: only a Super Administrator can manage Admin/Super Admin accounts';
-                        const superAdminOnlyTitle = 'Access Restricted: only a Super Administrator can do this';
-                        // Own account: the Delete action is not offered at
-                        // all (handleDeleteUser refuses it too, so hiding the
-                        // button is the presentation of the rule, not the rule).
-                        const isOwnAccount = isSameUserAccount(permissions.user, user);
-                        return (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleViewUser(user)}
-                              disabled={actionLoading === `delete-${user.id}`}
-                              className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
-                              title="View full profile"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingUser(user);
-                                setShowForm(true);
-                              }}
-                              disabled={!canEditThisUser || actionLoading === `delete-${user.id}`}
-                              className="p-2 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 rounded-lg transition-colors disabled:opacity-50"
-                              title={canEditThisUser ? 'Edit user' : editRestrictedTitle}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setUserToResetPassword(user)}
-                              disabled={!canDestructivelyManage || actionLoading === `delete-${user.id}` || actionLoading === `reset-${user.id}`}
-                              className="p-2 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors disabled:opacity-50"
-                              title={canDestructivelyManage ? 'Reset password to default' : superAdminOnlyTitle}
-                            >
-                              {actionLoading === `reset-${user.id}` ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Lock className="w-4 h-4" />
-                              )}
-                            </button>
-                            {isOwnAccount ? (
-                              <span
-                                className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap"
-                                title={
-                                  permissions.isSuperAdmin
-                                    ? 'A Super Admin cannot delete their own account.'
-                                    : 'You cannot delete your own account.'
-                                }
-                              >
-                                Your account
-                              </span>
-                            ) : (
-                              <button
-                                onClick={() => setUserToDelete(user)}
-                                disabled={!canDestructivelyManage || actionLoading === `delete-${user.id}`}
-                                className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
-                                title={canDestructivelyManage ? 'Delete user' : superAdminOnlyTitle}
-                              >
-                                {actionLoading === `delete-${user.id}` ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <Trash2 className="w-4 h-4" />
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })()}
+                      <UserRowActions
+                        user={user}
+                        permissions={permissions}
+                        actionLoading={actionLoading}
+                        onView={handleViewUser}
+                        onEdit={(u) => { setEditingUser(u); setShowForm(true); }}
+                        onResetPassword={setUserToResetPassword}
+                        onDelete={setUserToDelete}
+                      />
                     </td>
                   </tr>
                 ))}

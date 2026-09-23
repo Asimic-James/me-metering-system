@@ -17,14 +17,13 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import JEDApiService from '../services/api';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
-import InfoModal from '../common/InfoModal';
+import JedAssignmentNotice from '../installations/JedAssignmentNotice';
 import StatusTabs from '../common/StatusTabs';
 import StatusBadge from '../common/StatusBadge';
 import { isCompletedStatus } from '../../utils/statusBadge';
 import { formatDateOnly } from '../../utils/date';
 import { fetchAllRequests } from '../../utils/fetchAllRequests';
 import {
-  ClipboardList,
   Clock,
   CheckCircle,
   RefreshCw,
@@ -299,20 +298,9 @@ function AdminInstallations() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 bg-brand-100 dark:bg-brand-900/30 rounded-lg shrink-0">
-            <ClipboardList className="w-6 h-6 text-brand-600 dark:text-brand-400" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
-              Installations
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm truncate">
-              Paid customers awaiting installation, and completed installs
-            </p>
-          </div>
-        </div>
+      {/* The page title lives on InstallationsPage, which hosts this view —
+          only the actions for this view belong here. */}
+      <div className="flex items-center justify-end gap-3">
         <button
           type="button"
           onClick={() => setRefreshKey((k) => k + 1)}
@@ -398,15 +386,7 @@ function AdminInstallations() {
         />
       </div>
 
-      <InfoModal
-        isOpen={!!assignTarget}
-        onClose={() => setAssignTarget(null)}
-        title="JED requests can't be assigned yet"
-      >
-        <p>
-          All installers can see and complete JED requests from the Awaiting Installation queue.
-        </p>
-      </InfoModal>
+      <JedAssignmentNotice isOpen={!!assignTarget} onClose={() => setAssignTarget(null)} />
     </div>
   );
 }

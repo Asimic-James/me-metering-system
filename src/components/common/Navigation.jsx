@@ -15,7 +15,7 @@
 import {
   LayoutDashboard, Database, Users, BarChart3,
   Upload, Settings, X, CreditCard, ChevronsLeft, ChevronsRight,
-  ClipboardList, MessageSquareWarning, ClipboardCheck, FileSpreadsheet, Send, Wrench
+  ClipboardList, MessageSquareWarning, FileSpreadsheet, Send, Wrench
 } from 'lucide-react';
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
@@ -54,20 +54,17 @@ const NAVIGATION_CONFIG = {
       accessible: (userRole) => userRole === ROLES.INSTALLER && canAccessPage(userRole, 'my-jobs'),
     },
     {
+      // One Installations area (2026-09-23). It holds both views that used
+      // to be separate top-level items — "All Requests" (imported jobs +
+      // JED's Remita requests, dispatch, disco export) and "JED Queue"
+      // (PAID -> COMPLETED) — because their data overlapped while their
+      // workflows did not. See InstallationsPage.jsx.
       id: 'installations',
-      label: 'Installations (JED)',
+      label: 'Installations',
       path: '/installations',
       icon: ClipboardList,
-      description: 'JED paid requests awaiting installation & completed',
+      description: 'Every disco\'s requests, dispatch, and the JED queue',
       accessible: (userRole) => isAdminTierRole(userRole),
-    },
-    {
-      id: 'installation-requests',
-      label: 'Installation Requests',
-      path: '/installation-requests',
-      icon: ClipboardCheck,
-      description: 'Imported jobs, installer dispatch & disco export',
-      accessible: (userRole) => canAccessPage(userRole, 'installation-requests'),
     },
     {
       id: 'imports',

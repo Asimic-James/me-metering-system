@@ -32,7 +32,7 @@ Versions below are read directly from `package.json` — verify there before ass
 ## Architecture
 
 - **Application structure:** `src/App.jsx` owns the route table and top-level layout (Header + Navigation sidebar + `<Suspense>`-wrapped route content). Every route component is `React.lazy`-loaded. Pages are organized by role/feature under `src/components/{admin,auth,common,contexts,dashboard,installation,schedule,services,settings,uploads}/` plus one root-level page (none currently — `SubmissionPage.jsx` was the only one and has been removed).
-- **Routing:** `react-router-dom` v7 `<Routes>`/`<Route>` (not `createBrowserRouter`). Every protected route is gated **inline** in `App.jsx` with a ternary against `usePermissions()` output (e.g. `permissions.isAdmin ? <AdminInstallations /> : <AccessDenied />>`), not a wrapper `<ProtectedRoute>` component. `AccessDenied` renders in place at the same URL rather than redirecting.
+- **Routing:** `react-router-dom` v7 `<Routes>`/`<Route>` (not `createBrowserRouter`). Every protected route is gated **inline** in `App.jsx` with a ternary against `usePermissions()` output (e.g. `permissions.isAdmin ? <InstallationsPage /> : <AccessDenied />`), not a wrapper `<ProtectedRoute>` component. `AccessDenied` renders in place at the same URL rather than redirecting.
 - **Authentication:** JWT login (`POST /auth/login`, body exactly `{ phone, password }`). Token + user object persisted in `localStorage` (`jedAuthToken`, `jedUser`) via `jedApi`'s own storage methods (`storeTokens`/`storeUser`/`getAuthToken`/`getStoredUser`/`clearTokens`); `AuthContext.jsx` wraps this in React state and normalizes the role to uppercase. A 401 from any API call clears tokens automatically (`handleErrorResponse` in `api.js`). There is no `/auth/refresh-token` endpoint on the real API — a lapsed JWT just requires a fresh login.
 - **Authorization:** three real roles from the API's `User.role` enum — `SUPERADMIN`, `ADMIN`, `INSTALLER` — used uppercase, as-is, throughout (no case translation, no role renaming). `src/components/auth/permissions.js` defines the permission model (`PERMISSIONS`, `ROLE_PERMISSIONS`, `PAGE_ACCESS`); `usePermissions.jsx` is the hook every component actually consumes (`isAdmin`, `isSuperAdmin`, `isInstaller`, `canViewInstallations`, etc.). **Client-side checks are a UX convenience, not the security boundary** — the real API enforces the same rules server-side (e.g. only `SUPERADMIN` can create `ADMIN`/`SUPERADMIN` accounts, per the documented `UserCreate` rule) and must continue to.
 - **State management:** Context API for cross-cutting concerns (`AuthContext` — session; `ThemeContext` — light/dark, persisted to `localStorage` under `theme`; `DataRefreshContext` — a lightweight `refreshSignal` counter that mutations bump via `notifyDataChanged()` so other mounted pages re-fetch without a full reload). Everything else — form state, tab state, fetched-list state — is local to the component that needs it. There is no Redux/Zustand/Jotai and none should be introduced without a real, demonstrated need.
@@ -60,12 +60,12 @@ easiest way to break this app.
 | Statuses | `INITIATED → PAID → COMPLETED` | `PENDING → ASSIGNED → IN_PROGRESS → INSTALLED → EXPORTED` (+ `FAILED`, `CANCELLED`) |
 | Endpoints | `/external/jed/*` | `/discos`, `/imports`, `/assignments`, `/installations` |
 | Installer view | `/dashboard` — a **shared** queue every installer sees | `/my-jobs` — genuinely **assigned** to that installer |
-| Admin routes | `/installations` ("Installations (JED)") | `/installation-requests`, `/imports`, `/assignments` |
+| Admin routes | `/installations?view=jed` ("JED Queue") | `/installations` ("All Requests"), `/imports`, `/assignments` |
 | Status helpers | `isAwaitingInstallationStatus`/`isCompletedStatus` (`utils/statusBadge.js`) | `getAvailableActions`/`installationStatusLabel` (`utils/installationStatus.js`) |
 
 The JED endpoints and screens are **unchanged** — don't "unify" the two without a backend decision.
 
-**Installation Requests shows both, side by side (2026-09-21).** `/installation-requests` loads
+**The Installations page shows both, side by side (2026-09-21).** `/installations` ("All Requests") loads
 `InstallationRequest`s *and* `JedCustomerRequest`s. Each row keeps its own real status, and the two status
 sets don't overlap, so one filter covers both. Scoping, attribution, filtering and sorting live in
 `utils/installationScope.js`. A Remita request belongs to a registered disco only when its own
@@ -92,6 +92,13 @@ separate `importedAt`), `assignedAt` (dispatch to an installer) and `installatio
 (the physical install). `filterByImportDate` and the Installation Requests "Imported from/to" filter
 read **only** `importedAt`. JED's Remita requests are never imported — `importedAt` is `null` for them
 and `dateRequested` must never stand in for it.
+
+**One Installations area:** `/installations` (`components/installations/InstallationsPage.jsx`) holds
+both admin views — **All Requests** (default) and **JED Queue** (`?view=jed`) — as one nav item. The
+view is a query param, not a path segment, because `/installations/:accountNumber` already exists.
+`/installation-requests` redirects there. Don't re-split them into two nav items, and don't merge
+their rows into one table: they are two resources whose status enums don't overlap. The shared
+`JedAssignmentNotice` is the one explanation of why a JED request can't be dispatched.
 
 **One dispatch implementation:** `hooks/useMeterDispatch.js` owns "give these meter serials to this
 installer" — the live capacity read, the per-meter-type cap, the fresh re-check at submit, the
@@ -156,7 +163,7 @@ Only these statuses exist on the real backend — do not invent intermediate one
 - **"Awaiting Installation" is a UI label for `PAID`, not a real backend status.** `src/utils/statusBadge.js`'s `isAwaitingInstallationStatus()`/`isCompletedStatus()` are the single source of truth for this mapping — reuse them, don't re-derive the logic elsewhere.
 - **Meter inventory status:** `AVAILABLE / INSTALLED / FAULTY / RETIRED`. **Phase type:** `SINGLE PHASE / THREE PHASE`.
 - **Full lifecycle:** JED submits a request (server-to-server, API key) → `POST /external/jed/generate-ref` creates the RRR (`INITIATED`) → customer pays via Remita → webhook or manual admin confirm marks it `PAID` → it appears in every installer's shared "Awaiting Installation" queue (there is no per-installer assignment — see below) → an installer opens the job and submits the completion form → `COMPLETED`.
-- **There is no installer-assignment field or endpoint on the real API.** Every installer sees the identical shared queue. The Installations page (`/installations`) has real, working multi-select UI, but clicking "Assign Installer" opens an explanatory modal, not a working assignment — see `API_GAP_REPORT.md` before changing this.
+- **There is no installer-assignment field or endpoint on the real API.** Every installer sees the identical shared queue. The Installations page's JED Queue (`/installations?view=jed`) has real, working multi-select UI, but clicking "Assign Installer" opens an explanatory modal (`JedAssignmentNotice`), not a working assignment — see `API_GAP_REPORT.md` before changing this.
 
 ## Roles
 

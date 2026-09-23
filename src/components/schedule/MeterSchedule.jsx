@@ -4,7 +4,7 @@ import { usePermissions } from '../auth/usePermissions';
 import { useDataRefresh } from '../contexts/DataRefreshContext';
 import ConfirmationModal from '../common/ConfirmationModal';
 import {
-  Calendar, MapPin, User, Phone, Clock, CheckCircle,
+  Calendar, Clock, CheckCircle,
   AlertCircle, FileText, Search, // Navigation and Filter icons removed — confirmed unused
   Zap,
   Cpu,
@@ -15,7 +15,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Upload,
   ChevronsLeft,
   ChevronsRight,
   Database,
@@ -37,17 +36,6 @@ import {
 import AssignMeterModal from '../installations/AssignMeterModal';
 
 // Constants for better maintainability
-const PRIORITY_CONFIG = {
-  high: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-800 dark:text-red-300', label: 'High' },
-  medium: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-800 dark:text-yellow-300', label: 'Medium' },
-  low: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-300', label: 'Low' }
-};
-
-const STATUS_CONFIG = {
-  pending: { bg: 'bg-brand-100 dark:bg-brand-900/30', text: 'text-brand-800 dark:text-brand-300', icon: Clock },
-  completed: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-300', icon: CheckCircle }
-};
-
 const METER_STATUS_OPTIONS = [
   { value: 'ALL', label: 'All Status', icon: Battery },
   { value: 'AVAILABLE', label: 'Available', icon: CheckCircle },
@@ -447,16 +435,6 @@ const StatsCard = ({ title, value, icon: Icon, bgColor, iconColor, loading = fal
     </div>
   </div>
 );
-
-// Priority Badge Component
-const PriorityBadge = ({ priority }) => {
-  const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.medium;
-  return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
-      {config.label}
-    </span>
-  );
-};
 
 // Meter Status Badge Component
 const normalizeStatus = (status) => String(status || '').toUpperCase().trim();
@@ -1365,12 +1343,18 @@ const MeterInventory = ({ meterInventory, canDeleteMeters, canAssignMeters, onDa
         confirmText={deleteCount === 1 ? 'Delete 1 meter' : `Delete ${deleteCount} meters`}
       />
 
-      <AssignMeterModal
-        meters={metersToAssign || []}
-        isOpen={!!metersToAssign && metersToAssign.length > 0}
-        onClose={() => setMetersToAssign(null)}
-        onAssigned={handleAssigned}
-      />
+      {/* Mounted only when there is something to assign. The modal loads the
+          disco list and the installer's capacity on mount, so rendering it
+          permanently (returning null when closed) would fire GET /discos on
+          every visit to this page for a dialog nobody opened. */}
+      {metersToAssign?.length > 0 && (
+        <AssignMeterModal
+          meters={metersToAssign}
+          isOpen
+          onClose={() => setMetersToAssign(null)}
+          onAssigned={handleAssigned}
+        />
+      )}
 
       {loading && <MeterLoadingSkeleton />}
 

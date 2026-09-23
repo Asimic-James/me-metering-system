@@ -226,7 +226,10 @@ function InstallationDetail() {
       fetchDetail();
       notifyDataChanged();
 
-      setTimeout(() => navigate(permissions.isAdmin ? '/installations' : '/dashboard'), 1500);
+      // Back to the queue this job came from, once the success state has been
+      // on screen long enough to read. This is a confirmation pause, not an
+      // artificial loading delay — navigating instantly would hide the result.
+      setTimeout(() => navigate(permissions.isAdmin ? '/installations?view=jed' : '/dashboard'), 1500);
     } catch (err) {
       console.error('[InstallationDetail] Failed to complete installation:', err);
       setSubmitError(describeCompletionError(err));

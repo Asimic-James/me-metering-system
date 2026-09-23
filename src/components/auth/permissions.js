@@ -238,7 +238,10 @@ const PAGE_ACCESS = Object.freeze({
   // Multi-disco flow
   imports: [PERMISSIONS.IMPORTS.VIEW],
   assignments: [PERMISSIONS.ASSIGNMENTS.VIEW],
-  'installation-requests': [PERMISSIONS.INSTALLATIONS.VIEW_ALL],
+  // The one Installations page (both views — see InstallationsPage.jsx).
+  // Renamed from 'installation-requests' when those two top-level items
+  // merged; the permission itself is unchanged.
+  installations: [PERMISSIONS.INSTALLATIONS.VIEW_ALL],
   'my-jobs': [PERMISSIONS.INSTALLATIONS.FIELD_JOBS]
 });
 
